@@ -98,7 +98,9 @@ import kotlinx.coroutines.launch
  * Turns the Gemini category suggestion UI (button, example chips, result panel, auto-apply)
  * on or off in one place. The view model keeps the logic either way.
  */
-private const val SHOW_AI_SUGGESTION = true
+// AI category suggestion is on hold (decision pending). Set to true to re-enable;
+// it needs a Firebase project registered for the current applicationId.
+private const val SHOW_AI_SUGGESTION = false
 
 private const val AI_TYPING_DEBOUNCE_MS = 800L
 

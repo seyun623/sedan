@@ -47,8 +47,8 @@
 | `KEY_ALIAS` | 키 별칭 (기본값 `upload`) |
 | `KEY_PASSWORD` | 키 비밀번호 |
 
-### Firebase (AI 카테고리 추천, 선택)
-AI 카테고리 추천은 Firebase AI Logic을 사용합니다. 쓰려면 직접 만든 Firebase 프로젝트의 `google-services.json`을 `app/`에 넣으세요. 이 파일은 저장소에 커밋하지 않습니다. 파일이 없어도 빌드는 되고, AI 추천만 동작하지 않습니다.
+### Firebase (AI 카테고리 추천, 현재 보류)
+AI 카테고리 추천은 현재 꺼져 있습니다 (`TransactionFormScreen.kt`의 `SHOW_AI_SUGGESTION`). 다시 켜려면 Firebase AI Logic을 쓰는 Firebase 프로젝트에 앱 ID `io.github.seyun623.moneyflow`를 등록하고 받은 `google-services.json`을 `app/`에 넣으세요. 이 파일은 저장소에 커밋하지 않습니다. 파일이 없어도 빌드는 되고, AI 추천만 동작하지 않습니다.
 
 ## CI
 GitHub Actions(`.github/workflows/android.yml`)가 push할 때마다 단위 테스트, 린트, 디버그·릴리스 빌드를 실행합니다.
