@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moneyflow.ui.theme.AccentRed
 import com.moneyflow.ui.theme.Gray100
+import com.moneyflow.ui.theme.Gray300
 import com.moneyflow.ui.theme.Gray500
 import com.moneyflow.ui.theme.Gray600
 import com.moneyflow.ui.theme.Gray900
@@ -238,7 +239,7 @@ fun PinDots(length: Int, filled: Int, modifier: Modifier = Modifier, error: Bool
           color = when {
             error -> AccentRed
             i < filled -> TossBlue
-            else -> Gray100
+            else -> Gray300
           },
           shape = CircleShape
         )
