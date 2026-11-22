@@ -1,6 +1,0 @@
-{
-  "name": "머니플로우",
-  "description": "토스 및 뱅크샐러드 감성의 스마트 가계부 및 자산 관리 통합 금융 앱",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

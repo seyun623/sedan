@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Strip verbose/debug/info logging from release builds (financial data must not reach logcat).
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
