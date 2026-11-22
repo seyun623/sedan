@@ -58,6 +58,9 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  // Room schemas as debug assets so MigrationTestHelper can read them in Robolectric tests
+  // (debug builds only; release APKs do not contain them).
+  sourceSets.getByName("debug").assets.directories.add("$projectDir/schemas")
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

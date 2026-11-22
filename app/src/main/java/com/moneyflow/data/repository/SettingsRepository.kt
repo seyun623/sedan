@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -38,11 +37,10 @@ data class AppSettings(
   val isLockEnabled: Boolean get() = pinHash != null && pinSalt != null
 }
 
-private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 @Singleton
-class SettingsRepository @Inject constructor(@ApplicationContext context: Context) {
-  private val store = context.settingsStore
+class SettingsRepository @Inject constructor(private val store: DataStore<Preferences>) {
 
   private object Keys {
     val PIN_HASH = stringPreferencesKey("pin_hash")

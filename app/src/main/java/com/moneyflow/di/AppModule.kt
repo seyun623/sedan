@@ -3,6 +3,9 @@ package com.moneyflow.di
 import android.content.Context
 import com.moneyflow.data.local.AppDatabase
 import com.moneyflow.data.local.DatabaseFactory
+import com.moneyflow.data.repository.settingsStore
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.moneyflow.domain.AppClock
 import com.moneyflow.domain.MonthlyStatsCalculator
 import com.moneyflow.domain.SystemAppClock
@@ -26,6 +29,10 @@ object AppModule {
   @Singleton
   fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
     DatabaseFactory.create(context, DatabaseKeyManager(context).getOrCreatePassphraseHex())
+
+  @Provides
+  @Singleton
+  fun provideSettingsStore(@ApplicationContext context: Context): DataStore<Preferences> = context.settingsStore
 
   @Provides
   fun provideStatsCalculator(clock: AppClock): MonthlyStatsCalculator = MonthlyStatsCalculator(clock.zone)

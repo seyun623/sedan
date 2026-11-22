@@ -235,7 +235,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
     private val MASKED_NAME = Regex("[가-힣]\\*[가-힣]{0,2}")
     private val DATE_TIME = Regex("(\\d{1,2})[/.\\-](\\d{1,2})\\s+(\\d{1,2}):(\\d{2})")
     private val PAY_STYLE = Regex("([^\\s\\[\\]]{2,30}?)에서\\s*[0-9,]+\\s*원")
-    private val TRAILER = Regex("누적|잔액|잔고|잔여한도|사용가능|이용가능")
+    private val TRAILER = Regex("누적|잔액|잔고|잔여한도|사용가능|이용가능|\\s\\(")
     private val NOISE = Regex("체크카드|신용카드|체크|신용|일시불|할부|[0-9]{1,2}\\s*개월|승인\\s*취소|취소|승인|결제|출금|입금|완료|사용|이용|해외|국내")
 
     /** (text to look for, canonical provider name). Order does not matter. */
