@@ -50,12 +50,17 @@ class TransactionFormViewModel @Inject constructor(
   private val editingId: Long = savedState.get<Long>(ARG_TRANSACTION_ID) ?: 0L
   val isEditMode: Boolean get() = editingId > 0
 
-  val accounts: StateFlow<List<AccountEntity>> =
-    ledger.accounts.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+  /** All accounts; null until the first load completes (so the UI can tell "loading" from "none"). */
+  val accounts: StateFlow<List<AccountEntity>?> =
+    ledger.accounts.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
   /** The transaction being edited (null while loading or in create mode). */
   private val _editing = MutableStateFlow<TransactionEntity?>(null)
   val editing: StateFlow<TransactionEntity?> = _editing.asStateFlow()
+
+  /** Edit mode only: true when the transaction to edit no longer exists. */
+  private val _editingNotFound = MutableStateFlow(false)
+  val editingNotFound: StateFlow<Boolean> = _editingNotFound.asStateFlow()
 
   private val _events = Channel<FormEvent>(Channel.BUFFERED)
   val events = _events.receiveAsFlow()
@@ -65,7 +70,11 @@ class TransactionFormViewModel @Inject constructor(
   private var suggestionJob: Job? = null
 
   init {
-    if (editingId > 0) viewModelScope.launch { _editing.value = ledger.getTransaction(editingId) }
+    if (editingId > 0) viewModelScope.launch {
+      val tx = ledger.getTransaction(editingId)
+      _editing.value = tx
+      _editingNotFound.value = tx == null
+    }
   }
 
   /**
