@@ -1,0 +1,74 @@
+package com.moneyflow.data.local
+
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import org.json.JSONObject
+import java.time.YearMonth
+
+/**
+ * v2 -> v3
+ * - transactions: source / dedupKey / recurringId / goalId columns + indices
+ *   (existing auto-registered and recurring rows are tagged from their memo text)
+ * - budgets: one row per month (keeps the newest duplicate) + unique index;
+ *   per-category limits move from a JSON column to the category_budgets table
+ * - recurring_transactions: startMonth column
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    // --- transactions ---
+    db.execSQL("ALTER TABLE `transactions` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'MANUAL'")
+    db.execSQL("ALTER TABLE `transactions` ADD COLUMN `dedupKey` TEXT")
+    db.execSQL("ALTER TABLE `transactions` ADD COLUMN `recurringId` INTEGER")
+    db.execSQL("ALTER TABLE `transactions` ADD COLUMN `goalId` INTEGER")
+    db.execSQL("UPDATE `transactions` SET `source` = 'SMS' WHERE `memo` LIKE '%SMS 자동등록%'")
+    db.execSQL("UPDATE `transactions` SET `source` = 'NOTIFICATION' WHERE `source` = 'MANUAL' AND `memo` LIKE '%자동등록%'")
+    db.execSQL("UPDATE `transactions` SET `source` = 'RECURRING' WHERE `memo` LIKE '[정기]%'")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_timestamp` ON `transactions` (`timestamp`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_accountId` ON `transactions` (`accountId`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_toAccountId` ON `transactions` (`toAccountId`)")
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_transactions_dedupKey` ON `transactions` (`dedupKey`)")
+
+    // --- budgets ---
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `category_budgets` (`monthKey` TEXT NOT NULL, `category` TEXT NOT NULL, " +
+        "`limitAmount` INTEGER NOT NULL, PRIMARY KEY(`monthKey`, `category`))"
+    )
+    db.query(
+      "SELECT monthKey, categoryBudgetsJson FROM budgets WHERE id IN (SELECT MAX(id) FROM budgets GROUP BY monthKey)"
+    ).use { c ->
+      while (c.moveToNext()) {
+        val month = c.getString(0)
+        val json = runCatching { JSONObject(c.getString(1) ?: "{}") }.getOrNull() ?: continue
+        json.keys().forEach { category ->
+          val limit = json.optLong(category)
+          if (limit > 0) {
+            db.execSQL(
+              "INSERT OR REPLACE INTO category_budgets(monthKey, category, limitAmount) VALUES (?, ?, ?)",
+              arrayOf<Any>(month, category, limit)
+            )
+          }
+        }
+      }
+    }
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `budgets_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`monthKey` TEXT NOT NULL, `totalBudget` INTEGER NOT NULL)"
+    )
+    db.execSQL(
+      "INSERT INTO budgets_new(id, monthKey, totalBudget) SELECT id, monthKey, totalBudget FROM budgets " +
+        "WHERE id IN (SELECT MAX(id) FROM budgets GROUP BY monthKey)"
+    )
+    db.execSQL("DROP TABLE budgets")
+    db.execSQL("ALTER TABLE budgets_new RENAME TO budgets")
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_budgets_monthKey` ON `budgets` (`monthKey`)")
+
+    // --- recurring ---
+    db.execSQL("ALTER TABLE `recurring_transactions` ADD COLUMN `startMonth` TEXT NOT NULL DEFAULT ''")
+    val now = YearMonth.now()
+    val currentKey = "%04d-%02d".format(now.year, now.monthValue)
+    db.execSQL(
+      "UPDATE `recurring_transactions` SET `startMonth` = COALESCE(`lastExecutedMonth`, ?)",
+      arrayOf<Any>(currentKey)
+    )
+  }
+}

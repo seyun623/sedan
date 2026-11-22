@@ -33,6 +33,8 @@ object CsvExportHelper {
       val sanitizedSuffix = titleSuffix.replace(" ", "_").replace("년", "").replace("월", "")
       val fileName = "MoneyFlow_가계부_${sanitizedSuffix}_${timestampStr}.csv"
       val cacheDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      // Remove earlier exports so financial data does not accumulate in the cache.
+      cacheDir.listFiles()?.forEach { it.delete() }
       val file = File(cacheDir, fileName)
 
       // Write UTF-8 with BOM (\uFEFF) so Excel on Windows and macOS automatically parses Korean characters correctly
@@ -88,12 +90,18 @@ object CsvExportHelper {
     }
   }
 
-  private fun escapeCsv(value: String): String {
-    var str = value
+  /**
+   * Escapes a CSV field. Values starting with = + - @ (or tab/CR) are prefixed with an apostrophe
+   * so spreadsheet apps do not execute them as formulas (memos can come from SMS text).
+   */
+  internal fun escapeCsv(value: String): String {
+    var str = if (value.isNotEmpty() && value[0] in FORMULA_TRIGGERS) "'$value" else value
     if (str.contains(",") || str.contains("\"") || str.contains("\n") || str.contains("\r")) {
       str = str.replace("\"", "\"\"")
       return "\"$str\""
     }
     return str
   }
+
+  private val FORMULA_TRIGGERS = charArrayOf('=', '+', '-', '@', '\t', '\r')
 }

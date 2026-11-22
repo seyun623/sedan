@@ -2,6 +2,7 @@ package com.moneyflow.data.local
 
 import androidx.room.TypeConverter
 import com.moneyflow.data.model.AccountType
+import com.moneyflow.data.model.TransactionSource
 import com.moneyflow.data.model.TransactionType
 
 class Converters {
@@ -18,4 +19,11 @@ class Converters {
   @TypeConverter
   fun toTransactionType(value: String?): TransactionType? =
     value?.let { runCatching { TransactionType.valueOf(it) }.getOrDefault(TransactionType.EXPENSE) }
+
+  @TypeConverter
+  fun fromSource(source: TransactionSource?): String? = source?.name
+
+  @TypeConverter
+  fun toSource(value: String?): TransactionSource? =
+    value?.let { runCatching { TransactionSource.valueOf(it) }.getOrDefault(TransactionSource.MANUAL) }
 }

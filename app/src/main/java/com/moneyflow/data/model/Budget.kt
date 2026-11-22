@@ -1,15 +1,29 @@
 package com.moneyflow.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "budgets")
+@Entity(
+  tableName = "budgets",
+  indices = [Index(value = ["monthKey"], unique = true)]
+)
 data class BudgetEntity(
   @PrimaryKey(autoGenerate = true)
   val id: Long = 0,
   val monthKey: String, // e.g. "2026-10"
-  val totalBudget: Long, // e.g. 1,800,000 KRW
-  val categoryBudgetsJson: String = "{}" // Category-specific budget allocations in JSON
+  val totalBudget: Long
+)
+
+@Entity(
+  tableName = "category_budgets",
+  primaryKeys = ["monthKey", "category"]
+)
+data class CategoryBudgetEntity(
+  val monthKey: String,
+  val category: String,
+  val limitAmount: Long
 )
 
 @Entity(tableName = "saving_goals")
@@ -32,13 +46,17 @@ data class RecurringTransactionEntity(
   val type: TransactionType,
   val amount: Long,
   val category: String,
-  val dayOfMonth: Int, // 1..31
+  val dayOfMonth: Int, // 1..31 (clamped to the month's last day)
   val accountId: Long,
   val accountName: String,
   val memo: String = "",
   val paymentMethod: String = "계좌이체",
   val isActive: Boolean = true,
-  val lastExecutedMonth: String? = null // e.g. "2026-10"
+  /** Last month ("yyyy-MM") for which a transaction was recorded. */
+  val lastExecutedMonth: String? = null,
+  /** First month ("yyyy-MM") this item applies to. */
+  @ColumnInfo(defaultValue = "")
+  val startMonth: String = ""
 )
 
 data class CategoryBudgetProgress(

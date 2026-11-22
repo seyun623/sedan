@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">머니플로우</string>
+    <string name="notification_listener_label">머니플로우 결제 알림 자동 등록</string>
 </resources>

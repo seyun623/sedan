@@ -1,4 +1,4 @@
-package com.moneyflow.ui.components
+package com.moneyflow.ui.common
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance

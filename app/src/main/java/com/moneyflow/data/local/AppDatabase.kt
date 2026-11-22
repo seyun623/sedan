@@ -1,12 +1,11 @@
 package com.moneyflow.data.local
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.moneyflow.data.model.AccountEntity
 import com.moneyflow.data.model.BudgetEntity
+import com.moneyflow.data.model.CategoryBudgetEntity
 import com.moneyflow.data.model.RecurringTransactionEntity
 import com.moneyflow.data.model.SavingGoalEntity
 import com.moneyflow.data.model.TransactionEntity
@@ -16,11 +15,12 @@ import com.moneyflow.data.model.TransactionEntity
     AccountEntity::class,
     TransactionEntity::class,
     BudgetEntity::class,
+    CategoryBudgetEntity::class,
     SavingGoalEntity::class,
     RecurringTransactionEntity::class
   ],
-  version = 2,
-  exportSchema = false
+  version = AppDatabase.VERSION,
+  exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -31,21 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun recurringTransactionDao(): RecurringTransactionDao
 
   companion object {
-    @Volatile
-    private var INSTANCE: AppDatabase? = null
-
-    fun getDatabase(context: Context): AppDatabase {
-      return INSTANCE ?: synchronized(this) {
-        val instance = Room.databaseBuilder(
-          context.applicationContext,
-          AppDatabase::class.java,
-          "moneyflow_finance.db"
-        )
-          .fallbackToDestructiveMigration()
-          .build()
-        INSTANCE = instance
-        instance
-      }
-    }
+    const val VERSION = 3
+    const val NAME = "moneyflow_finance.db"
   }
 }

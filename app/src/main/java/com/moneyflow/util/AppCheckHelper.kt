@@ -1,7 +1,6 @@
 package com.moneyflow.util
 
 import android.content.Context
-import android.content.Intent
 import android.util.Log
 import com.moneyflow.BuildConfig
 import com.google.firebase.FirebaseApp
@@ -12,12 +11,9 @@ import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
 private const val TAG = "AppCheckInit"
 
 // App Check contract keys defined by the Firebase SDK and runtime harness.
-private const val DEBUG_TOKEN_EXTRA = "FIREBASE_APPCHECK_DEBUG_TOKEN"
-private const val DEBUG_STORE_PREFIX = "com.google.firebase.appcheck.debug.store."
-private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_SECRET"
 private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
-fun configureAppCheck(context: Context, intent: Intent?) {
+fun configureAppCheck(context: Context) {
   try {
     // 1. Ensure FirebaseApp is initialized
     if (FirebaseApp.getApps(context).isEmpty()) {
@@ -25,25 +21,9 @@ fun configureAppCheck(context: Context, intent: Intent?) {
     }
 
     if (BuildConfig.DEBUG) {
-      // 2. Debug: Read debug token from Intent extra
-      val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)
-
-      if (!debugToken.isNullOrEmpty()) {
-        val persistenceKey = FirebaseApp.getInstance().persistenceKey
-        val prefs = context.getSharedPreferences(
-          "$DEBUG_STORE_PREFIX$persistenceKey",
-          Context.MODE_PRIVATE
-        )
-        // CRITICAL: MUST use commit() instead of apply() so the secret is written
-        // synchronously before DebugAppCheckProviderFactory reads it.
-        prefs.edit()
-          .putString(DEBUG_SECRET_KEY, debugToken)
-          .commit()
-        Log.d(TAG, "App Check debug secret configured successfully.")
-      } else {
-        Log.w(TAG, "No debug token found in Intent extra.")
-      }
-
+      // Debug builds use Firebase's debug provider; it prints a debug token to logcat on first
+      // use, which is registered once in the Firebase console. The token is never taken from
+      // the launch Intent (the launcher activity is exported, so any app could set it).
       FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
         DebugAppCheckProviderFactory.getInstance()
       )

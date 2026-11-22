@@ -18,7 +18,7 @@ object BiometricAuthHelper {
 
   fun checkBiometricAvailability(context: Context): BiometricStatus {
     val biometricManager = BiometricManager.from(context)
-    val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+    val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
     return when (biometricManager.canAuthenticate(authenticators)) {
       BiometricManager.BIOMETRIC_SUCCESS -> BiometricStatus.READY
       BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricStatus.NOT_ENROLLED
@@ -65,6 +65,7 @@ object BiometricAuthHelper {
       .setDescription(description)
       .setNegativeButtonText(negativeButtonText)
       .setConfirmationRequired(false)
+      .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
       .build()
 
     biometricPrompt.authenticate(promptInfo)
