@@ -105,37 +105,37 @@ class ScreenshotTest {
   private fun home() = HomeViewModel(ledger, budgets, settings, seeder, stats, bus, clock)
   private fun monthStore() = SelectedMonthStore(clock)
 
-  @Test fun homeLight() = shot("01_home", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = home()) }
-  @Test fun homeDark() = shot("01_home", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = home()) }
+  @Test fun homeLight() { val vm = home(); shot("01_home", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
+  @Test fun homeDark() { val vm = home(); shot("01_home", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
 
-  @Test fun ledgerLight() = shot("02_ledger", false) { LedgerScreen({}, {}, viewModel = LedgerViewModel(ledger, monthStore(), stats, bus, clock)) }
-  @Test fun ledgerDark() = shot("02_ledger", true) { LedgerScreen({}, {}, viewModel = LedgerViewModel(ledger, monthStore(), stats, bus, clock)) }
+  @Test fun ledgerLight() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock); shot("02_ledger", false) { LedgerScreen({}, {}, viewModel = vm) } }
+  @Test fun ledgerDark() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock); shot("02_ledger", true) { LedgerScreen({}, {}, viewModel = vm) } }
 
-  @Test fun analyticsLight() = shot("03_analytics", false) { AnalyticsScreen({}, viewModel = AnalyticsViewModel(ledger, monthStore(), stats, clock)) }
-  @Test fun analyticsDark() = shot("03_analytics", true) { AnalyticsScreen({}, viewModel = AnalyticsViewModel(ledger, monthStore(), stats, clock)) }
+  @Test fun analyticsLight() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", false) { AnalyticsScreen({}, viewModel = vm) } }
+  @Test fun analyticsDark() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", true) { AnalyticsScreen({}, viewModel = vm) } }
 
   private fun budgetVm() = BudgetViewModel(ledger, budgets, recurring, monthStore(), stats, bus, clock)
-  @Test fun budgetLight() = shot("04_budget", false) { BudgetScreen({}, viewModel = budgetVm()) }
-  @Test fun budgetDark() = shot("04_budget", true) { BudgetScreen({}, viewModel = budgetVm()) }
+  @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
+  @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
   private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(), bus)
-  @Test fun formLight() = shot("05_form", false) { TransactionFormScreen({}, viewModel = formVm()) }
-  @Test fun formDark() = shot("05_form", true) { TransactionFormScreen({}, viewModel = formVm()) }
+  @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
+  @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
   private fun settingsVm() = SettingsViewModel(settings, ledger, AppLockManager(settings, clock), AutoCaptureProcessor(db, ledger, settings, clock), seeder, bus)
-  @Test fun settingsLight() = shot("06_settings", false) { SettingsScreen({}, {}, {}, viewModel = settingsVm()) }
-  @Test fun settingsDark() = shot("06_settings", true) { SettingsScreen({}, {}, {}, viewModel = settingsVm()) }
+  @Test fun settingsLight() { val vm = settingsVm(); shot("06_settings", false) { SettingsScreen({}, {}, {}, viewModel = vm) } }
+  @Test fun settingsDark() { val vm = settingsVm(); shot("06_settings", true) { SettingsScreen({}, {}, {}, viewModel = vm) } }
 
   private val lockSettings = AppSettings(pinHash = "x", pinSalt = "y")
   @Test fun lockLight() = shot("07_lock", false) { LockScreen(lockSettings, { _, _ -> }, {}) }
-  @Test fun securityLight() = shot("08_security", false) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = settingsVm()) }
-  @Test fun securityDark() = shot("08_security", true) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = settingsVm()) }
-  @Test fun captureLight() = shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = settingsVm()) }
-  @Test fun captureDark() = shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = settingsVm()) }
+  @Test fun securityLight() { val vm = settingsVm(); shot("08_security", false) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = vm) } }
+  @Test fun securityDark() { val vm = settingsVm(); shot("08_security", true) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = vm) } }
+  @Test fun captureLight() { val vm = settingsVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
+  @Test fun captureDark() { val vm = settingsVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
     SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, bus)
-  @Test fun accountLight() = shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = accountVm()) }
-  @Test fun accountDark() = shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = accountVm()) }
+  @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
+  @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }
 }
 
