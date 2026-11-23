@@ -45,6 +45,8 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = true
       isShrinkResources = true
+      // Family phones are ARM; leaving out x86 emulator libraries keeps the APK small.
+      ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfigs.findByName("release")?.let { signingConfig = it }
     }

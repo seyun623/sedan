@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Creates the Play "upload key" keystore and prints the values to store as GitHub Secrets.
+# Creates the app signing key and prints the values to store as GitHub Secrets.
 # Run this on YOUR computer (JDK required). Never commit the .jks file or its passwords.
-# Keep a backup of the .jks and passwords somewhere safe (password manager):
-# with Play App Signing a lost upload key can be reset, but it takes days.
+# BACK UP the .jks file and password (e.g. password manager). If the key is lost, installed
+# phones cannot be updated anymore: the app would have to be uninstalled (losing its data,
+# so export CSV first) and reinstalled.
 set -euo pipefail
 
-OUT="${1:-moneyflow-upload.jks}"
+OUT="${1:-moneyflow-release.jks}"
 ALIAS="${2:-upload}"
 
 if [ -e "$OUT" ]; then echo "$OUT already exists; refusing to overwrite." >&2; exit 1; fi

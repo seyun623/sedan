@@ -1,7 +1,8 @@
 name: Release build
 
-# Builds a signed AAB (for Play Console) and APK when a tag like v1.0.0 is pushed,
-# or manually from the Actions tab.
+# Builds the signed APK that family members install, when a tag like v1.0.0 is pushed
+# or manually from the Actions tab. Every release MUST be signed with the same key,
+# otherwise phones refuse to install it as an update.
 #
 # Required repository secrets (Settings > Secrets and variables > Actions):
 #   ANDROID_KEYSTORE_BASE64  base64 of the upload keystore (.jks)
@@ -54,13 +55,13 @@ jobs:
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest
 
-      - name: Build signed AAB and APK
+      - name: Build signed APK
         env:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: >
-          ./gradlew :app:bundleRelease :app:assembleRelease
+          ./gradlew :app:assembleRelease
           -PversionCode=${{ steps.version.outputs.code }}
           -PversionName=${{ steps.version.outputs.name }}
 
@@ -68,7 +69,7 @@ jobs:
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
           "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
-          jarsigner -verify app/build/outputs/bundle/release/app-release.aab | tail -1
+          cp app/build/outputs/apk/release/app-release.apk "moneyflow-${{ steps.version.outputs.name }}.apk"
         shell: bash
 
       - name: Remove keystore
@@ -79,6 +80,5 @@ jobs:
         with:
           name: moneyflow-${{ steps.version.outputs.name }}
           path: |
-            app/build/outputs/bundle/release/app-release.aab
-            app/build/outputs/apk/release/app-release.apk
+            moneyflow-${{ steps.version.outputs.name }}.apk
             app/build/outputs/mapping/release/mapping.txt
