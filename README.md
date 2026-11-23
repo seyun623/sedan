@@ -25,7 +25,7 @@
 - 앱 잠금 PIN은 PBKDF2 해시로만 저장하고, 5회 이상 틀리면 입력을 잠시 막습니다. 백그라운드에 있다가 돌아오면 다시 잠깁니다.
 - 화면 캡처 방지와 최근 앱 화면 가리기를 기본으로 켭니다.
 - 시스템 클라우드 백업은 꺼져 있습니다 (암호화 키가 기기에만 있어 복원해도 열 수 없기 때문). 대신 앱의 **백업 파일**(비밀번호로 AES-256-GCM 암호화, `.mfbackup`)로 저장·복원합니다.
-- 결제 알림·문자 내용은 로그에 남기지 않고 기기 밖으로 보내지 않습니다. AI 카테고리 추천을 쓰면 메모 내용이 Firebase AI로 전송됩니다.
+- 결제 알림·문자 내용은 로그에 남기지 않고 기기 밖으로 보내지 않습니다. AI 카테고리 추천을 켜면 입력한 메모와 카테고리 목록만 Google Gemini로 전송됩니다.
 
 ## 빌드 요구 사항
 - Android Studio 최신 버전 (AGP 9.1 지원)
@@ -55,8 +55,8 @@
 | `KEY_ALIAS` | 키 별칭 (기본값 `upload`) |
 | `KEY_PASSWORD` | 키 비밀번호 |
 
-### Firebase (AI 카테고리 추천, 현재 보류)
-AI 카테고리 추천은 현재 꺼져 있습니다 (`TransactionFormScreen.kt`의 `SHOW_AI_SUGGESTION`). 다시 켜려면 Firebase AI Logic을 쓰는 Firebase 프로젝트에 앱 ID `io.github.seyun623.moneyflow`를 등록하고 받은 `google-services.json`을 `app/`에 넣으세요. 이 파일은 저장소에 커밋하지 않습니다. 파일이 없어도 빌드는 되고, AI 추천만 동작하지 않습니다.
+### AI 카테고리 추천
+앱의 **설정 → AI 설정**에서 직접 발급한 Google Gemini API 키(aistudio.google.com)를 등록해서 사용합니다. 키는 Android Keystore로 암호화해 기기에만 저장하고, 백업 파일에는 넣지 않습니다. Firebase는 사용하지 않습니다.
 
 ## CI
 GitHub Actions(`.github/workflows/android.yml`)가 push할 때마다 단위 테스트, 린트, 디버그·릴리스 빌드를 실행합니다.

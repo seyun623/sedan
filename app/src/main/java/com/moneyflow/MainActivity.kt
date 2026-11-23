@@ -21,7 +21,6 @@ import com.moneyflow.ui.lock.LockScreen
 import com.moneyflow.ui.navigation.MoneyFlowNavHost
 import com.moneyflow.ui.theme.Gray100
 import com.moneyflow.ui.theme.MoneyFlowTheme
-import com.moneyflow.util.configureAppCheck
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -30,7 +29,6 @@ class MainActivity : FragmentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    configureAppCheck(this)
     enableEdgeToEdge()
     // Hide content in the recents screen until settings say otherwise.
     applySecureScreen(true)

@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Used until the user picks a model from the list their key can access. */
+const val DEFAULT_AI_MODEL = "gemini-2.5-flash"
+
 enum class ThemeMode(val label: String) { SYSTEM("시스템 설정"), LIGHT("라이트"), DARK("다크") }
 
 data class AppSettings(
@@ -36,8 +39,16 @@ data class AppSettings(
   val autoCaptureDefaultAccountId: Long? = null,
   val onboardingDone: Boolean = false,
   /** When a backup file was last created (0 = never). */
-  val lastBackupAt: Long = 0L
+  val lastBackupAt: Long = 0L,
+  /** AI category suggestion (user's own Gemini API key). */
+  val aiEnabled: Boolean = false,
+  /** API key encrypted with the Android Keystore (never stored in plain text). */
+  val aiApiKeyEncrypted: String? = null,
+  val aiModel: String = DEFAULT_AI_MODEL
 ) {
+  val hasAiKey: Boolean get() = !aiApiKeyEncrypted.isNullOrBlank()
+  val isAiReady: Boolean get() = aiEnabled && hasAiKey
+
   val isLockEnabled: Boolean get() = pinHash != null && pinSalt != null
 }
 
@@ -61,6 +72,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val DEFAULT_ACCOUNT = longPreferencesKey("auto_capture_default_account")
     val ONBOARDING = booleanPreferencesKey("onboarding_done")
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
+    val AI_ENABLED = booleanPreferencesKey("ai_enabled")
+    val AI_KEY = stringPreferencesKey("ai_api_key_enc")
+    val AI_MODEL = stringPreferencesKey("ai_model")
   }
 
   val settings: Flow<AppSettings> = store.data.map { p ->
@@ -78,7 +92,10 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       smsCaptureEnabled = p[Keys.SMS_CAPTURE] ?: false,
       autoCaptureDefaultAccountId = p[Keys.DEFAULT_ACCOUNT],
       onboardingDone = p[Keys.ONBOARDING] ?: false,
-      lastBackupAt = p[Keys.LAST_BACKUP] ?: 0L
+      lastBackupAt = p[Keys.LAST_BACKUP] ?: 0L,
+      aiEnabled = p[Keys.AI_ENABLED] ?: false,
+      aiApiKeyEncrypted = p[Keys.AI_KEY],
+      aiModel = p[Keys.AI_MODEL] ?: DEFAULT_AI_MODEL
     )
   }
 
@@ -116,6 +133,11 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setThemeMode(mode: ThemeMode) = store.edit { it[Keys.THEME] = mode.name }
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
+  suspend fun setAiEnabled(enabled: Boolean) = store.edit { it[Keys.AI_ENABLED] = enabled }
+  suspend fun setAiModel(model: String) = store.edit { it[Keys.AI_MODEL] = model }
+  suspend fun setAiApiKeyEncrypted(encrypted: String?) = store.edit {
+    if (encrypted == null) { it.remove(Keys.AI_KEY); it[Keys.AI_ENABLED] = false } else it[Keys.AI_KEY] = encrypted
+  }
   suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }
   suspend fun setDefaultCaptureAccount(id: Long?) = store.edit {

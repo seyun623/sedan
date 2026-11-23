@@ -49,3 +49,9 @@ fun testSettingsRepository(): com.moneyflow.data.repository.SettingsRepository {
   )
   return com.moneyflow.data.repository.SettingsRepository(store)
 }
+
+/** Test double: "encrypts" by prefixing (Android Keystore is not available in Robolectric). */
+object PlainSecretStore : com.moneyflow.security.SecretStore {
+  override fun encrypt(plain: String) = "enc:$plain"
+  override fun decrypt(stored: String) = stored.removePrefix("enc:")
+}

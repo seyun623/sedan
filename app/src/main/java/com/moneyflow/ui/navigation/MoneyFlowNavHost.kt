@@ -40,6 +40,7 @@ import com.moneyflow.ui.budget.BudgetScreen
 import com.moneyflow.ui.common.UserMessageBus
 import com.moneyflow.ui.home.HomeScreen
 import com.moneyflow.ui.ledger.LedgerScreen
+import com.moneyflow.ui.settings.AiSettingsScreen
 import com.moneyflow.ui.settings.AutoCaptureSettingsScreen
 import com.moneyflow.ui.settings.BackupScreen
 import com.moneyflow.ui.settings.SecuritySettingsScreen
@@ -147,11 +148,13 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
           onBack = { navController.popBackStack() },
           onOpenSecurity = { navController.navigate(Routes.SECURITY) },
           onOpenAutoCapture = { navController.navigate(Routes.AUTO_CAPTURE) },
-          onOpenBackup = { navController.navigate(Routes.BACKUP) }
+          onOpenBackup = { navController.navigate(Routes.BACKUP) },
+          onOpenAi = { navController.navigate(Routes.AI) }
         )
       }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.AUTO_CAPTURE) { AutoCaptureSettingsScreen(onBack = { navController.popBackStack() }) }
+      composable(Routes.AI) { AiSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.BACKUP) {
         BackupScreen(
           onBack = { navController.popBackStack() },

@@ -10,6 +10,8 @@ import com.moneyflow.domain.AppClock
 import com.moneyflow.domain.MonthlyStatsCalculator
 import com.moneyflow.domain.SystemAppClock
 import com.moneyflow.security.DatabaseKeyManager
+import com.moneyflow.security.KeystoreSecretStore
+import com.moneyflow.security.SecretStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,6 +35,10 @@ object AppModule {
   @Provides
   @Singleton
   fun provideSettingsStore(@ApplicationContext context: Context): DataStore<Preferences> = context.settingsStore
+
+  @Provides
+  @Singleton
+  fun provideSecretStore(): SecretStore = KeystoreSecretStore()
 
   @Provides
   fun provideStatsCalculator(clock: AppClock): MonthlyStatsCalculator = MonthlyStatsCalculator(clock.zone)

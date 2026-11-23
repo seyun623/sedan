@@ -1,12 +1,10 @@
 package com.moneyflow.ai
 
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.Schema
-import com.google.firebase.ai.type.generationConfig
 import com.moneyflow.data.model.FinanceCategories
 import com.moneyflow.data.model.TransactionType
-import kotlinx.coroutines.withTimeout
+import com.moneyflow.data.repository.SettingsRepository
+import com.moneyflow.security.SecretStore
+import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,49 +25,25 @@ sealed interface CategorySuggestionUiState {
   data class Error(val message: String) : CategorySuggestionUiState
 }
 
+class AiNotConfiguredException : Exception("설정 → AI 설정에서 API 키를 등록하고 켜 주세요.")
+
 /**
- * Gemini (Firebase AI Logic) category suggestion — moved unchanged out of the old view model.
- * The AI feature is kept as-is for now; its future (keep / replace / remove) is still to be decided.
+ * AI category suggestion with the user's own Google Gemini API key (Settings → AI 설정).
+ * Only the typed memo keyword and the allowed category names are sent.
  */
 @Singleton
-class CategorySuggester @Inject constructor() {
+class CategorySuggester @Inject constructor(
+  private val settings: SettingsRepository,
+  private val secrets: SecretStore,
+  private val gemini: GeminiClient
+) {
 
-  private val categorySuggestionSchema = Schema.obj(
-    properties = mapOf(
-      "recommendedCategory" to Schema.string(
-        description = "입력된 거래 키워드에 가장 적합한 1순위 카테고리명 (제공된 허용 카테고리 목록 중 하나여야 함)"
-      ),
-      "alternativeCategory" to Schema.string(
-        description = "2순위 대안 카테고리명 (제공된 허용 카테고리 목록 중 하나, 없으면 빈 문자열)",
-        nullable = true
-      ),
-      "suggestedPaymentMethod" to Schema.enumeration(
-        values = listOf("체크카드", "신용카드", "계좌이체", "현금", "간편결제"),
-        description = "해당 거래에 가장 자연스러운 결제 수단 추천"
-      ),
-      "confidence" to Schema.integer(
-        description = "분류 신뢰도 점수 (0에서 100 사이의 정수)"
-      ),
-      "reason" to Schema.string(
-        description = "입력된 키워드를 바탕으로 해당 카테고리를 추천한 이유 (간결한 한국어 한 문장)"
-      )
-    ),
-    optionalProperties = listOf("alternativeCategory")
-  )
-
-  private val categoryAiModel by lazy {
-    Firebase.ai.generativeModel(
-      modelName = "gemini-3.8-flash",
-      generationConfig = generationConfig {
-        responseMimeType = "application/json"
-        responseSchema = categorySuggestionSchema
-      }
-    )
-  }
-
-
-  /** Throws on network / timeout errors; returns null when the response is empty. */
+  /** Throws AiNotConfiguredException / AiRequestException; returns null when the response is empty. */
   suspend fun suggest(trimmed: String, transactionType: TransactionType): AiCategoryRecommendation? {
+    val s = settings.current()
+    if (!s.isAiReady) throw AiNotConfiguredException()
+    val apiKey = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
+
     val allowedCategories = if (transactionType == TransactionType.INCOME) {
       FinanceCategories.incomeCategories.map { it.first }
     } else {
@@ -85,12 +59,8 @@ class CategorySuggester @Inject constructor() {
       appendLine("주의: 반드시 위 허용된 카테고리 목록 중 하나를 recommendedCategory로 선택해야 합니다.")
     }
 
-    val response = withTimeout(45_000L) {
-      categoryAiModel.generateContent(prompt)
-    }
-
-    val text = response.text?.trim()
-    if (text.isNullOrEmpty()) return null
+    val text = gemini.generateJson(apiKey, s.aiModel, prompt, schema(allowedCategories)).trim()
+    if (text.isEmpty()) return null
 
     val json = JSONObject(text)
     val recCat = json.optString("recommendedCategory", "").trim()
@@ -114,4 +84,21 @@ class CategorySuggester @Inject constructor() {
         reason = reason
       )
   }
+
+  /** Verifies the key by listing models it can use (Settings → 연결 테스트). */
+  suspend fun availableModels(apiKey: String): List<String> = gemini.listModels(apiKey)
+
+  private fun schema(categories: List<String>) = JSONObject()
+    .put("type", "OBJECT")
+    .put("properties", JSONObject()
+      .put("recommendedCategory", JSONObject().put("type", "STRING").put("enum", JSONArray(categories))
+        .put("description", "입력된 거래 키워드에 가장 적합한 1순위 카테고리명"))
+      .put("alternativeCategory", JSONObject().put("type", "STRING").put("nullable", true)
+        .put("description", "2순위 대안 카테고리명 (없으면 빈 문자열)"))
+      .put("suggestedPaymentMethod", JSONObject().put("type", "STRING")
+        .put("enum", JSONArray(listOf("체크카드", "신용카드", "계좌이체", "현금", "간편결제")))
+        .put("description", "해당 거래에 가장 자연스러운 결제 수단 추천"))
+      .put("confidence", JSONObject().put("type", "INTEGER").put("description", "분류 신뢰도 점수 (0에서 100 사이의 정수)"))
+      .put("reason", JSONObject().put("type", "STRING").put("description", "추천 이유 (간결한 한국어 한 문장)")))
+    .put("required", JSONArray(listOf("recommendedCategory", "suggestedPaymentMethod", "confidence", "reason")))
 }

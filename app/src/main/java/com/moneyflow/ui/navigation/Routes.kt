@@ -22,6 +22,7 @@ object Routes {
   const val SECURITY = "settings/security"
   const val AUTO_CAPTURE = "settings/auto-capture"
   const val BACKUP = "settings/backup"
+  const val AI = "settings/ai"
 
   fun transaction(id: Long? = null) = if (id == null) "transaction" else "transaction?transactionId=$id"
   fun account(id: Long) = "account/$id"

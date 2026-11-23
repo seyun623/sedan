@@ -3,6 +3,7 @@ package com.moneyflow.ui.settings
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
@@ -33,6 +34,7 @@ fun SettingsScreen(
   onOpenSecurity: () -> Unit,
   onOpenAutoCapture: () -> Unit,
   onOpenBackup: () -> Unit = {},
+  onOpenAi: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -65,6 +67,20 @@ fun SettingsScreen(
         icon = Icons.Filled.NotificationsActive,
         onClick = onOpenAutoCapture,
         modifier = Modifier.testTag("settings_auto_capture")
+      )
+    }
+
+    SettingsSection("AI") {
+      SettingsItem(
+        title = "AI 카테고리 추천",
+        subtitle = when {
+          settings.isAiReady -> "사용 중 · ${settings.aiModel}"
+          settings.hasAiKey -> "API 키 등록됨 · 꺼져 있어요"
+          else -> "내 Gemini API 키를 등록해서 사용해요"
+        },
+        icon = Icons.Filled.AutoAwesome,
+        onClick = onOpenAi,
+        modifier = Modifier.testTag("settings_ai")
       )
     }
 
@@ -131,7 +147,7 @@ fun SettingsScreen(
       )
       SettingsItem(
         title = "데이터 보관",
-        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요. 휴대폰을 바꿀 때는 백업 파일을 이용하세요.",
+        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요. 휴대폰을 바꿀 때는 백업 파일을 이용하세요. AI 추천을 켜면 메모만 Google로 전송돼요.",
         showChevron = false
       )
     }

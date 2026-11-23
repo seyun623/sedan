@@ -94,14 +94,6 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import kotlinx.coroutines.launch
 
-/**
- * Turns the Gemini category suggestion UI (button, example chips, result panel, auto-apply)
- * on or off in one place. The view model keeps the logic either way.
- */
-// AI category suggestion is on hold (decision pending). Set to true to re-enable;
-// it needs a Firebase project registered for the current applicationId.
-private const val SHOW_AI_SUGGESTION = false
-
 private const val AI_TYPING_DEBOUNCE_MS = 800L
 
 /** The only add / edit transaction UI. Create mode when there is no transaction id argument. */
@@ -115,6 +107,8 @@ fun TransactionFormScreen(
   val editing by viewModel.editing.collectAsStateWithLifecycle()
   val editingNotFound by viewModel.editingNotFound.collectAsStateWithLifecycle()
   val suggestion by viewModel.categorySuggestionState.collectAsStateWithLifecycle()
+  // The AI suggestion UI appears only when AI is turned on with an API key (Settings → AI 설정).
+  val showAi by viewModel.aiReady.collectAsStateWithLifecycle()
   val isEditMode = viewModel.isEditMode
   val zone = remember { ZoneId.systemDefault() }
 
@@ -203,7 +197,7 @@ fun TransactionFormScreen(
     }
   }
 
-  if (SHOW_AI_SUGGESTION) {
+  if (showAi) {
     // Apply a fresh AI suggestion once (not again after rotation, so manual picks stay).
     LaunchedEffect(suggestion) {
       val rec = (suggestion as? CategorySuggestionUiState.Success)?.recommendation ?: return@LaunchedEffect
@@ -361,7 +355,7 @@ fun TransactionFormScreen(
           FormCard {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
               SectionLabel("메모", Modifier.weight(1f))
-              if (SHOW_AI_SUGGESTION) {
+              if (showAi) {
                 AiSuggestButton(enabled = memo.trim().length >= 2) {
                   viewModel.suggestCategoryFromKeyword(memo, type, 0L)
                 }
@@ -372,12 +366,12 @@ fun TransactionFormScreen(
               value = memo,
               onValueChange = { text ->
                 memo = text
-                if (SHOW_AI_SUGGESTION) viewModel.suggestCategoryFromKeyword(text, type, AI_TYPING_DEBOUNCE_MS)
+                if (showAi) viewModel.suggestCategoryFromKeyword(text, type, AI_TYPING_DEBOUNCE_MS)
               },
               modifier = Modifier.fillMaxWidth().testTag("form_memo_input"),
               placeholder = {
                 Text(
-                  if (SHOW_AI_SUGGESTION) "예: 스타벅스, 카카오택시 (입력하면 AI가 카테고리를 추천해요)"
+                  if (showAi) "예: 스타벅스, 카카오택시 (입력하면 AI가 카테고리를 추천해요)"
                   else "예: 스타벅스, 점심 식사",
                   color = Gray400,
                   maxLines = 1,
@@ -395,7 +389,7 @@ fun TransactionFormScreen(
                 }
               }
             )
-            if (SHOW_AI_SUGGESTION) {
+            if (showAi) {
               Spacer(Modifier.height(6.dp))
               AiExampleChips { sample ->
                 memo = sample
@@ -617,7 +611,7 @@ private fun FormActionBar(
   }
 }
 
-// ---- AI category suggestion UI (only shown when SHOW_AI_SUGGESTION) ----
+// ---- AI category suggestion UI (only shown when AI is set up) ----
 
 @Composable
 private fun AiSuggestButton(enabled: Boolean, onClick: () -> Unit) {

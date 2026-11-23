@@ -10,6 +10,8 @@ import com.moneyflow.data.model.TransactionEntity
 import com.moneyflow.data.model.TransactionType
 import com.moneyflow.data.repository.LedgerRepository
 import com.moneyflow.data.repository.LedgerResult
+import com.moneyflow.data.repository.SettingsRepository
+import kotlinx.coroutines.flow.map
 import com.moneyflow.ui.common.UserMessage
 import com.moneyflow.ui.common.UserMessageBus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +46,7 @@ class TransactionFormViewModel @Inject constructor(
   savedState: SavedStateHandle,
   private val ledger: LedgerRepository,
   private val suggester: CategorySuggester,
+  settings: SettingsRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
 
@@ -64,6 +67,10 @@ class TransactionFormViewModel @Inject constructor(
 
   private val _events = Channel<FormEvent>(Channel.BUFFERED)
   val events = _events.receiveAsFlow()
+
+  /** AI suggestion is available (turned on with an API key in Settings → AI 설정). */
+  val aiReady: StateFlow<Boolean> = settings.settings.map { it.isAiReady }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
   private val _suggestion = MutableStateFlow<CategorySuggestionUiState>(CategorySuggestionUiState.Idle)
   val categorySuggestionState: StateFlow<CategorySuggestionUiState> = _suggestion.asStateFlow()
