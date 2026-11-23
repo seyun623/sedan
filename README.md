@@ -9,7 +9,9 @@
 - **예산·목표**: 월 예산과 카테고리별 예산, 매월 반복되는 수입·지출(고정 거래) 자동 기록, 저축 목표
 - **보안**: 생체 인증 또는 PIN으로 앱 잠금
 - **백업·복원**: 비밀번호로 암호화된 백업 파일을 저장하거나 카카오톡 등으로 보내고, 새 휴대폰에서 불러오기
-- **결제 자동 등록**: 카드·은행 결제 알림과 SMS를 읽어 거래를 자동으로 기록
+- **결제 자동 등록** (`full` 빌드만): 카드·은행 결제 알림과 SMS를 읽어 거래를 자동으로 기록
+
+빌드는 두 가지입니다: `basic`(기본, 민감 권한 없음 — 바로 설치됨)과 `full`(자동 등록 포함 — Play 프로텍트 사기 방지 강화로 직접 설치가 막힘). 자세한 내용은 설치 안내 참고.
 
 ## 구조
 - **UI**: Jetpack Compose + Navigation-Compose. 화면마다 ViewModel이 따로 있습니다 (`ui/<화면>/`).
@@ -31,9 +33,9 @@
 - Android SDK Platform 36.1
 
 ```bash
-./gradlew :app:assembleDebug        # 디버그 APK
-./gradlew :app:testDebugUnitTest    # 단위 테스트
-./gradlew :app:lintDebug            # 린트
+./gradlew :app:assembleBasicDebug   # 디버그 APK (기본판)
+./gradlew :app:testFullDebugUnitTest # 단위 테스트
+./gradlew :app:lintFullDebug        # 린트
 ```
 
 `ScreenshotTest`는 주요 화면을 라이트/다크 모드로 그려 `app/build/screenshots/`에 PNG로 저장합니다 (눈으로 확인하는 용도).

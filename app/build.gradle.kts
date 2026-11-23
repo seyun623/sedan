@@ -56,6 +56,22 @@ android {
     targetCompatibility = JavaVersion.VERSION_11
     isCoreLibraryDesugaringEnabled = true
   }
+  // basic: installs normally on any phone (no SMS / notification-access permissions).
+  // full : adds payment auto-capture; blocked by Play Protect's enhanced fraud protection when
+  //        sideloaded from a browser/messenger, see docs/family-install-guide.md.
+  // Both use the same application id and signing key, so a phone can switch and keep its data.
+  flavorDimensions += "capture"
+  productFlavors {
+    create("basic") {
+      dimension = "capture"
+      isDefault = true
+      buildConfigField("boolean", "AUTO_CAPTURE_AVAILABLE", "false")
+    }
+    create("full") {
+      dimension = "capture"
+      buildConfigField("boolean", "AUTO_CAPTURE_AVAILABLE", "true")
+    }
+  }
   buildFeatures {
     compose = true
     buildConfig = true

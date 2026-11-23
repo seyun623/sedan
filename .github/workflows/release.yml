@@ -53,7 +53,7 @@ jobs:
         shell: bash
 
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew :app:testFullDebugUnitTest
 
       - name: Build signed APK
         env:
@@ -61,15 +61,17 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: >
-          ./gradlew :app:assembleRelease
+          ./gradlew :app:assembleBasicRelease :app:assembleFullRelease
           -PversionCode=${{ steps.version.outputs.code }}
           -PversionName=${{ steps.version.outputs.name }}
 
       - name: Verify signature
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk "moneyflow-${{ steps.version.outputs.name }}.apk"
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/basic/release/app-basic-release.apk
+          "$APKSIGNER" verify app/build/outputs/apk/full/release/app-full-release.apk
+          cp app/build/outputs/apk/basic/release/app-basic-release.apk "moneyflow-${{ steps.version.outputs.name }}-basic.apk"
+          cp app/build/outputs/apk/full/release/app-full-release.apk "moneyflow-${{ steps.version.outputs.name }}-autocapture.apk"
         shell: bash
 
       - name: Remove keystore
@@ -80,5 +82,6 @@ jobs:
         with:
           name: moneyflow-${{ steps.version.outputs.name }}
           path: |
-            moneyflow-${{ steps.version.outputs.name }}.apk
-            app/build/outputs/mapping/release/mapping.txt
+            moneyflow-${{ steps.version.outputs.name }}-basic.apk
+            moneyflow-${{ steps.version.outputs.name }}-autocapture.apk
+            app/build/outputs/mapping/

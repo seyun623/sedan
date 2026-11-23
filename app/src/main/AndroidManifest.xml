@@ -5,9 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <!-- SMS auto-capture is optional; the app must still install on devices without telephony. -->
-    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!-- SMS / notification auto-capture components live in src/full/AndroidManifest.xml.
+         Android's enhanced fraud protection blocks sideloading apps that request them,
+         so the "basic" flavor leaves them out. -->
 
     <application
         android:name=".MoneyFlowApplication"
@@ -30,27 +30,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Payment Notification Listener Service -->
-        <service
-            android:name=".service.FinanceNotificationListenerService"
-            android:label="@string/notification_listener_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <!-- SMS Payment Receiver -->
-        <receiver
-            android:name=".receiver.SmsTransactionReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter>
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -54,7 +54,7 @@ fun SettingsScreen(
       )
     }
 
-    SettingsSection("결제 알림 자동 등록") {
+    if (com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE) SettingsSection("결제 알림 자동 등록") {
       val on = listOfNotNull(
         "알림".takeIf { settings.notificationCaptureEnabled },
         "문자".takeIf { settings.smsCaptureEnabled }
