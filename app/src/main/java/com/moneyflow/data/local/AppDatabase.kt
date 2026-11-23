@@ -29,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun budgetDao(): BudgetDao
   abstract fun savingGoalDao(): SavingGoalDao
   abstract fun recurringTransactionDao(): RecurringTransactionDao
+  abstract fun backupDao(): BackupDao
 
   companion object {
     const val VERSION = 3

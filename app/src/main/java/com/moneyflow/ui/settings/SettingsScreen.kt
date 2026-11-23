@@ -3,6 +3,7 @@ package com.moneyflow.ui.settings
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -23,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moneyflow.BuildConfig
 import com.moneyflow.data.repository.ThemeMode
 import com.moneyflow.util.CsvExportHelper
+import com.moneyflow.util.Formatters
 import kotlinx.coroutines.launch
 
 @Composable
@@ -30,6 +32,7 @@ fun SettingsScreen(
   onBack: () -> Unit,
   onOpenSecurity: () -> Unit,
   onOpenAutoCapture: () -> Unit,
+  onOpenBackup: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,6 +83,14 @@ fun SettingsScreen(
     }
 
     SettingsSection("데이터") {
+      val lastBackup = state.settings.lastBackupAt
+      SettingsItem(
+        title = "백업 및 복원",
+        subtitle = if (lastBackup > 0) "마지막 백업 ${Formatters.formatFullDate(lastBackup)}" else "아직 백업한 적이 없어요",
+        icon = Icons.Filled.Backup,
+        onClick = onOpenBackup,
+        modifier = Modifier.testTag("settings_backup")
+      )
       SettingsItem(
         title = "전체 거래 CSV 내보내기",
         subtitle = if (exporting) "내보내는 중…" else "엑셀에서 열 수 있는 파일로 공유해요",
@@ -120,7 +131,7 @@ fun SettingsScreen(
       )
       SettingsItem(
         title = "데이터 보관",
-        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요.",
+        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요. 휴대폰을 바꿀 때는 백업 파일을 이용하세요.",
         showChevron = false
       )
     }

@@ -48,8 +48,8 @@ import com.moneyflow.ui.common.TransactionRow
 import com.moneyflow.ui.theme.AccentRed
 import com.moneyflow.ui.theme.CardSurface
 import com.moneyflow.ui.theme.Gray600
-import com.moneyflow.ui.theme.Gray900
 import com.moneyflow.ui.theme.TossBlue
+import com.moneyflow.ui.theme.Gray900
 import com.moneyflow.util.Formatters
 
 @Composable
@@ -62,6 +62,7 @@ fun HomeScreen(
   onNavigateToLedger: () -> Unit,
   onNavigateToAnalytics: () -> Unit,
   onNavigateToBudget: () -> Unit,
+  onOpenBackup: () -> Unit = {},
   viewModel: HomeViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,6 +109,9 @@ fun HomeScreen(
               onAction = { showAddAccount = true },
               modifier = Modifier.testTag("home_onboarding")
             )
+            TextButton(onClick = onOpenBackup, modifier = Modifier.testTag("home_restore_backup")) {
+              Text("백업 파일에서 복원하기", color = TossBlue, fontWeight = FontWeight.SemiBold)
+            }
             TextButton(onClick = viewModel::loadSampleData, modifier = Modifier.testTag("home_load_sample")) {
               Text("샘플 데이터로 둘러보기", color = Gray600, fontWeight = FontWeight.SemiBold)
             }

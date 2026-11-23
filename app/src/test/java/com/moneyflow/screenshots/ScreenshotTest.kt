@@ -136,6 +136,19 @@ class ScreenshotTest {
     SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, bus)
   @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
+  private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(
+    androidx.test.core.app.ApplicationProvider.getApplicationContext(),
+    com.moneyflow.data.repository.BackupRepository(db, settings, clock), recurring, settings, bus)
+  @Test fun backupLight() { val vm = backupVm(); shot("11_backup", false) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
+  @Test fun backupDark() { val vm = backupVm(); shot("11_backup", true) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
+  @Test fun firstRunHome() {
+    runBlocking { db.backupDao().clearTransactions(); db.backupDao().clearRecurring(); db.backupDao().clearGoals(); db.backupDao().clearAccounts() }
+    val vm = home(); shot("12_firstrun", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) }
+  }
+  @Test fun firstRunHomeDark() {
+    runBlocking { db.backupDao().clearTransactions(); db.backupDao().clearRecurring(); db.backupDao().clearGoals(); db.backupDao().clearAccounts() }
+    val vm = home(); shot("12_firstrun", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) }
+  }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }
 }
 

@@ -32,7 +32,9 @@ data class AppSettings(
   val smsCaptureEnabled: Boolean = false,
   /** Account used for auto-captured transactions when no account matches the card/bank name. */
   val autoCaptureDefaultAccountId: Long? = null,
-  val onboardingDone: Boolean = false
+  val onboardingDone: Boolean = false,
+  /** When a backup file was last created (0 = never). */
+  val lastBackupAt: Long = 0L
 ) {
   val isLockEnabled: Boolean get() = pinHash != null && pinSalt != null
 }
@@ -55,6 +57,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val SMS_CAPTURE = booleanPreferencesKey("sms_capture")
     val DEFAULT_ACCOUNT = longPreferencesKey("auto_capture_default_account")
     val ONBOARDING = booleanPreferencesKey("onboarding_done")
+    val LAST_BACKUP = longPreferencesKey("last_backup_at")
   }
 
   val settings: Flow<AppSettings> = store.data.map { p ->
@@ -70,7 +73,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       notificationCaptureEnabled = p[Keys.NOTI_CAPTURE] ?: false,
       smsCaptureEnabled = p[Keys.SMS_CAPTURE] ?: false,
       autoCaptureDefaultAccountId = p[Keys.DEFAULT_ACCOUNT],
-      onboardingDone = p[Keys.ONBOARDING] ?: false
+      onboardingDone = p[Keys.ONBOARDING] ?: false,
+      lastBackupAt = p[Keys.LAST_BACKUP] ?: 0L
     )
   }
 
@@ -107,6 +111,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setThemeMode(mode: ThemeMode) = store.edit { it[Keys.THEME] = mode.name }
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
+  suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }
   suspend fun setDefaultCaptureAccount(id: Long?) = store.edit {
     if (id == null) it.remove(Keys.DEFAULT_ACCOUNT) else it[Keys.DEFAULT_ACCOUNT] = id
