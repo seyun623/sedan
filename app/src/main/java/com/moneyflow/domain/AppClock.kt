@@ -1,5 +1,9 @@
 package com.moneyflow.domain
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -23,6 +27,17 @@ object SystemAppClock : AppClock {
   override fun now(): Instant = Instant.now()
   override val zone: ZoneId get() = ZoneId.systemDefault()
 }
+
+/**
+ * Today's date, re-emitted when the day changes (checked every minute while collected), so
+ * screens left open over midnight move on to the new day / month.
+ */
+fun AppClock.todayFlow(): Flow<LocalDate> = flow {
+  while (true) {
+    emit(today())
+    delay(60_000)
+  }
+}.distinctUntilChanged()
 
 /** Month/day helpers shared by repositories, view models and tests. */
 object MonthKeys {

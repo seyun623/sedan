@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material3.AlertDialog
@@ -45,7 +46,7 @@ import com.moneyflow.util.Formatters
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-private enum class PasswordPurpose { SAVE, SHARE, OPEN }
+private enum class PasswordPurpose { SAVE, SHARE, OPEN, AUTO }
 
 /** Create an encrypted backup file and restore from one. */
 @Composable
@@ -58,6 +59,8 @@ fun BackupScreen(
   val lastBackupAt by viewModel.lastBackupAt.collectAsStateWithLifecycle()
   val busy by viewModel.busy.collectAsStateWithLifecycle()
   val pending by viewModel.pendingRestore.collectAsStateWithLifecycle()
+  val auto by viewModel.autoState.collectAsStateWithLifecycle()
+  var confirmAutoOff by rememberSaveable { mutableStateOf(false) }
 
   var passwordPurpose by rememberSaveable { mutableStateOf<PasswordPurpose?>(null) }
   var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -74,6 +77,13 @@ fun BackupScreen(
     if (uri == null) return@rememberLauncherForActivityResult
     if (pw == null) { errorMessage = "다시 시도해 주세요."; return@rememberLauncherForActivityResult }
     viewModel.saveBackup(uri, pw)
+  }
+  val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+    val pw = heldPassword
+    heldPassword = null
+    if (uri == null) return@rememberLauncherForActivityResult
+    if (pw == null) { errorMessage = "다시 시도해 주세요."; return@rememberLauncherForActivityResult }
+    viewModel.enableAutoBackup(uri, pw, intervalDays = 7)
   }
   val openDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     if (uri != null) {
@@ -130,6 +140,42 @@ fun BackupScreen(
       )
     }
 
+    SettingsSection("자동 백업") {
+      SettingsSwitchItem(
+        title = "자동 백업",
+        subtitle = if (auto.enabled) "${auto.folderName ?: "선택한 폴더"}에 ${if (auto.intervalDays == 1) "매일" else "매주"} 저장해요 (최근 ${com.moneyflow.data.repository.AutoBackupRepository.KEEP}개 보관)"
+          else "고른 폴더(휴대폰 저장공간, 구글 드라이브 등)에 백업 파일을 자동으로 저장해요",
+        icon = Icons.Filled.Backup,
+        checked = auto.enabled,
+        enabled = !busy,
+        onCheckedChange = { on -> if (on) passwordPurpose = PasswordPurpose.AUTO else confirmAutoOff = true },
+        modifier = Modifier.testTag("auto_backup_switch")
+      )
+      if (auto.enabled) {
+        Text(
+          buildString {
+            append(if (auto.lastAt > 0) "마지막 자동 백업: ${Formatters.formatDateTime(auto.lastAt)}" else "아직 자동 백업 전이에요")
+          },
+          style = MaterialTheme.typography.bodySmall, color = Gray600,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+        auto.error?.let {
+          Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = AccentRed, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        listOf(1 to "매일", 7 to "매주").forEach { (days, label) ->
+          SettingsRadioItem(title = "$label 백업", selected = auto.intervalDays == days, onSelect = { viewModel.setAutoBackupInterval(days) })
+        }
+        SettingsItem(
+          title = "지금 자동 백업",
+          subtitle = "자동 백업 폴더에 바로 저장해요",
+          icon = Icons.Filled.SaveAlt,
+          enabled = !busy,
+          showChevron = false,
+          onClick = viewModel::autoBackupNow
+        )
+      }
+    }
+
     SettingsSection("복원") {
       SettingsItem(
         title = "백업 파일 불러오기",
@@ -147,7 +193,9 @@ fun BackupScreen(
         listOf(
           "백업 파일은 비밀번호로 암호화돼요. 비밀번호를 잊으면 아무도 열 수 없어요.",
           "계좌, 거래, 예산, 저축 목표, 고정 거래가 모두 들어가요. 앱 잠금 PIN과 화면 설정은 들어가지 않아요.",
-          "휴대폰을 바꾸거나 초기화하기 전에 꼭 백업해 두세요. 앱을 지우면 기록도 함께 지워져요."
+          "휴대폰을 바꾸거나 초기화하기 전에 꼭 백업해 두세요. 앱을 지우면 기록도 함께 지워져요.",
+          "자동 백업은 휴대폰 안 보안 영역에 백업 비밀번호를 암호화해 두고 정해진 주기에 저장해요. 폴더는 구글 드라이브를 고르면 휴대폰을 잃어도 안전해요.",
+          "2주 넘게 백업하지 않으면 알려 드려요. (설정 → 알림에서 끌 수 있어요)"
         ).forEach {
           Text("• $it", style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(vertical = 3.dp))
         }
@@ -158,6 +206,7 @@ fun BackupScreen(
   passwordPurpose?.let { purpose ->
     BackupPasswordDialog(
       confirm = purpose != PasswordPurpose.OPEN,
+      note = if (purpose == PasswordPurpose.AUTO) "다음 화면에서 백업 파일을 저장할 폴더를 골라 주세요. 구글 드라이브를 고르면 휴대폰을 잃어도 복원할 수 있어요." else null,
       onDismiss = { passwordPurpose = null; openedUri = null },
       onSubmit = { pw ->
         passwordPurpose = null
@@ -165,8 +214,19 @@ fun BackupScreen(
           PasswordPurpose.SAVE -> { heldPassword = pw; createDocument.launch(fileName) }
           PasswordPurpose.SHARE -> viewModel.shareBackup(pw, fileName)
           PasswordPurpose.OPEN -> openedUri?.let { viewModel.openBackup(android.net.Uri.parse(it), pw) }
+          PasswordPurpose.AUTO -> { heldPassword = pw; pickFolder.launch(null) }
         }
       }
+    )
+  }
+
+  if (confirmAutoOff) {
+    ConfirmDialog(
+      title = "자동 백업을 끌까요?",
+      message = "이미 저장된 백업 파일은 지워지지 않아요.",
+      confirmLabel = "끄기",
+      onConfirm = { confirmAutoOff = false; viewModel.disableAutoBackup() },
+      onDismiss = { confirmAutoOff = false }
     )
   }
 
@@ -210,6 +270,7 @@ fun BackupScreen(
 @Composable
 private fun BackupPasswordDialog(
   confirm: Boolean,
+  note: String? = null,
   onDismiss: () -> Unit,
   onSubmit: (String) -> Unit
 ) {
@@ -226,6 +287,7 @@ private fun BackupPasswordDialog(
       Column {
         if (confirm) {
           Text("복원할 때 이 비밀번호가 필요해요. 잊으면 백업을 열 수 없어요.", style = MaterialTheme.typography.bodySmall, color = AccentRed)
+          note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(top = 4.dp)) }
           Spacer(Modifier.height(8.dp))
         }
         OutlinedTextField(

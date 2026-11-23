@@ -1,24 +1,12 @@
 package com.moneyflow.work
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.moneyflow.MainActivity
-import com.moneyflow.R
 import com.moneyflow.data.repository.CardRepository
 import com.moneyflow.data.repository.LedgerRepository
 import com.moneyflow.data.repository.SettingsRepository
@@ -68,29 +56,14 @@ class CardAlertWorker @AssistedInject constructor(
     val names = ledger.getAccounts().associate { it.id to it.name }
     val alerts = CardAlerts.due(cards.currentStatuses(), names, s.sentCardAlerts)
     if (alerts.isEmpty()) return Result.success()
-    ensureChannel(applicationContext)
-    val open = PendingIntent.getActivity(
-      applicationContext, 0,
-      Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-      PendingIntent.FLAG_IMMUTABLE
-    )
     alerts.forEach { a ->
-      val n = NotificationCompat.Builder(applicationContext, CHANNEL)
-        .setSmallIcon(R.mipmap.ic_launcher)
-        .setContentTitle(a.title)
-        .setContentText(a.text)
-        .setStyle(NotificationCompat.BigTextStyle().bigText(a.text))
-        .setContentIntent(open)
-        .setAutoCancel(true)
-        .build()
-      try { NotificationManagerCompat.from(applicationContext).notify(a.key.hashCode(), n) } catch (_: SecurityException) {}
+      Notifications.post(applicationContext, com.moneyflow.domain.alerts.Reminder(a.key, com.moneyflow.domain.alerts.ReminderChannel.CARD, a.title, a.text))
     }
     settings.markCardAlertsSent(alerts.map { it.key })
     return Result.success()
   }
 
   companion object {
-    const val CHANNEL = "card_alerts"
 
     fun schedule(context: Context) {
       WorkManager.getInstance(context).enqueueUniquePeriodicWork(
@@ -98,16 +71,6 @@ class CardAlertWorker @AssistedInject constructor(
       )
     }
 
-    fun canNotify(context: Context): Boolean =
-      Build.VERSION.SDK_INT < 33 ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-
-    private fun ensureChannel(context: Context) {
-      if (Build.VERSION.SDK_INT >= 26) {
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-          NotificationChannel(CHANNEL, "카드 실적·혜택 알림", NotificationManager.IMPORTANCE_DEFAULT)
-        )
-      }
-    }
+    fun canNotify(context: Context): Boolean = Notifications.canNotify(context)
   }
 }

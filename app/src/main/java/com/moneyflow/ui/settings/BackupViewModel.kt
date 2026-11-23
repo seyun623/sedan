@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -25,6 +26,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+
+data class AutoBackupUi(
+  val enabled: Boolean = false,
+  val folderName: String? = null,
+  val intervalDays: Int = 7,
+  val lastAt: Long = 0L,
+  val error: String? = null
+)
 
 sealed interface BackupEvent {
   data class Error(val message: String) : BackupEvent
@@ -39,8 +48,55 @@ class BackupViewModel @Inject constructor(
   private val backups: BackupRepository,
   private val recurring: RecurringRepository,
   settings: SettingsRepository,
+  private val autoBackup: com.moneyflow.data.repository.AutoBackupRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
+
+  /** Auto backup state for the screen. */
+  val autoState: StateFlow<AutoBackupUi> = settings.settings.map { s ->
+    AutoBackupUi(
+      enabled = s.autoBackupEnabled,
+      folderName = s.autoBackupFolder?.let { folderName(it) },
+      intervalDays = s.autoBackupIntervalDays,
+      lastAt = s.autoBackupLastAt,
+      error = s.autoBackupError
+    )
+  }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AutoBackupUi())
+
+  /** Turns auto backup on with a folder from the system picker and makes the first backup. */
+  fun enableAutoBackup(tree: Uri, password: String, intervalDays: Int) = run {
+    withContext(Dispatchers.IO) {
+      context.contentResolver.takePersistableUriPermission(
+        tree, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+      )
+    }
+    autoBackup.enable(tree.toString(), password, intervalDays)
+    autoBackup.runIfDue(force = true)
+    messages.show("자동 백업을 켰어요. 첫 백업을 저장했어요.")
+  }
+
+  fun disableAutoBackup() = run {
+    autoBackup.disable()
+    messages.show("자동 백업을 껐어요. 저장된 백업 파일은 그대로 있어요.")
+  }
+
+  fun autoBackupNow() = run {
+    val name = autoBackup.runIfDue(force = true)
+    messages.show("백업했어요: $name")
+  }
+
+  fun setAutoBackupInterval(days: Int) = viewModelScope.launch { settingsRepo.setAutoBackupInterval(days) }
+
+  private val settingsRepo = settings
+
+  private fun folderName(tree: String): String = runCatching {
+    val uri = Uri.parse(tree)
+    val doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, android.provider.DocumentsContract.getTreeDocumentId(uri))
+    context.contentResolver.query(doc, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+      ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+  }.getOrNull() ?: runCatching {
+    android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(tree)).substringAfter(':').ifEmpty { "선택한 폴더" }
+  }.getOrDefault("선택한 폴더")
 
   val lastBackupAt: StateFlow<Long> = settings.settings.map { it.lastBackupAt }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)

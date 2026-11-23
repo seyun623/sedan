@@ -95,6 +95,45 @@ fun SettingsScreen(
         },
         modifier = Modifier.testTag("settings_card_alerts")
       )
+      val budgetPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> if (granted) viewModel.setBudgetAlerts(true) }
+      val summaryPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> if (granted) viewModel.setMonthlySummary(true) }
+      val needsPermission = {
+        android.os.Build.VERSION.SDK_INT >= 33 &&
+          androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+          android.content.pm.PackageManager.PERMISSION_GRANTED
+      }
+      SettingsSwitchItem(
+        title = "예산 알림",
+        subtitle = "이번 달 예산의 80%, 100%를 넘을 때와 카테고리 예산을 넘을 때 알려 드려요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.budgetAlertsEnabled,
+        onCheckedChange = { on ->
+          if (on && needsPermission()) budgetPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBudgetAlerts(on)
+        },
+        modifier = Modifier.testTag("settings_budget_alerts")
+      )
+      SettingsSwitchItem(
+        title = "매월 1일 지난달 요약",
+        subtitle = "지난달 지출·수입, 예산 대비, 가장 많이 쓴 곳을 알려 드려요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.monthlySummaryEnabled,
+        onCheckedChange = { on ->
+          if (on && needsPermission()) summaryPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setMonthlySummary(on)
+        },
+        modifier = Modifier.testTag("settings_monthly_summary")
+      )
+      SettingsSwitchItem(
+        title = "백업 알림",
+        subtitle = "2주 넘게 백업하지 않았거나 자동 백업이 실패하면 알려 드려요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.backupReminderEnabled,
+        onCheckedChange = viewModel::setBackupReminder,
+        modifier = Modifier.testTag("settings_backup_reminder")
+      )
     }
 
     SettingsSection("AI") {

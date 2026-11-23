@@ -142,7 +142,9 @@ class ScreenshotTest {
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(
     androidx.test.core.app.ApplicationProvider.getApplicationContext(),
-    com.moneyflow.data.repository.BackupRepository(db, settings, clock), recurring, settings, bus)
+    com.moneyflow.data.repository.BackupRepository(db, settings, clock), recurring, settings,
+    com.moneyflow.data.repository.AutoBackupRepository(androidx.test.core.app.ApplicationProvider.getApplicationContext(),
+      com.moneyflow.data.repository.BackupRepository(db, settings, clock), settings, com.moneyflow.testing.PlainSecretStore, clock), bus)
   @Test fun backupLight() { val vm = backupVm(); shot("11_backup", false) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
   @Test fun backupDark() { val vm = backupVm(); shot("11_backup", true) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
   @Test fun firstRunHome() {

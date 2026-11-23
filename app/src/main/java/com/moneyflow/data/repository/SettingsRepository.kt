@@ -52,8 +52,25 @@ data class AppSettings(
   /** Alerts already sent ("kind|account|period"), so each is sent once. */
   val sentCardAlerts: Set<String> = emptySet(),
   /** Last "실적" figure read from each card company screen, by account id. */
-  val cardPerformance: Map<Long, CardPerformance> = emptyMap()
+  val cardPerformance: Map<Long, CardPerformance> = emptyMap(),
+  /** Auto backup: folder picked with the system file picker (tree URI). */
+  val autoBackupFolder: String? = null,
+  /** Auto backup password, encrypted with the Android Keystore. */
+  val autoBackupPasswordEncrypted: String? = null,
+  val autoBackupIntervalDays: Int = 7,
+  val autoBackupLastAt: Long = 0L,
+  /** Last auto backup failure (null = last run succeeded). */
+  val autoBackupError: String? = null,
+  /** Remind when there has been no backup for a while. */
+  val backupReminderEnabled: Boolean = true,
+  /** Budget 80% / 100% alerts. */
+  val budgetAlertsEnabled: Boolean = false,
+  /** Last month's summary on the 1st. */
+  val monthlySummaryEnabled: Boolean = false,
+  /** Show amounts on the home screen widget while app lock is on. */
+  val widgetShowAmountsWhenLocked: Boolean = false
 ) {
+  val autoBackupEnabled: Boolean get() = autoBackupFolder != null && autoBackupPasswordEncrypted != null
   val aiApiKeyEncrypted: String? get() = aiKeysEncrypted[aiProvider]
   val aiModel: String get() = aiModels[aiProvider]?.takeIf { it.isNotBlank() } ?: aiProvider.defaultModel
   val aiBaseUrl: String? get() = if (aiProvider == AiProvider.CUSTOM) aiCustomBaseUrl else aiProvider.defaultBaseUrl
@@ -95,6 +112,15 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     /** v1.1.0 single Gemini key / model (read as the Gemini entries). */
     val LEGACY_AI_KEY = stringPreferencesKey("ai_api_key_enc")
     val LEGACY_AI_MODEL = stringPreferencesKey("ai_model")
+    val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
+    val AUTO_BACKUP_PW = stringPreferencesKey("auto_backup_password_enc")
+    val AUTO_BACKUP_DAYS = intPreferencesKey("auto_backup_interval_days")
+    val AUTO_BACKUP_LAST = longPreferencesKey("auto_backup_last_at")
+    val AUTO_BACKUP_ERROR = stringPreferencesKey("auto_backup_error")
+    val BACKUP_REMINDER = booleanPreferencesKey("backup_reminder")
+    val BUDGET_ALERTS = booleanPreferencesKey("budget_alerts")
+    val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
+    val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
@@ -127,7 +153,16 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
       cardAlertsEnabled = p[Keys.CARD_ALERTS] ?: false,
       lastSeenVersion = p[Keys.LAST_SEEN_VERSION],
-      sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet()
+      sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet(),
+      autoBackupFolder = p[Keys.AUTO_BACKUP_FOLDER],
+      autoBackupPasswordEncrypted = p[Keys.AUTO_BACKUP_PW],
+      autoBackupIntervalDays = p[Keys.AUTO_BACKUP_DAYS] ?: 7,
+      autoBackupLastAt = p[Keys.AUTO_BACKUP_LAST] ?: 0L,
+      autoBackupError = p[Keys.AUTO_BACKUP_ERROR],
+      backupReminderEnabled = p[Keys.BACKUP_REMINDER] ?: true,
+      budgetAlertsEnabled = p[Keys.BUDGET_ALERTS] ?: false,
+      monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
+      widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false
     )
   }
 
@@ -213,6 +248,39 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       it[Keys.aiKey(provider)] = encrypted
     }
   }
+  /** Records sent reminders (card, budget, backup …); keeps only the most recent ones. */
+  suspend fun markAlertsSent(keys: Collection<String>) = markCardAlertsSent(keys)
+
+  suspend fun setAutoBackup(folder: String, passwordEncrypted: String, intervalDays: Int) = store.edit {
+    it[Keys.AUTO_BACKUP_FOLDER] = folder
+    it[Keys.AUTO_BACKUP_PW] = passwordEncrypted
+    it[Keys.AUTO_BACKUP_DAYS] = intervalDays
+    it.remove(Keys.AUTO_BACKUP_ERROR)
+  }
+
+  suspend fun clearAutoBackup() = store.edit {
+    it.remove(Keys.AUTO_BACKUP_FOLDER)
+    it.remove(Keys.AUTO_BACKUP_PW)
+    it.remove(Keys.AUTO_BACKUP_ERROR)
+  }
+
+  suspend fun setAutoBackupInterval(days: Int) = store.edit { it[Keys.AUTO_BACKUP_DAYS] = days }
+
+  /** Result of an auto backup run: [error] null = success at [at]. */
+  suspend fun setAutoBackupResult(at: Long, error: String?) = store.edit {
+    if (error == null) {
+      it[Keys.AUTO_BACKUP_LAST] = at
+      it.remove(Keys.AUTO_BACKUP_ERROR)
+    } else {
+      it[Keys.AUTO_BACKUP_ERROR] = error
+    }
+  }
+
+  suspend fun setBackupReminder(enabled: Boolean) = store.edit { it[Keys.BACKUP_REMINDER] = enabled }
+  suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
+  suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }
+  suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
+
   suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }
   suspend fun setDefaultCaptureAccount(id: Long?) = store.edit {

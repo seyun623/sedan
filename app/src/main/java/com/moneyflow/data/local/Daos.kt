@@ -66,6 +66,12 @@ interface TransactionDao {
   @Query("SELECT * FROM transactions WHERE accountId = :accountId OR toAccountId = :accountId ORDER BY timestamp DESC, id DESC")
   fun observeByAccount(accountId: Long): Flow<List<TransactionEntity>>
 
+  @Query("SELECT * FROM transactions WHERE timestamp BETWEEN :start AND :end ORDER BY timestamp DESC, id DESC")
+  suspend fun getBetween(start: Long, end: Long): List<TransactionEntity>
+
+  @Query("SELECT MIN(timestamp) FROM transactions")
+  suspend fun earliestTimestamp(): Long?
+
   @Query("SELECT * FROM transactions WHERE id = :id")
   suspend fun getById(id: Long): TransactionEntity?
 

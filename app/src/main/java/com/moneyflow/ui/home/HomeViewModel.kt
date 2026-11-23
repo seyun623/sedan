@@ -21,6 +21,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import com.moneyflow.domain.todayFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -61,18 +65,24 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
   private val ledger: LedgerRepository,
-  budgets: BudgetRepository,
-  settings: SettingsRepository,
-  cards: com.moneyflow.data.repository.CardRepository,
+  private val budgets: BudgetRepository,
+  private val settings: SettingsRepository,
+  private val cards: com.moneyflow.data.repository.CardRepository,
   private val seeder: SampleDataSeeder,
   private val stats: MonthlyStatsCalculator,
   private val messages: UserMessageBus,
   private val clock: AppClock
 ) : ViewModel() {
 
-  private val month = clock.currentMonth()
 
-  val uiState: StateFlow<HomeUiState> = combine(
+  @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+  val uiState: StateFlow<HomeUiState> = clock.todayFlow()
+    .map { java.time.YearMonth.from(it) }
+    .distinctUntilChanged()
+    .flatMapLatest { month -> state(month) }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+  private fun state(month: java.time.YearMonth) = combine(
     ledger.accounts,
     ledger.transactions,
     ledger.goals,
@@ -107,7 +117,7 @@ class HomeViewModel @Inject constructor(
       cardStatuses = cardStatuses.filter { it.target > 0 },
       cardGuide = cardGuide
     )
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+  }
 
   fun addAccount(
     name: String, bankName: String, type: AccountType, accountNumber: String,

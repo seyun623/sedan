@@ -86,6 +86,9 @@ class SettingsViewModel @Inject constructor(
   fun lockNow() = lock.lockNow()
 
   fun setCardAlertsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setCardAlertsEnabled(enabled) }
+  fun setBudgetAlerts(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBudgetAlerts(enabled) }
+  fun setMonthlySummary(enabled: Boolean) = viewModelScope.launch { settingsRepo.setMonthlySummary(enabled) }
+  fun setBackupReminder(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBackupReminder(enabled) }
 
   // ---- Appearance ----
   fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { settingsRepo.setThemeMode(mode) }
