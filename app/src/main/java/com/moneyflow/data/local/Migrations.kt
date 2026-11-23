@@ -72,3 +72,19 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     )
   }
 }
+
+/** v3 -> v4: card spending-goal settings and card benefits (new tables only). */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `card_profiles` (`accountId` INTEGER NOT NULL, `performanceTarget` INTEGER NOT NULL, " +
+        "`cycleStartDay` INTEGER NOT NULL, `excludedCategories` TEXT NOT NULL, `excludedKeywords` TEXT NOT NULL, PRIMARY KEY(`accountId`))"
+    )
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `card_benefits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `accountId` INTEGER NOT NULL, " +
+        "`title` TEXT NOT NULL, `category` TEXT, `merchantKeywords` TEXT NOT NULL, `kind` TEXT NOT NULL, `value` INTEGER NOT NULL, " +
+        "`monthlyCap` INTEGER NOT NULL, `minPerformance` INTEGER NOT NULL, `minAmount` INTEGER NOT NULL, `isActive` INTEGER NOT NULL)"
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_benefits_accountId` ON `card_benefits` (`accountId`)")
+  }
+}

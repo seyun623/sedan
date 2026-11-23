@@ -102,7 +102,7 @@ class ScreenshotTest {
     File(dir, "${name}_${if (dark) "dark" else "light"}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
   }
 
-  private fun home() = HomeViewModel(ledger, budgets, settings, seeder, stats, bus, clock)
+  private fun home() = HomeViewModel(ledger, budgets, settings, com.moneyflow.data.repository.CardRepository(db, clock), seeder, stats, bus, clock)
   private fun monthStore() = SelectedMonthStore(clock)
 
   @Test fun homeLight() { val vm = home(); shot("01_home", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
@@ -133,7 +133,7 @@ class ScreenshotTest {
   @Test fun captureLight() { val vm = settingsVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   @Test fun captureDark() { val vm = settingsVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
-    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, bus)
+    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, com.moneyflow.data.repository.CardRepository(db, clock), bus)
   @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(
@@ -164,6 +164,14 @@ class ScreenshotTest {
   }
   @Test fun cardPreview() { val vm = previewVm(); shot("15_cardpreview", false) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
   @Test fun cardPreviewDark() { val vm = previewVm(); shot("15_cardpreview", true) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
+  private fun seedCard() = runBlocking {
+    db.cardDao().upsertProfile(com.moneyflow.data.model.CardProfileEntity(3L, 300_000, 1, "", "관리비"))
+    db.cardDao().insertBenefit(com.moneyflow.data.model.CardBenefitEntity(accountId = 3L, title = "카페 10% 할인", category = "카페/간식", value = 1000, monthlyCap = 5_000))
+    db.cardDao().insertBenefit(com.moneyflow.data.model.CardBenefitEntity(accountId = 3L, title = "쇼핑 5% 적립", category = "쇼핑", value = 500, monthlyCap = 10_000, minPerformance = 300_000))
+  }
+  @Test fun cardAccountLight() { seedCard(); val vm = accountVm(); shot("16_cardaccount", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
+  @Test fun cardAccountDark() { seedCard(); val vm = accountVm(); shot("16_cardaccount", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
+  @Test fun homeCardGoals() { seedCard(); val vm = home(); shot("17_homecards", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }
 }
 

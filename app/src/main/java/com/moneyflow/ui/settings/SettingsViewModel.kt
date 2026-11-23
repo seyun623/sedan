@@ -85,6 +85,8 @@ class SettingsViewModel @Inject constructor(
   fun setSecureScreen(enabled: Boolean) = viewModelScope.launch { settingsRepo.setSecureScreen(enabled) }
   fun lockNow() = lock.lockNow()
 
+  fun setCardAlertsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setCardAlertsEnabled(enabled) }
+
   // ---- Appearance ----
   fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { settingsRepo.setThemeMode(mode) }
 

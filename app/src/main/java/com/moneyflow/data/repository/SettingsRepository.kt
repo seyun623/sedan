@@ -46,6 +46,9 @@ data class AppSettings(
   val aiModels: Map<AiProvider, String> = emptyMap(),
   /** Base URL for [AiProvider.CUSTOM]. */
   val aiCustomBaseUrl: String = "",
+  val cardAlertsEnabled: Boolean = false,
+  /** Alerts already sent ("kind|account|period"), so each is sent once. */
+  val sentCardAlerts: Set<String> = emptySet(),
   /** Last "실적" figure read from each card company screen, by account id. */
   val cardPerformance: Map<Long, CardPerformance> = emptyMap()
 ) {
@@ -82,6 +85,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
     val CARD_PERFORMANCE = stringPreferencesKey("card_performance_json")
+    val CARD_ALERTS = booleanPreferencesKey("card_alerts_enabled")
+    val SENT_CARD_ALERTS = androidx.datastore.preferences.core.stringSetPreferencesKey("sent_card_alerts")
     val AI_PROVIDER = stringPreferencesKey("ai_provider")
     val AI_CUSTOM_URL = stringPreferencesKey("ai_custom_base_url")
     /** v1.1.0 single Gemini key / model (read as the Gemini entries). */
@@ -116,7 +121,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
         (p[Keys.aiModel(pr)] ?: if (pr == AiProvider.GEMINI) p[Keys.LEGACY_AI_MODEL] else null)?.let { pr to it }
       }.toMap(),
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
-      cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE])
+      cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
+      cardAlertsEnabled = p[Keys.CARD_ALERTS] ?: false,
+      sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet()
     )
   }
 
@@ -155,6 +162,13 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
   suspend fun setAiEnabled(enabled: Boolean) = store.edit { it[Keys.AI_ENABLED] = enabled }
+  suspend fun setCardAlertsEnabled(enabled: Boolean) = store.edit { it[Keys.CARD_ALERTS] = enabled }
+
+  /** Records sent alerts; keeps only the most recent ones. */
+  suspend fun markCardAlertsSent(keys: Collection<String>) = store.edit {
+    it[Keys.SENT_CARD_ALERTS] = ((it[Keys.SENT_CARD_ALERTS] ?: emptySet()) + keys).toList().takeLast(200).toSet()
+  }
+
   suspend fun setCardPerformance(accountId: Long, value: CardPerformance) = store.edit {
     val map = parsePerformance(it[Keys.CARD_PERFORMANCE]).toMutableMap()
     map[accountId] = value

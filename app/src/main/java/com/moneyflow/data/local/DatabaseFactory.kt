@@ -14,7 +14,7 @@ object DatabaseFactory {
     encryptPlaintextDatabaseIfNeeded(context, passphrase)
     return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
       .openHelperFactory(SupportOpenHelperFactory(passphrase.toByteArray(Charsets.UTF_8)))
-      .addMigrations(MIGRATION_2_3)
+      .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
       // v1 only ever existed in early AI Studio previews; nothing to migrate from it.
       .fallbackToDestructiveMigrationFrom(true, 1)
       .build()

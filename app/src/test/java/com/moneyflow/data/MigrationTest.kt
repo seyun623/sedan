@@ -49,5 +49,24 @@ class MigrationTest {
     }
   }
 
-  private companion object { const val DB = "migration-test" }
+  @Test fun migrate3To4_addsCardTables() {
+    helper.createDatabase(DB4, 3).apply {
+      execSQL("INSERT INTO accounts(id,name,bankName,accountType,accountNumber,balance,colorHex,isFavorite,isDebt) VALUES(1,'카드','현대카드','CREDIT_CARD','',0,0,0,1)")
+      close()
+    }
+    val db = helper.runMigrationsAndValidate(DB4, 4, true, com.moneyflow.data.local.MIGRATION_3_4)
+    db.execSQL("INSERT INTO card_profiles(accountId,performanceTarget,cycleStartDay,excludedCategories,excludedKeywords) VALUES(1,300000,1,'','')")
+    db.query("SELECT COUNT(*) FROM card_profiles").use { c -> c.moveToNext(); assertEquals(1, c.getInt(0)) }
+  }
+
+  @Test fun migrate2To4_fullPath() {
+    helper.createDatabase(DB24, 2).close()
+    helper.runMigrationsAndValidate(DB24, 4, true, MIGRATION_2_3, com.moneyflow.data.local.MIGRATION_3_4)
+  }
+
+  private companion object {
+    const val DB = "migration-test"
+    const val DB4 = "migration-test-4"
+    const val DB24 = "migration-test-24"
+  }
 }

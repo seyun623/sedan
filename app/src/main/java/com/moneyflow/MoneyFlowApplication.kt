@@ -23,5 +23,6 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     appLockManager.initialize()
     ProcessLifecycleOwner.get().lifecycle.addObserver(appLockManager)
     RecurringWorker.schedule(this)
+    com.moneyflow.work.CardAlertWorker.schedule(this)
   }
 }

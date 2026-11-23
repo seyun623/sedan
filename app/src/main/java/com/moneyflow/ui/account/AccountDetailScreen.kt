@@ -83,6 +83,9 @@ fun AccountDetailScreen(
   // Balance shown when the edit dialog was opened; if the user leaves it unchanged, the
   // current balance is kept (a transaction may have changed it while the dialog was open).
   var editBaselineBalance by rememberSaveable { mutableStateOf<Long?>(null) }
+  var showProfileDialog by rememberSaveable { mutableStateOf(false) }
+  /** null = closed, 0 = new benefit, otherwise the benefit id being edited. */
+  var editingBenefitId by rememberSaveable { mutableStateOf<Long?>(null) }
   var showTransfer by rememberSaveable { mutableStateOf(false) }
   var confirmDelete by rememberSaveable { mutableStateOf(false) }
   var confirmDeleteRelated by rememberSaveable { mutableStateOf<String?>(null) }
@@ -148,7 +151,16 @@ fun AccountDetailScreen(
           AccountHeaderCard(account, transferEnabled = state.otherAccounts.isNotEmpty(), onTransfer = { showTransfer = true })
         }
         if (account.accountType == com.moneyflow.data.model.AccountType.CREDIT_CARD) item(key = "card_performance") {
-          CardPerformanceCard(state.cardPerformance, onOpenCardImport)
+          CardSection(
+            status = state.cardStatus,
+            profile = state.cardProfile,
+            benefits = state.cardBenefits,
+            imported = state.cardPerformance,
+            onEditProfile = { showProfileDialog = true },
+            onAddBenefit = { editingBenefitId = 0L },
+            onEditBenefit = { editingBenefitId = it.id },
+            onOpenCardImport = onOpenCardImport
+          )
         }
         item(key = "tx_title") {
           Text(
@@ -179,6 +191,22 @@ fun AccountDetailScreen(
         item(key = "bottom") { Spacer(Modifier.height(24.dp)) }
       }
     }
+  }
+
+  if (showProfileDialog) {
+    CardProfileDialog(
+      initial = state.cardProfile,
+      onDismiss = { showProfileDialog = false },
+      onSave = viewModel::saveCardProfile
+    )
+  }
+  editingBenefitId?.let { id ->
+    BenefitDialog(
+      initial = state.cardBenefits.firstOrNull { it.id == id },
+      onDismiss = { editingBenefitId = null },
+      onSave = viewModel::saveBenefit,
+      onDelete = viewModel::deleteBenefit
+    )
   }
 
   if (showEdit && account != null) {
@@ -289,35 +317,6 @@ private fun AccountHeaderCard(account: AccountEntity, transferEnabled: Boolean, 
         Spacer(Modifier.width(6.dp))
         Text(if (transferEnabled) "이체하기" else "이체할 다른 계좌가 없어요", fontWeight = FontWeight.Bold)
       }
-    }
-  }
-}
-
-@Composable
-private fun CardPerformanceCard(perf: com.moneyflow.data.repository.CardPerformance?, onOpenCardImport: () -> Unit) {
-  androidx.compose.material3.Surface(shape = RoundedCornerShape(16.dp), color = com.moneyflow.ui.theme.CardSurface, modifier = Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp)) {
-      Text("카드사 실적", fontWeight = FontWeight.Bold, color = Gray900)
-      if (perf != null) {
-        Text(
-          "${perf.label}: ${com.moneyflow.util.Formatters.formatCurrency(perf.amount)}",
-          color = Gray900,
-          modifier = Modifier.padding(top = 4.dp)
-        )
-        Text(
-          "${com.moneyflow.util.Formatters.formatDateTime(perf.fetchedAt)}에 카드사에서 가져옴",
-          style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-          color = Gray600
-        )
-      } else {
-        Text(
-          "카드사 홈페이지에서 이용내역과 실적을 가져올 수 있어요.",
-          style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-          color = Gray600,
-          modifier = Modifier.padding(top = 4.dp)
-        )
-      }
-      androidx.compose.material3.TextButton(onClick = onOpenCardImport) { Text("카드사에서 가져오기") }
     }
   }
 }

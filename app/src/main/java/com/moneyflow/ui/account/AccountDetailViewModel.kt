@@ -26,6 +26,9 @@ data class AccountDetailUiState(
   val otherAccounts: List<AccountEntity> = emptyList(),
   /** Last "실적" read from the card company's site (card accounts). */
   val cardPerformance: com.moneyflow.data.repository.CardPerformance? = null,
+  val cardProfile: com.moneyflow.data.model.CardProfileEntity? = null,
+  val cardBenefits: List<com.moneyflow.data.model.CardBenefitEntity> = emptyList(),
+  val cardStatus: com.moneyflow.domain.card.CardStatus? = null,
   val isLoading: Boolean = true
 )
 
@@ -41,6 +44,7 @@ class AccountDetailViewModel @Inject constructor(
   savedState: SavedStateHandle,
   private val ledger: LedgerRepository,
   settings: com.moneyflow.data.repository.SettingsRepository,
+  private val cards: com.moneyflow.data.repository.CardRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
   private val accountId: Long = checkNotNull(savedState.get<Long>(ARG_ACCOUNT_ID))
@@ -49,9 +53,15 @@ class AccountDetailViewModel @Inject constructor(
     ledger.observeAccount(accountId),
     ledger.observeAccountTransactions(accountId),
     ledger.accounts,
-    settings.settings
-  ) { account, txs, all, s ->
-    AccountDetailUiState(account, txs, all.filter { it.id != accountId }, s.cardPerformance[accountId], isLoading = false)
+    settings.settings,
+    kotlinx.coroutines.flow.combine(cards.observeProfile(accountId), cards.observeBenefits(accountId), cards.statuses) { p, b, st ->
+      Triple(p, b, st.firstOrNull { it.accountId == accountId })
+    }
+  ) { account, txs, all, s, card ->
+    AccountDetailUiState(
+      account, txs, all.filter { it.id != accountId }, s.cardPerformance[accountId],
+      cardProfile = card.first, cardBenefits = card.second, cardStatus = card.third, isLoading = false
+    )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())
 
   private val _events = Channel<AccountEvent>(Channel.BUFFERED)
@@ -80,6 +90,31 @@ class AccountDetailViewModel @Inject constructor(
         AccountEvent.ConfirmDeleteRelated("${r.reason}\n함께 삭제하면 관련 거래가 지워지고 다른 계좌 잔액도 되돌려집니다.")
       )
     }
+  }
+
+  fun saveCardProfile(target: Long, cycleStartDay: Int, excludedCategories: Set<String>, excludedKeywords: String) = viewModelScope.launch {
+    if (target <= 0) {
+      cards.deleteProfile(accountId)
+      messages.show("실적 관리를 껐어요.")
+    } else {
+      cards.saveProfile(
+        com.moneyflow.data.model.CardProfileEntity(
+          accountId, target, cycleStartDay.coerceIn(1, 28), excludedCategories.joinToString(","),
+          excludedKeywords.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
+        )
+      )
+      messages.show("실적 조건을 저장했어요.")
+    }
+  }
+
+  fun saveBenefit(benefit: com.moneyflow.data.model.CardBenefitEntity) = viewModelScope.launch {
+    cards.saveBenefit(benefit.copy(accountId = accountId))
+    messages.show("'${benefit.title}' 혜택을 저장했어요.")
+  }
+
+  fun deleteBenefit(benefit: com.moneyflow.data.model.CardBenefitEntity) = viewModelScope.launch {
+    cards.deleteBenefit(benefit)
+    messages.show("'${benefit.title}' 혜택을 삭제했어요.")
   }
 
   fun transfer(to: AccountEntity, amount: Long, memo: String) = viewModelScope.launch {

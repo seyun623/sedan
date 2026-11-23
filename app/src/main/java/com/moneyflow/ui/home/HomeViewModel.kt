@@ -49,7 +49,9 @@ data class HomeUiState(
   val expenseChangeVsLastMonthPct: Float? = null,
   val recentTransactions: List<TransactionEntity> = emptyList(),
   val goals: List<SavingGoalEntity> = emptyList(),
-  val isLockEnabled: Boolean = false
+  val isLockEnabled: Boolean = false,
+  /** 실적 status of cards that have 실적 settings. */
+  val cardStatuses: List<com.moneyflow.domain.card.CardStatus> = emptyList()
 ) {
   val hasNoAccounts: Boolean get() = !isLoading && accounts.isEmpty()
 }
@@ -59,6 +61,7 @@ class HomeViewModel @Inject constructor(
   private val ledger: LedgerRepository,
   budgets: BudgetRepository,
   settings: SettingsRepository,
+  cards: com.moneyflow.data.repository.CardRepository,
   private val seeder: SampleDataSeeder,
   private val stats: MonthlyStatsCalculator,
   private val messages: UserMessageBus,
@@ -72,8 +75,8 @@ class HomeViewModel @Inject constructor(
     ledger.transactions,
     ledger.goals,
     budgets.observeBudget(month),
-    settings.settings
-  ) { accounts, txs, goals, budget, s ->
+    combine(settings.settings, cards.statuses) { s, c -> s to c }
+  ) { accounts, txs, goals, budget, (s, cardStatuses) ->
     val assets = accounts.filter { !it.isDebt }.sumOf { it.balance }
     val debts = accounts.filter { it.isDebt }.sumOf { it.balance }
     val monthTxs = stats.inMonth(txs, month)
@@ -98,7 +101,8 @@ class HomeViewModel @Inject constructor(
       expenseChangeVsLastMonthPct = trends.lastOrNull()?.changeVsPrevPct,
       recentTransactions = txs.take(RECENT_COUNT),
       goals = goals,
-      isLockEnabled = s.isLockEnabled
+      isLockEnabled = s.isLockEnabled,
+      cardStatuses = cardStatuses
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

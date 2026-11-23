@@ -72,6 +72,30 @@ fun SettingsScreen(
       )
     }
 
+    SettingsSection("알림") {
+      val context = androidx.compose.ui.platform.LocalContext.current
+      val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> viewModel.setCardAlertsEnabled(granted) }
+      SettingsSwitchItem(
+        title = "카드 실적·혜택 알림",
+        subtitle = "실적 기간이 5일 남았는데 모자랄 때, 혜택 한도를 다 썼을 때 알려 드려요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.cardAlertsEnabled,
+        onCheckedChange = { on ->
+          if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+          ) {
+            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+          } else {
+            viewModel.setCardAlertsEnabled(on)
+          }
+        },
+        modifier = Modifier.testTag("settings_card_alerts")
+      )
+    }
+
     SettingsSection("AI") {
       SettingsItem(
         title = "AI 카테고리 추천",

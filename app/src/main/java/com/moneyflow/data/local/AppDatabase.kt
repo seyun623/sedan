@@ -5,6 +5,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.moneyflow.data.model.AccountEntity
 import com.moneyflow.data.model.BudgetEntity
+import com.moneyflow.data.model.CardBenefitEntity
+import com.moneyflow.data.model.CardProfileEntity
 import com.moneyflow.data.model.CategoryBudgetEntity
 import com.moneyflow.data.model.RecurringTransactionEntity
 import com.moneyflow.data.model.SavingGoalEntity
@@ -17,7 +19,9 @@ import com.moneyflow.data.model.TransactionEntity
     BudgetEntity::class,
     CategoryBudgetEntity::class,
     SavingGoalEntity::class,
-    RecurringTransactionEntity::class
+    RecurringTransactionEntity::class,
+    CardProfileEntity::class,
+    CardBenefitEntity::class
   ],
   version = AppDatabase.VERSION,
   exportSchema = true
@@ -30,9 +34,10 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun savingGoalDao(): SavingGoalDao
   abstract fun recurringTransactionDao(): RecurringTransactionDao
   abstract fun backupDao(): BackupDao
+  abstract fun cardDao(): CardDao
 
   companion object {
-    const val VERSION = 3
+    const val VERSION = 4
     const val NAME = "moneyflow_finance.db"
   }
 }

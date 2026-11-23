@@ -96,7 +96,11 @@ class LedgerRepositoryTest {
     val b = ledger.addAccount(bank("B", 100_000))
     ledger.transfer(db.accountDao().getById(a)!!, db.accountDao().getById(b)!!, 30_000, "")
     assertTrue(ledger.deleteAccount(a, deleteRelated = false) is LedgerResult.Rejected)
+    db.cardDao().upsertProfile(com.moneyflow.data.model.CardProfileEntity(a, 100))
+    db.cardDao().insertBenefit(com.moneyflow.data.model.CardBenefitEntity(accountId = a, title = "x", value = 100))
     assertEquals(LedgerResult.Ok, ledger.deleteAccount(a, deleteRelated = true))
+    assertTrue(db.cardDao().getProfiles().isEmpty())
+    assertTrue(db.cardDao().getBenefits().isEmpty())
     assertNull(db.accountDao().getById(a))
     assertEquals(100_000, balance(b)) // transfer into B was reverted
     assertEquals(0, db.transactionDao().count())

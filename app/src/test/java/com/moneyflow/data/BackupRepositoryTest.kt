@@ -53,11 +53,15 @@ class BackupRepositoryTest {
     val accounts = ledger.getAccounts()
     ledger.depositToGoal(goal, accounts.first().id, 50_000)
     ledger.transfer(accounts[0], accounts[1], 10_000, "이체")
+    val cardId = accounts.first { it.isDebt }.id
+    source.cardDao().upsertProfile(com.moneyflow.data.model.CardProfileEntity(cardId, 300_000, 13, "주거/통신", "관리비"))
+    source.cardDao().insertBenefit(com.moneyflow.data.model.CardBenefitEntity(accountId = cardId, title = "카페 10%", category = "카페/간식", value = 1000, monthlyCap = 10_000))
     return ledger
   }
 
   private suspend fun snapshot(db: AppDatabase) = with(db.backupDao()) {
-    listOf(accounts(), transactions(), budgets(), categoryBudgets().sortedBy { it.category }, goals(), recurring())
+    listOf(accounts(), transactions(), budgets(), categoryBudgets().sortedBy { it.category }, goals(), recurring(),
+      db.cardDao().getProfiles(), db.cardDao().getBenefits())
   }
 
   @Test fun cryptoRoundTripAndWrongPassword() {

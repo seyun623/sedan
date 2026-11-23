@@ -4,7 +4,10 @@ import androidx.room.withTransaction
 import com.moneyflow.data.local.AppDatabase
 import com.moneyflow.data.model.AccountEntity
 import com.moneyflow.data.model.AccountType
+import com.moneyflow.data.model.BenefitKind
 import com.moneyflow.data.model.BudgetEntity
+import com.moneyflow.data.model.CardBenefitEntity
+import com.moneyflow.data.model.CardProfileEntity
 import com.moneyflow.data.model.CategoryBudgetEntity
 import com.moneyflow.data.model.RecurringTransactionEntity
 import com.moneyflow.data.model.SavingGoalEntity
@@ -40,7 +43,9 @@ class BackupContent internal constructor(
   internal val budgets: List<BudgetEntity>,
   internal val categoryBudgets: List<CategoryBudgetEntity>,
   internal val goals: List<SavingGoalEntity>,
-  internal val recurring: List<RecurringTransactionEntity>
+  internal val recurring: List<RecurringTransactionEntity>,
+  internal val cardProfiles: List<CardProfileEntity> = emptyList(),
+  internal val cardBenefits: List<CardBenefitEntity> = emptyList()
 )
 
 /**
@@ -76,6 +81,15 @@ class BackupRepository @Inject constructor(
         }))
         .put("goals", JSONArray(dao.goals().map(::goalJson)))
         .put("recurring", JSONArray(dao.recurring().map(::recurringJson)))
+        .put("cardProfiles", JSONArray(db.cardDao().getProfiles().map {
+          JSONObject().put("accountId", it.accountId).put("performanceTarget", it.performanceTarget)
+            .put("cycleStartDay", it.cycleStartDay).put("excludedCategories", it.excludedCategories).put("excludedKeywords", it.excludedKeywords)
+        }))
+        .put("cardBenefits", JSONArray(db.cardDao().getBenefits().map {
+          JSONObject().put("id", it.id).put("accountId", it.accountId).put("title", it.title).put("category", it.category ?: JSONObject.NULL)
+            .put("merchantKeywords", it.merchantKeywords).put("kind", it.kind.name).put("value", it.value).put("monthlyCap", it.monthlyCap)
+            .put("minPerformance", it.minPerformance).put("minAmount", it.minAmount).put("isActive", it.isActive)
+        }))
     }
     val bytes = withContext(Dispatchers.Default) {
       BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
@@ -103,6 +117,20 @@ class BackupRepository @Inject constructor(
       }
       val goals = root.getJSONArray("goals").objects().map(::parseGoal)
       val recurring = root.getJSONArray("recurring").objects().map(::parseRecurring)
+      // Added in database v4; older backups simply have none.
+      val cardProfiles = root.optJSONArray("cardProfiles")?.objects().orEmpty().map {
+        CardProfileEntity(it.getLong("accountId"), it.getLong("performanceTarget"), it.optInt("cycleStartDay", 1),
+          it.optString("excludedCategories"), it.optString("excludedKeywords"))
+      }
+      val cardBenefits = root.optJSONArray("cardBenefits")?.objects().orEmpty().map {
+        CardBenefitEntity(
+          id = it.getLong("id"), accountId = it.getLong("accountId"), title = it.getString("title"),
+          category = it.optStringOrNull("category"), merchantKeywords = it.optString("merchantKeywords"),
+          kind = enumOf(it.optString("kind", "PERCENT"), BenefitKind.PERCENT), value = it.getLong("value"),
+          monthlyCap = it.optLong("monthlyCap"), minPerformance = it.optLong("minPerformance"),
+          minAmount = it.optLong("minAmount"), isActive = it.optBoolean("isActive", true)
+        )
+      }
 
       val accountIds = accounts.map { it.id }.toSet()
       if (transactions.any { it.accountId !in accountIds || (it.toAccountId != null && it.toAccountId !in accountIds) }) {
@@ -122,7 +150,9 @@ class BackupRepository @Inject constructor(
         budgets = budgets,
         categoryBudgets = categoryBudgets,
         goals = goals,
-        recurring = recurring
+        recurring = recurring,
+        cardProfiles = cardProfiles,
+        cardBenefits = cardBenefits
       )
     } catch (e: BackupFormatException) {
       throw e
@@ -134,6 +164,8 @@ class BackupRepository @Inject constructor(
   /** Replaces ALL current data with the backup, in one transaction (all or nothing). */
   suspend fun restore(content: BackupContent) {
     db.withTransaction {
+      db.cardDao().clearBenefits()
+      db.cardDao().clearProfiles()
       dao.clearTransactions()
       dao.clearRecurring()
       dao.clearGoals()
@@ -146,6 +178,8 @@ class BackupRepository @Inject constructor(
       dao.insertCategoryBudgets(content.categoryBudgets)
       dao.insertGoals(content.goals)
       dao.insertRecurring(content.recurring)
+      db.cardDao().insertProfiles(content.cardProfiles)
+      db.cardDao().insertBenefits(content.cardBenefits)
     }
     // The default auto-capture account may not exist in the restored data.
     val defaultId = settings.current().autoCaptureDefaultAccountId

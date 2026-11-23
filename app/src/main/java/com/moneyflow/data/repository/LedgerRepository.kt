@@ -201,6 +201,8 @@ class LedgerRepository @Inject constructor(
       revertEffects(tx)
     }
     recurringDao.deleteByAccount(accountId)
+    db.cardDao().deleteProfile(accountId)
+    db.cardDao().deleteBenefitsOf(accountId)
     accountDao.delete(account)
     LedgerResult.Ok
   }

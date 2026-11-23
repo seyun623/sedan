@@ -476,3 +476,51 @@ private fun accountIcon(type: AccountType): ImageVector = when (type) {
   AccountType.CREDIT_CARD, AccountType.LOAN -> Icons.Filled.CreditCard
   AccountType.CASH -> Icons.Filled.Payments
 }
+
+/** "이번 기간 카드 실적" summary: one row per card with 실적 settings. */
+@Composable
+internal fun CardGoalsCard(
+  statuses: List<com.moneyflow.domain.card.CardStatus>,
+  names: Map<Long, String>,
+  onOpenAccount: (Long) -> Unit
+) {
+  androidx.compose.material3.Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    color = CardSurface,
+    modifier = Modifier.fillMaxWidth().testTag("home_card_goals")
+  ) {
+    Column(Modifier.padding(20.dp)) {
+      Text("카드 실적", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleMedium)
+      statuses.forEach { st ->
+        Column(
+          Modifier.fillMaxWidth()
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenAccount(st.accountId) }
+            .padding(vertical = 8.dp)
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(names[st.accountId] ?: "카드", fontWeight = FontWeight.SemiBold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+              if (st.achieved) "달성" else "${Formatters.formatCurrency(st.shortage)} 남음",
+              color = if (st.achieved) AccentGreen else if (st.needsAttention) AccentOrange else Gray600,
+              fontWeight = FontWeight.SemiBold,
+              style = MaterialTheme.typography.bodyMedium
+            )
+          }
+          androidx.compose.material3.LinearProgressIndicator(
+            progress = { st.progress },
+            color = if (st.achieved) AccentGreen else if (st.needsAttention) AccentOrange else TossBlue,
+            trackColor = Gray200,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+          )
+          Text(
+            "${Formatters.formatCurrency(st.performance)} / ${Formatters.formatCurrency(st.target)} · ${st.daysLeft}일 남음" +
+              if (st.totalBenefit > 0) " · 혜택 ${Formatters.formatCurrency(st.totalBenefit)}" else "",
+            style = MaterialTheme.typography.bodySmall,
+            color = Gray600,
+            modifier = Modifier.padding(top = 4.dp)
+          )
+        }
+      }
+    }
+  }
+}
