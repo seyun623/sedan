@@ -129,4 +129,40 @@ class PaymentMessageParserTest {
     ignored("회원님 오늘 병원 예약 잊지 마세요")
     ignored("이번 주 점심 메뉴 추천해줘")
   }
+
+  @Test fun bankSalaryDepositsInCommonFormats() {
+    val cases = listOf(
+      "[Web발신]\n신한 11/25 09:01\n110-***-123456\n입금 3,500,000\n잔액 4,200,000\n (주)머니플로우" to "신한은행",
+      "[Web발신]\n[KB]11/25 09:00\n123456**789\n(주)머니플로우\n입금\n3,500,000\n잔액4,200,000" to "KB국민은행",
+      "[Web발신]\n[하나]11/25 09:00 123-******-12345 입금 3,500,000원 (주)머니플로우 잔액4,200,000원" to "하나은행",
+      "[Web발신]\n농협 입금3,500,000원 11/25 09:00 351-****-1234-56 (주)머니플로우 잔액4,200,000원" to "NH농협은행",
+      "[카카오뱅크] 입금 3,500,000원 (주)머니플로우 11/25 09:00 잔액 4,200,000원" to "카카오뱅크"
+    )
+    for ((text, bank) in cases) {
+      val p = ok(text)
+      assertEquals(text, TransactionType.INCOME, p.type)
+      assertEquals(text, 3_500_000L, p.amount)
+      assertEquals(text, "(주)머니플로우", p.merchant)
+      assertEquals(text, bank, p.provider)
+    }
+  }
+
+  @Test fun salaryKeywordInSenderIsSalary() {
+    val p = ok("[Web발신]\n우리 11/25 09:00\n1002***123456\n입금 3,500,000원\n(주)머니플로우급여\n잔액 4,200,000원")
+    assertEquals(FinanceCategories.SALARY, p.category)
+    assertEquals("우리은행", p.provider)
+  }
+
+  @Test fun someoneSentMeMoneyIsIncome() {
+    val p = ok("[토스뱅크] 홍길동님이 50,000원을 보냈어요. 잔액 4,200,000원")
+    assertEquals(TransactionType.INCOME, p.type)
+    assertEquals(50_000L, p.amount)
+    assertEquals("홍길동", p.merchant)
+  }
+
+  @Test fun iSentMoneyIsExpense() {
+    val p = ok("[토스뱅크] 홍길동님에게 50,000원을 보냈어요.")
+    assertEquals(TransactionType.EXPENSE, p.type)
+    assertEquals("홍길동", p.merchant)
+  }
 }

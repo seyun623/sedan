@@ -108,4 +108,19 @@ class AutoCaptureProcessorTest {
     assertTrue(out is CaptureOutcome.Recorded)
     assertEquals(bankId, txs().single().accountId)
   }
+
+  @Test fun categoryCorrectedOnceIsReusedForTheSameSender() = runBlocking {
+    val salary = "[Web발신]\n신한 11/25 09:01\n110-***-123456\n입금 3,500,000\n잔액 4,200,000\n (주)머니플로우"
+    settings.setDefaultCaptureAccount(bankId)
+    processor.process(CaptureChannel.SMS, "15778000", null, "", salary, clock.nowMillis())
+    val first = txs().single()
+    assertEquals("기타수입", first.category)
+    // The user fixes the category once…
+    ledger.updateTransaction(first.copy(category = "급여"))
+    // …and next month's salary is filed as 급여 automatically.
+    clock.advanceMillis(31L * 24 * 60 * 60 * 1000)
+    val next = salary.replace("11/25", "12/25")
+    processor.process(CaptureChannel.SMS, "15778000", null, "", next, clock.nowMillis())
+    assertEquals(listOf("급여", "급여"), txs().map { it.category })
+  }
 }

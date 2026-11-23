@@ -91,6 +91,10 @@ class AutoCaptureProcessor @Inject constructor(
       val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
         ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
 
+      // Reuse the category the user last used for this merchant/sender (e.g. salary from a company).
+      val category = db.transactionDao().lastCategoryFor(payment.type, payment.merchant)
+        ?.takeIf { it in com.moneyflow.data.model.FinanceCategories.categoriesFor(payment.type) }
+        ?: payment.category
       val memo = buildString {
         append(payment.merchant)
         payment.installmentMonths?.let { append(" (할부 ${it}개월)") }
@@ -99,7 +103,7 @@ class AutoCaptureProcessor @Inject constructor(
         TransactionEntity(
           type = payment.type,
           amount = payment.amount,
-          category = payment.category,
+          category = category,
           accountId = account.id,
           timestamp = timestamp,
           memo = memo,

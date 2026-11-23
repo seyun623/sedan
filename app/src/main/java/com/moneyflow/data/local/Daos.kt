@@ -105,6 +105,19 @@ interface TransactionDao {
   )
   suspend fun findExpensesForCancel(amount: Long, from: Long, to: Long): List<TransactionEntity>
 
+  /**
+   * Category last used for this merchant/sender (memo starting with it), so a category the user
+   * corrected once is reused for later auto-captured payments from the same place.
+   */
+  @Query(
+    """
+    SELECT category FROM transactions
+    WHERE type = :type AND (memo = :merchant OR memo LIKE :merchant || ' (%')
+    ORDER BY timestamp DESC, id DESC LIMIT 1
+    """
+  )
+  suspend fun lastCategoryFor(type: TransactionType, merchant: String): String?
+
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun insert(tx: TransactionEntity): Long
 

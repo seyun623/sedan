@@ -81,7 +81,9 @@ class PaymentMessageParser(private val zone: ZoneId) {
     if (amount <= 0) return ParseResult.Ignored("금액이 0원")
 
     val isCardBill = CARD_BILL.containsMatchIn(text)
-    val isIncome = !isCancel && !isCardBill && INCOME.containsMatchIn(text) && !WITHDRAW.containsMatchIn(text)
+    val sentToMe = SENT_TO_ME.containsMatchIn(text)
+    val isIncome = !isCancel && !isCardBill &&
+      (sentToMe || (INCOME.containsMatchIn(text) && !WITHDRAW.containsMatchIn(text)))
     val type = when {
       isCardBill -> TransactionType.TRANSFER
       isIncome -> TransactionType.INCOME
@@ -122,7 +124,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
 
   /** The provider that appears earliest in the text wins (so a PG name later in the text loses). */
   fun detectProvider(text: String): String? =
-    PROVIDERS.mapNotNull { (needle, name) ->
+    startBankTag(text)?.let { BANK_TAGS[it.groupValues[1].uppercase()] } ?: PROVIDERS.mapNotNull { (needle, name) ->
       val idx = text.indexOf(needle, ignoreCase = true)
       if (idx >= 0) idx to name else null
     }.minByOrNull { it.first }?.second
@@ -172,29 +174,32 @@ class PaymentMessageParser(private val zone: ZoneId) {
   fun extractMerchant(text: String, provider: String?, isIncome: Boolean): String {
     // Pay apps: "스타벅스에서 12,500원 결제했어요"
     PAY_STYLE.find(text)?.let { return it.groupValues[1].trim() }
+    // Transfers in pay/bank apps: "홍길동님이 50,000원을 보냈어요" / "홍길동님에게 ... 보냈어요"
+    PERSON_STYLE.find(text)?.let { return it.groupValues[1].trim() }
 
-    // Card SMS: merchant usually follows the date/time and precedes 누적/잔액.
-    DATE_TIME.find(text)?.let { m ->
-      val after = text.substring(m.range.last + 1)
-        .split(TRAILER).first()
-        .replace(WON_AMOUNT, " ")
-        .replace(NOISE, " ")
-        .trim()
-      val tokens = after.split(' ').filter { it.isNotBlank() && !MASKED_NUMBER.matches(it) }.take(3)
-      if (tokens.isNotEmpty()) return tokens.joinToString(" ")
-    }
-
-    var clean = text
-      .replace(Regex("\\[[^\\]]*\\]"), " ")
-      .split(TRAILER).first()
+    // Everything that is not the merchant / sender is removed; what remains is the name.
+    var clean = " $text "
+      .replace(BALANCE_SEGMENT, " ")
+      .replace(REWARD_NOTE, " ")
+      .replace(FOREIGN, " ")
+      .replace(DATE_TIME, " ")
       .replace(WON_AMOUNT, " ")
+      .replace(BARE_AMOUNT, " ")
       .replace(CARD_LAST4, " ")
       .replace(MASKED_NAME, " ")
-      .replace(NOISE, " ")
+      .replace(Regex("\\[[^\\]]*\\]"), " ")
+    startBankTag(text)?.let { clean = clean.replaceFirst(it.value.trim(), " ") }
     provider?.let { p -> PROVIDERS.filter { it.second == p }.forEach { clean = clean.replace(it.first, " ", ignoreCase = true) } }
-    val tokens = clean.split(Regex("\\s+")).filter { it.length >= 2 && !it.all { c -> c.isDigit() || c == ',' || c == ':' || c == '/' } }
-    return tokens.lastOrNull() ?: if (isIncome) "입금" else "알 수 없는 가맹점"
+    clean = clean.replace(NOISE, " ").replace(Regex("\\(\\s*\\)"), " ")
+    val tokens = clean.split(Regex("\\s+"))
+      .map { it.trim(',', '.', '/', ':', '-') }
+      .filter { it.length >= 2 && !MASKED_NUMBER.matches(it) && it.any { c -> c.isLetter() } }
+      .take(3)
+    return if (tokens.isNotEmpty()) tokens.joinToString(" ") else if (isIncome) "입금" else "알 수 없는 가맹점"
   }
+
+  /** Short bank tags at the start of bank SMS: "신한 11/25", "[KB]11/25", "우리 ", "[하나]" … */
+  private fun startBankTag(text: String): MatchResult? = START_BANK_TAG.find(text.trimStart())
 
   // ---- Category ------------------------------------------------------------------------------
 
@@ -235,8 +240,20 @@ class PaymentMessageParser(private val zone: ZoneId) {
     private val MASKED_NAME = Regex("[가-힣]\\*[가-힣]{0,2}")
     private val DATE_TIME = Regex("(\\d{1,2})[/.\\-](\\d{1,2})\\s+(\\d{1,2}):(\\d{2})")
     private val PAY_STYLE = Regex("([^\\s\\[\\]]{2,30}?)에서\\s*[0-9,]+\\s*원")
-    private val TRAILER = Regex("누적|잔액|잔고|잔여한도|사용가능|이용가능|\\s\\(")
-    private val NOISE = Regex("체크카드|신용카드|체크|신용|일시불|할부|[0-9]{1,2}\\s*개월|승인\\s*취소|취소|승인|결제|출금|입금|완료|사용|이용|해외|국내")
+    private val BALANCE_SEGMENT = Regex("(누적|잔액|잔고|잔여한도|사용가능금액|사용가능|이용가능)\\s*:?\\s*-?[0-9,]+\\s*원?")
+    private val REWARD_NOTE = Regex("\\((캐시백|적립|할인)[^)]*\\)")
+    private val BARE_AMOUNT = Regex("(?<![0-9A-Za-z*])[0-9]{1,3}(?:,[0-9]{3})+(?![0-9])")
+    private val PERSON_STYLE = Regex("([^\\s\\[\\]]{1,20})님(?:이|에게|께)\\s*[0-9,]+\\s*원")
+    private val SENT_TO_ME = Regex("님이\\s*[0-9,]+\\s*원을?\\s*(보냈|입금)")
+    private val START_BANK_TAG = Regex("^(?:\\[Web발신\\]\\s*)?\\[?(신한|KB|국민|우리|하나|농협|NH|IBK|기업|SC|씨티|부산|경남|대구|광주|전북|제주|수협|새마을|신협|우체국|케이뱅크|카카오뱅크|토스뱅크)\\]?(?=[\\s0-9]|$)", RegexOption.IGNORE_CASE)
+    private val BANK_TAGS = mapOf(
+      "신한" to "신한은행", "KB" to "KB국민은행", "국민" to "KB국민은행", "우리" to "우리은행", "하나" to "하나은행",
+      "농협" to "NH농협은행", "NH" to "NH농협은행", "IBK" to "IBK기업은행", "기업" to "IBK기업은행",
+      "SC" to "SC제일은행", "씨티" to "씨티은행", "부산" to "부산은행", "경남" to "경남은행", "대구" to "iM뱅크",
+      "광주" to "광주은행", "전북" to "전북은행", "제주" to "제주은행", "수협" to "수협은행", "새마을" to "새마을금고",
+      "신협" to "신협", "우체국" to "우체국", "케이뱅크" to "케이뱅크", "카카오뱅크" to "카카오뱅크", "토스뱅크" to "토스뱅크"
+    )
+    private val NOISE = Regex("Web발신|체크카드|신용카드|체크|신용|일시불|할부|[0-9]{1,2}\\s*개월|승인\\s*취소|취소|승인|결제했어요|결제|출금|입금|완료|사용|이용|해외|국내|원$")
 
     /** (text to look for, canonical provider name). Order does not matter. */
     val PROVIDERS = listOf(
