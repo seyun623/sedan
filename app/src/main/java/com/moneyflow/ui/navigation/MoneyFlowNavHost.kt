@@ -37,6 +37,10 @@ import com.moneyflow.ui.account.ARG_ACCOUNT_ID
 import com.moneyflow.ui.account.AccountDetailScreen
 import com.moneyflow.ui.analytics.AnalyticsScreen
 import com.moneyflow.ui.budget.BudgetScreen
+import com.moneyflow.ui.cardimport.ARG_SITE_ID
+import com.moneyflow.ui.cardimport.CardBrowserScreen
+import com.moneyflow.ui.cardimport.CardImportPreviewScreen
+import com.moneyflow.ui.cardimport.CardImportScreen
 import com.moneyflow.ui.common.UserMessageBus
 import com.moneyflow.ui.home.HomeScreen
 import com.moneyflow.ui.ledger.LedgerScreen
@@ -141,7 +145,11 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
         arguments = listOf(navArgument(ARG_TRANSACTION_ID) { type = NavType.LongType; defaultValue = 0L })
       ) { TransactionFormScreen(onClose = { navController.popBackStack() }) }
       composable(Routes.ACCOUNT, arguments = listOf(navArgument(ARG_ACCOUNT_ID) { type = NavType.LongType })) {
-        AccountDetailScreen(onBack = { navController.popBackStack() }, onOpenTransaction = { openTransaction(it) })
+        AccountDetailScreen(
+          onBack = { navController.popBackStack() },
+          onOpenTransaction = { openTransaction(it) },
+          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) }
+        )
       }
       composable(Routes.SETTINGS) {
         SettingsScreen(
@@ -149,11 +157,22 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
           onOpenSecurity = { navController.navigate(Routes.SECURITY) },
           onOpenAutoCapture = { navController.navigate(Routes.AUTO_CAPTURE) },
           onOpenBackup = { navController.navigate(Routes.BACKUP) },
-          onOpenAi = { navController.navigate(Routes.AI) }
+          onOpenAi = { navController.navigate(Routes.AI) },
+          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) }
         )
       }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.AUTO_CAPTURE) { AutoCaptureSettingsScreen(onBack = { navController.popBackStack() }) }
+      composable(Routes.CARD_IMPORT) {
+        CardImportScreen(onBack = { navController.popBackStack() }, onOpenSite = { navController.navigate(Routes.cardBrowser(it.id)) })
+      }
+      composable(Routes.CARD_BROWSER, arguments = listOf(navArgument(ARG_SITE_ID) { type = NavType.StringType })) {
+        CardBrowserScreen(onClose = { navController.popBackStack() }, onOpenPreview = { navController.navigate(Routes.CARD_PREVIEW) })
+      }
+      composable(Routes.CARD_PREVIEW) {
+        // After importing, go back to the card site to read another month if needed.
+        CardImportPreviewScreen(onBack = { navController.popBackStack() }, onDone = { navController.popBackStack() })
+      }
       composable(Routes.AI) { AiSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.BACKUP) {
         BackupScreen(

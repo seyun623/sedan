@@ -17,7 +17,8 @@ enum class TransactionSource(val label: String) {
   RECURRING("고정 거래"),
   NOTIFICATION("알림 자동 등록"),
   SMS("문자 자동 등록"),
-  GOAL("목표 저축");
+  GOAL("목표 저축"),
+  CARD_IMPORT("카드사 가져오기");
 
   val isAutoCaptured: Boolean get() = this == NOTIFICATION || this == SMS
 }

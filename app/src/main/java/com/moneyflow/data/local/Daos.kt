@@ -95,6 +95,10 @@ interface TransactionDao {
   )
   suspend fun findAutoCapturedNear(type: TransactionType, amount: Long, from: Long, to: Long): List<TransactionEntity>
 
+  /** Existing transactions of an account in a time range (duplicate check for card imports). */
+  @Query("SELECT * FROM transactions WHERE accountId = :accountId AND timestamp BETWEEN :from AND :to")
+  suspend fun getForAccountBetween(accountId: Long, from: Long, to: Long): List<TransactionEntity>
+
   /** Original purchase candidates for a cancellation (most recent first). */
   @Query(
     """

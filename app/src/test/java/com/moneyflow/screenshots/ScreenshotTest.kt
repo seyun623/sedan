@@ -133,7 +133,7 @@ class ScreenshotTest {
   @Test fun captureLight() { val vm = settingsVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   @Test fun captureDark() { val vm = settingsVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
-    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, bus)
+    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, bus)
   @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(
@@ -153,6 +153,17 @@ class ScreenshotTest {
     com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), bus)
   @Test fun aiLight() { runBlocking { settings.setAiApiKeyEncrypted("enc:k"); settings.setAiEnabled(true) }; val vm = aiVm(); shot("13_ai", false) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
   @Test fun aiDark() { val vm = aiVm(); shot("13_ai", true) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
+  @Test fun cardImportList() = shot("14_cardimport", false) { com.moneyflow.ui.cardimport.CardImportScreen({}, {}) }
+  @Test fun cardImportListDark() = shot("14_cardimport", true) { com.moneyflow.ui.cardimport.CardImportScreen({}, {}) }
+  private fun previewVm(): com.moneyflow.ui.cardimport.CardImportPreviewViewModel {
+    val session = com.moneyflow.domain.cardimport.CardImportSession()
+    val text = "전월 이용실적 412,000원\n2026.11.22 스타벅스 역삼점 5,600원\n2026.11.21 점심 식사 12,000원\n2026.11.20 쿠팡 32,000원\n2026.11.19 GS25 강남점 승인취소 -3,500원\n2026.11.18 이마트 성수점 120,000원 3개월"
+    session.put(com.moneyflow.domain.cardimport.CardSites.byId("hyundai")!!, com.moneyflow.domain.cardimport.StatementTextParser(clock.today()).parse(text))
+    return com.moneyflow.ui.cardimport.CardImportPreviewViewModel(session,
+      com.moneyflow.data.repository.CardImportRepository(db, ledger, settings, clock), ledger, bus)
+  }
+  @Test fun cardPreview() { val vm = previewVm(); shot("15_cardpreview", false) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
+  @Test fun cardPreviewDark() { val vm = previewVm(); shot("15_cardpreview", true) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }
 }
 

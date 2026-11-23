@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -35,6 +36,7 @@ fun SettingsScreen(
   onOpenAutoCapture: () -> Unit,
   onOpenBackup: () -> Unit = {},
   onOpenAi: () -> Unit = {},
+  onOpenCardImport: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -99,6 +101,13 @@ fun SettingsScreen(
     }
 
     SettingsSection("데이터") {
+      SettingsItem(
+        title = "카드사에서 가져오기",
+        subtitle = "카드사 홈페이지에 로그인해 이용내역·실적을 불러와요",
+        icon = Icons.Filled.CreditCard,
+        onClick = onOpenCardImport,
+        modifier = Modifier.testTag("settings_card_import")
+      )
       val lastBackup = state.settings.lastBackupAt
       SettingsItem(
         title = "백업 및 복원",

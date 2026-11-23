@@ -24,6 +24,8 @@ data class AccountDetailUiState(
   val account: AccountEntity? = null,
   val transactions: List<TransactionEntity> = emptyList(),
   val otherAccounts: List<AccountEntity> = emptyList(),
+  /** Last "실적" read from the card company's site (card accounts). */
+  val cardPerformance: com.moneyflow.data.repository.CardPerformance? = null,
   val isLoading: Boolean = true
 )
 
@@ -38,6 +40,7 @@ sealed interface AccountEvent {
 class AccountDetailViewModel @Inject constructor(
   savedState: SavedStateHandle,
   private val ledger: LedgerRepository,
+  settings: com.moneyflow.data.repository.SettingsRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
   private val accountId: Long = checkNotNull(savedState.get<Long>(ARG_ACCOUNT_ID))
@@ -45,9 +48,10 @@ class AccountDetailViewModel @Inject constructor(
   val uiState: StateFlow<AccountDetailUiState> = combine(
     ledger.observeAccount(accountId),
     ledger.observeAccountTransactions(accountId),
-    ledger.accounts
-  ) { account, txs, all ->
-    AccountDetailUiState(account, txs, all.filter { it.id != accountId }, isLoading = false)
+    ledger.accounts,
+    settings.settings
+  ) { account, txs, all, s ->
+    AccountDetailUiState(account, txs, all.filter { it.id != accountId }, s.cardPerformance[accountId], isLoading = false)
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())
 
   private val _events = Channel<AccountEvent>(Channel.BUFFERED)

@@ -45,7 +45,9 @@ data class AppSettings(
   val aiKeysEncrypted: Map<AiProvider, String> = emptyMap(),
   val aiModels: Map<AiProvider, String> = emptyMap(),
   /** Base URL for [AiProvider.CUSTOM]. */
-  val aiCustomBaseUrl: String = ""
+  val aiCustomBaseUrl: String = "",
+  /** Last "실적" figure read from each card company screen, by account id. */
+  val cardPerformance: Map<Long, CardPerformance> = emptyMap()
 ) {
   val aiApiKeyEncrypted: String? get() = aiKeysEncrypted[aiProvider]
   val aiModel: String get() = aiModels[aiProvider]?.takeIf { it.isNotBlank() } ?: aiProvider.defaultModel
@@ -79,6 +81,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val ONBOARDING = booleanPreferencesKey("onboarding_done")
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
+    val CARD_PERFORMANCE = stringPreferencesKey("card_performance_json")
     val AI_PROVIDER = stringPreferencesKey("ai_provider")
     val AI_CUSTOM_URL = stringPreferencesKey("ai_custom_base_url")
     /** v1.1.0 single Gemini key / model (read as the Gemini entries). */
@@ -112,7 +115,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       aiModels = AiProvider.entries.mapNotNull { pr ->
         (p[Keys.aiModel(pr)] ?: if (pr == AiProvider.GEMINI) p[Keys.LEGACY_AI_MODEL] else null)?.let { pr to it }
       }.toMap(),
-      aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: ""
+      aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
+      cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE])
     )
   }
 
@@ -151,6 +155,24 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
   suspend fun setAiEnabled(enabled: Boolean) = store.edit { it[Keys.AI_ENABLED] = enabled }
+  suspend fun setCardPerformance(accountId: Long, value: CardPerformance) = store.edit {
+    val map = parsePerformance(it[Keys.CARD_PERFORMANCE]).toMutableMap()
+    map[accountId] = value
+    val json = org.json.JSONObject()
+    map.forEach { (id, v) ->
+      json.put(id.toString(), org.json.JSONObject().put("label", v.label).put("amount", v.amount).put("at", v.fetchedAt))
+    }
+    it[Keys.CARD_PERFORMANCE] = json.toString()
+  }
+
+  private fun parsePerformance(raw: String?): Map<Long, CardPerformance> = runCatching {
+    val json = org.json.JSONObject(raw ?: return emptyMap())
+    json.keys().asSequence().associate { k ->
+      val o = json.getJSONObject(k)
+      k.toLong() to CardPerformance(o.optString("label"), o.optLong("amount"), o.optLong("at"))
+    }
+  }.getOrDefault(emptyMap())
+
   suspend fun setAiProvider(provider: AiProvider) = store.edit { it[Keys.AI_PROVIDER] = provider.name }
   suspend fun setAiCustomBaseUrl(url: String) = store.edit { it[Keys.AI_CUSTOM_URL] = url.trim() }
 
