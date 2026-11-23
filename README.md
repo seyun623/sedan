@@ -37,7 +37,13 @@
 
 `ScreenshotTest`는 주요 화면을 라이트/다크 모드로 그려 `app/build/screenshots/`에 PNG로 저장합니다 (눈으로 확인하는 용도).
 
-### 릴리스 서명
+### 출시
+출시 절차는 [`docs/release-checklist.md`](docs/release-checklist.md)에 정리되어 있습니다.
+- 업로드 키 만들기: `scripts/create-upload-keystore.sh`
+- `v1.0.0` 같은 태그를 push하면 GitHub Actions(`release.yml`)가 서명된 AAB/APK를 만듭니다.
+- 개인정보처리방침 초안: [`docs/privacy-policy.md`](docs/privacy-policy.md), 데이터 보안 양식: [`docs/play-data-safety.md`](docs/play-data-safety.md)
+
+### 릴리스 서명 (로컬 빌드)
 아래 환경 변수가 있을 때만 릴리스 APK에 서명합니다. 없으면 서명되지 않은 APK가 만들어집니다.
 
 | 변수 | 설명 |

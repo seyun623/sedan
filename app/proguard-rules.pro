@@ -28,3 +28,8 @@
 }
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Enum names are persisted (Room TypeConverters store Enum.name, DataStore stores ThemeMode.name).
+# Never let R8 rename them, or existing data would stop matching.
+-keep enum com.moneyflow.data.model.** { *; }
+-keep enum com.moneyflow.data.repository.ThemeMode { *; }
