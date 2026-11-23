@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -524,3 +525,54 @@ internal fun CardGoalsCard(
     }
   }
 }
+
+/** "어디서 어떤 카드?": the card with the most benefit for each benefit category / merchant. */
+@Composable
+internal fun CardGuideCard(
+  rows: List<com.moneyflow.domain.card.CardGuideRow>,
+  names: Map<Long, String>,
+  onOpenAccount: (Long) -> Unit
+) {
+  var expanded by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+  val shown = if (expanded) rows else rows.take(GUIDE_ROWS)
+  androidx.compose.material3.Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    color = CardSurface,
+    modifier = Modifier.fillMaxWidth().testTag("home_card_guide")
+  ) {
+    Column(Modifier.padding(20.dp)) {
+      Text("어디서 어떤 카드?", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleMedium)
+      Text("등록한 혜택과 남은 한도로 계산했어요", style = MaterialTheme.typography.bodySmall, color = Gray600)
+      shown.forEach { row ->
+        val best = row.best
+        Column(
+          Modifier.fillMaxWidth()
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenAccount(best.accountId) }
+            .padding(vertical = 8.dp)
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(row.label, fontWeight = FontWeight.SemiBold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(names[best.accountId] ?: "카드", fontWeight = FontWeight.Bold, color = TossBlue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+          Text(
+            buildString {
+              append("${Formatters.formatCurrency(row.typicalAmount)} 결제 시 약 ${Formatters.formatCurrency(best.expected)} 혜택")
+              best.benefit?.let { append(" · ${it.title}") }
+              row.runnerUp?.let { r -> append(" (다음: ${names[r.accountId] ?: "카드"} ${Formatters.formatCurrency(r.expected)})") }
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = Gray600,
+            modifier = Modifier.padding(top = 2.dp)
+          )
+        }
+      }
+      if (rows.size > GUIDE_ROWS) {
+        androidx.compose.material3.TextButton(onClick = { expanded = !expanded }) {
+          Text(if (expanded) "접기" else "${rows.size - GUIDE_ROWS}개 더 보기")
+        }
+      }
+    }
+  }
+}
+
+private const val GUIDE_ROWS = 4

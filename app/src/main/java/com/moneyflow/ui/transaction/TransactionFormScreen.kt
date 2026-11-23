@@ -109,6 +109,7 @@ fun TransactionFormScreen(
   val suggestion by viewModel.categorySuggestionState.collectAsStateWithLifecycle()
   // The AI suggestion UI appears only when AI is turned on with an API key (Settings → AI 설정).
   val showAi by viewModel.aiReady.collectAsStateWithLifecycle()
+  val cardStatuses by viewModel.cardStatuses.collectAsStateWithLifecycle()
   val isEditMode = viewModel.isEditMode
   val zone = remember { ZoneId.systemDefault() }
 
@@ -462,6 +463,17 @@ fun TransactionFormScreen(
                 )
               }
             } else {
+              if (type == TransactionType.EXPENSE && !isEditMode) {
+                val picks = remember(cardStatuses, category, memo, amount) {
+                  viewModel.recommendCard(cardStatuses, category, memo, amount.toLongOrNull() ?: 0L)
+                }
+                CardPickHint(
+                  picks = picks,
+                  accounts = accountList.orEmpty(),
+                  selectedId = accountId,
+                  onUse = { accountId = it }
+                )
+              }
               Spacer(Modifier.height(4.dp))
               SectionLabel("결제 수단")
               PaymentMethodChips(selected = paymentMethod, onSelect = { paymentMethod = it })

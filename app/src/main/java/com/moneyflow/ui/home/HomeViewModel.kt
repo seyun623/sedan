@@ -51,7 +51,9 @@ data class HomeUiState(
   val goals: List<SavingGoalEntity> = emptyList(),
   val isLockEnabled: Boolean = false,
   /** 실적 status of cards that have 실적 settings. */
-  val cardStatuses: List<com.moneyflow.domain.card.CardStatus> = emptyList()
+  val cardStatuses: List<com.moneyflow.domain.card.CardStatus> = emptyList(),
+  /** "어디서 어떤 카드?" rows from registered card benefits. */
+  val cardGuide: List<com.moneyflow.domain.card.CardGuideRow> = emptyList()
 ) {
   val hasNoAccounts: Boolean get() = !isLoading && accounts.isEmpty()
 }
@@ -75,8 +77,8 @@ class HomeViewModel @Inject constructor(
     ledger.transactions,
     ledger.goals,
     budgets.observeBudget(month),
-    combine(settings.settings, cards.statuses) { s, c -> s to c }
-  ) { accounts, txs, goals, budget, (s, cardStatuses) ->
+    combine(settings.settings, cards.statuses, cards.guide) { s, c, g -> Triple(s, c, g) }
+  ) { accounts, txs, goals, budget, (s, cardStatuses, cardGuide) ->
     val assets = accounts.filter { !it.isDebt }.sumOf { it.balance }
     val debts = accounts.filter { it.isDebt }.sumOf { it.balance }
     val monthTxs = stats.inMonth(txs, month)
@@ -102,7 +104,8 @@ class HomeViewModel @Inject constructor(
       recentTransactions = txs.take(RECENT_COUNT),
       goals = goals,
       isLockEnabled = s.isLockEnabled,
-      cardStatuses = cardStatuses
+      cardStatuses = cardStatuses.filter { it.target > 0 },
+      cardGuide = cardGuide
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

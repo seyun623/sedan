@@ -86,6 +86,9 @@ fun AccountDetailScreen(
   var showProfileDialog by rememberSaveable { mutableStateOf(false) }
   /** null = closed, 0 = new benefit, otherwise the benefit id being edited. */
   var editingBenefitId by rememberSaveable { mutableStateOf<Long?>(null) }
+  var showBenefitPaste by rememberSaveable { mutableStateOf(false) }
+  val aiLabel by viewModel.aiLabel.collectAsStateWithLifecycle()
+  val benefitRead by viewModel.benefitRead.collectAsStateWithLifecycle()
   var showTransfer by rememberSaveable { mutableStateOf(false) }
   var confirmDelete by rememberSaveable { mutableStateOf(false) }
   var confirmDeleteRelated by rememberSaveable { mutableStateOf<String?>(null) }
@@ -158,6 +161,7 @@ fun AccountDetailScreen(
             imported = state.cardPerformance,
             onEditProfile = { showProfileDialog = true },
             onAddBenefit = { editingBenefitId = 0L },
+            onAddBenefitWithAi = { showBenefitPaste = true },
             onEditBenefit = { editingBenefitId = it.id },
             onOpenCardImport = onOpenCardImport
           )
@@ -206,6 +210,25 @@ fun AccountDetailScreen(
       onDismiss = { editingBenefitId = null },
       onSave = viewModel::saveBenefit,
       onDelete = viewModel::deleteBenefit
+    )
+  }
+
+  val read = benefitRead
+  if (read is BenefitReadState.Done) {
+    BenefitDraftsDialog(
+      drafts = read.drafts,
+      hasProfile = state.cardProfile != null,
+      onAdd = { drafts, setTarget -> showBenefitPaste = false; viewModel.addBenefits(drafts, setTarget) },
+      onDismiss = viewModel::closeBenefitRead
+    )
+  } else if (showBenefitPaste) {
+    BenefitPasteDialog(
+      aiLabel = aiLabel,
+      loading = read == BenefitReadState.Loading,
+      error = (read as? BenefitReadState.Failed)?.message,
+      onRead = viewModel::readBenefits,
+      onOpenCardImport = { showBenefitPaste = false; viewModel.closeBenefitRead(); onOpenCardImport() },
+      onDismiss = { showBenefitPaste = false; viewModel.closeBenefitRead() }
     )
   }
 

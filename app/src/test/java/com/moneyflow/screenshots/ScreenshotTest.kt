@@ -1,5 +1,8 @@
 package com.moneyflow.screenshots
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import kotlinx.coroutines.flow.first
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
@@ -118,7 +121,7 @@ class ScreenshotTest {
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
-  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, bus)
+  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus)
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
@@ -133,7 +136,8 @@ class ScreenshotTest {
   @Test fun captureLight() { val vm = settingsVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   @Test fun captureDark() { val vm = settingsVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
-    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, com.moneyflow.data.repository.CardRepository(db, clock), bus)
+    SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, com.moneyflow.data.repository.CardRepository(db, clock),
+    com.moneyflow.domain.card.BenefitReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), bus)
   @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(
@@ -160,7 +164,7 @@ class ScreenshotTest {
     val text = "전월 이용실적 412,000원\n2026.11.22 스타벅스 역삼점 5,600원\n2026.11.21 점심 식사 12,000원\n2026.11.20 쿠팡 32,000원\n2026.11.19 GS25 강남점 승인취소 -3,500원\n2026.11.18 이마트 성수점 120,000원 3개월"
     session.put(com.moneyflow.domain.cardimport.CardSites.byId("hyundai")!!, com.moneyflow.domain.cardimport.StatementTextParser(clock.today()).parse(text))
     return com.moneyflow.ui.cardimport.CardImportPreviewViewModel(session,
-      com.moneyflow.data.repository.CardImportRepository(db, ledger, settings, clock), ledger, bus)
+      com.moneyflow.data.repository.CardImportRepository(db, ledger, settings, clock), ledger, com.moneyflow.data.repository.CardRepository(db, clock), bus)
   }
   @Test fun cardPreview() { val vm = previewVm(); shot("15_cardpreview", false) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
   @Test fun cardPreviewDark() { val vm = previewVm(); shot("15_cardpreview", true) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
@@ -173,5 +177,21 @@ class ScreenshotTest {
   @Test fun cardAccountDark() { seedCard(); val vm = accountVm(); shot("16_cardaccount", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun homeCardGoals() { seedCard(); val vm = home(); shot("17_homecards", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }
+  private fun guideShot(dark: Boolean) {
+    seedCard()
+    val repo = com.moneyflow.data.repository.CardRepository(db, clock)
+    val rows = runBlocking { repo.guide.first() }
+    val statuses = runBlocking { repo.currentStatuses() }
+    val picks = repo.recommend(statuses, "카페/간식", "스타벅스", 6_000)
+    val accounts = runBlocking { ledger.accounts.first() }
+    shot("18_cardguide", dark) {
+      androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) {
+        com.moneyflow.ui.home.CardGuideCard(rows, accounts.associate { it.id to it.name }, {})
+        com.moneyflow.ui.transaction.CardPickHint(picks, accounts, selectedId = accounts.first { it.id != 3L }.id, onUse = {})
+        com.moneyflow.ui.transaction.CardPickHint(picks, accounts, selectedId = 3L, onUse = {})
+      }
+    }
+  }
+  @Test fun cardGuide() = guideShot(false)
+  @Test fun cardGuideDark() = guideShot(true)
 }
-

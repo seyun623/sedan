@@ -66,15 +66,18 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
 
   /** Expenses of the card in the period that count toward 실적. */
   fun countedExpenses(txs: List<TransactionEntity>, profile: CardProfileEntity, period: CardPeriod): List<TransactionEntity> {
-    val excludedCats = profile.excludedCategories.splitList().toSet()
-    val excludedWords = profile.excludedKeywords.splitList()
     val from = MonthKeys.dayStartMillis(period.start, zone)
     val to = MonthKeys.dayEndMillis(period.end, zone)
     return txs.filter { tx ->
       tx.accountId == profile.accountId && tx.type == TransactionType.EXPENSE && tx.timestamp in from..to &&
-        tx.category !in excludedCats && excludedWords.none { w -> tx.memo.contains(w, ignoreCase = true) }
+        countsToward(profile, tx.category, tx.memo)
     }
   }
+
+  /** Whether a payment with this category / memo counts toward the card's 실적. */
+  fun countsToward(profile: CardProfileEntity, category: String, memo: String): Boolean =
+    category !in profile.excludedCategories.splitList() &&
+      profile.excludedKeywords.splitList().none { w -> memo.contains(w, ignoreCase = true) }
 
   fun status(
     profile: CardProfileEntity,
@@ -103,12 +106,7 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
   fun usage(benefit: CardBenefitEntity, periodExpenses: List<TransactionEntity>, previousPerformance: Long): BenefitUsage {
     val eligible = benefit.minPerformance <= 0 || previousPerformance >= benefit.minPerformance
     val matching = periodExpenses.filter { matches(benefit, it) }
-    val raw = matching.sumOf { tx ->
-      when (benefit.kind) {
-        BenefitKind.PERCENT -> tx.amount * benefit.value / 10_000
-        BenefitKind.FIXED -> benefit.value
-      }
-    }
+    val raw = matching.sumOf { tx -> benefitFor(benefit, tx.amount) }
     val earned = if (!eligible) 0L else if (benefit.monthlyCap > 0) minOf(raw, benefit.monthlyCap) else raw
     return BenefitUsage(
       benefit = benefit,
@@ -119,12 +117,20 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
     )
   }
 
-  fun matches(benefit: CardBenefitEntity, tx: TransactionEntity): Boolean {
-    if (tx.amount < benefit.minAmount) return false
+  fun matches(benefit: CardBenefitEntity, tx: TransactionEntity): Boolean = matches(benefit, tx.category, tx.memo, tx.amount)
+
+  fun matches(benefit: CardBenefitEntity, category: String, memo: String, amount: Long): Boolean {
+    if (amount < benefit.minAmount) return false
     val words = benefit.merchantKeywords.splitList()
-    val categoryOk = benefit.category == null || tx.category == benefit.category
-    val keywordOk = words.isEmpty() || words.any { tx.memo.contains(it, ignoreCase = true) }
+    val categoryOk = benefit.category == null || category == benefit.category
+    val keywordOk = words.isEmpty() || words.any { memo.contains(it, ignoreCase = true) }
     return categoryOk && keywordOk
+  }
+
+  /** Benefit for one payment of [amount], before the monthly cap. */
+  fun benefitFor(benefit: CardBenefitEntity, amount: Long): Long = when (benefit.kind) {
+    BenefitKind.PERCENT -> amount * benefit.value / 10_000
+    BenefitKind.FIXED -> benefit.value
   }
 
   private fun String.splitList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }

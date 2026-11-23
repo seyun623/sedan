@@ -65,6 +65,7 @@ internal fun CardSection(
   imported: CardPerformance?,
   onEditProfile: () -> Unit,
   onAddBenefit: () -> Unit,
+  onAddBenefitWithAi: () -> Unit,
   onEditBenefit: (CardBenefitEntity) -> Unit,
   onOpenCardImport: () -> Unit
 ) {
@@ -109,10 +110,15 @@ internal fun CardSection(
       Spacer(Modifier.height(8.dp))
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text("카드 혜택", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
-        TextButton(onClick = onAddBenefit, modifier = Modifier.testTag("add_benefit")) { Text("혜택 추가") }
+        TextButton(onClick = onAddBenefitWithAi, modifier = Modifier.testTag("add_benefit_ai")) { Text("AI로 등록") }
+        TextButton(onClick = onAddBenefit, modifier = Modifier.testTag("add_benefit")) { Text("직접 추가") }
       }
       if (benefits.isEmpty()) {
-        Text("할인·적립 혜택을 등록하면 이번 기간에 받은 혜택과 남은 한도를 계산해요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        Text(
+          "할인·적립 혜택을 등록하면 받은 혜택과 남은 한도를 계산하고, 결제할 때 어떤 카드가 유리한지 알려 드려요. " +
+            "카드사 혜택 안내 글을 붙여 넣으면 AI가 한 번에 등록해요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
       }
       benefits.forEach { b ->
         val usage = status?.benefits?.firstOrNull { it.benefit.id == b.id }
@@ -152,7 +158,7 @@ internal fun CardSection(
   }
 }
 
-private fun benefitSummary(b: CardBenefitEntity): String = buildList {
+internal fun benefitSummary(b: CardBenefitEntity): String = buildList {
   add(listOfNotNull(b.category, b.merchantKeywords.takeIf { it.isNotBlank() }).joinToString(" · ").ifEmpty { "모든 결제" })
   add(if (b.kind == BenefitKind.PERCENT) "${formatPercent(b.value)}%" else "건당 ${Formatters.formatCurrency(b.value)}")
   if (b.monthlyCap > 0) add("월 한도 ${Formatters.formatCurrency(b.monthlyCap)}")
@@ -311,4 +317,97 @@ internal fun BenefitDialog(
       onDismiss = { confirmDelete = false }
     )
   }
+}
+
+/** Paste the card's benefit description; AI turns it into benefits (shown in [BenefitDraftsDialog]). */
+@Composable
+internal fun BenefitPasteDialog(
+  aiLabel: String?,
+  loading: Boolean,
+  error: String?,
+  onRead: (String) -> Unit,
+  onOpenCardImport: () -> Unit,
+  onDismiss: () -> Unit
+) {
+  var text by rememberSaveable { mutableStateOf("") }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("AI로 혜택 등록", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (aiLabel == null) {
+          Text("설정 → AI 설정에서 AI를 켜면 쓸 수 있어요. 그 전에는 '직접 추가'로 혜택을 등록해 주세요.", color = Gray600)
+          return@Column
+        }
+        Text(
+          "카드사 앱·홈페이지의 카드 상품 안내에서 혜택 부분을 복사해 붙여 넣으세요. " +
+            "또는 '카드사 화면에서 가져오기'로 로그인한 혜택 화면을 바로 읽을 수 있어요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
+        OutlinedTextField(
+          value = text,
+          onValueChange = { text = it.take(15_000) },
+          label = { Text("혜택 안내 글") },
+          placeholder = { Text("예: 커피전문점 10% 할인 (월 5천원 한도, 전월 실적 30만원 이상)") },
+          minLines = 4,
+          maxLines = 8,
+          enabled = !loading,
+          modifier = Modifier.fillMaxWidth().testTag("benefit_paste_input")
+        )
+        Text("붙여 넣은 글이 ${aiLabel}(으)로 전송돼요. 카드번호·이름 같은 개인 정보는 넣지 마세요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue, trackColor = Gray200)
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AccentRed) }
+        TextButton(onClick = onOpenCardImport, enabled = !loading) { Text("카드사 화면에서 가져오기") }
+      }
+    },
+    confirmButton = {
+      if (aiLabel != null) TextButton(enabled = text.isNotBlank() && !loading, onClick = { onRead(text) }) { Text("AI로 읽기", fontWeight = FontWeight.Bold) }
+      else TextButton(onClick = onDismiss) { Text("확인") }
+    },
+    dismissButton = { if (aiLabel != null) TextButton(onClick = onDismiss) { Text("취소") } }
+  )
+}
+
+/** Benefits read by AI: pick the ones to add. */
+@Composable
+internal fun BenefitDraftsDialog(
+  drafts: List<CardBenefitEntity>,
+  hasProfile: Boolean,
+  onAdd: (List<CardBenefitEntity>, setTarget: Boolean) -> Unit,
+  onDismiss: () -> Unit
+) {
+  var selected by rememberSaveable { mutableStateOf(drafts.indices.toSet()) }
+  val minPerf = drafts.filterIndexed { i, _ -> i in selected }.map { it.minPerformance }.filter { it > 0 }.minOrNull()
+  var setTarget by rememberSaveable { mutableStateOf(true) }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("찾은 혜택 ${drafts.size}개", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(Modifier.verticalScroll(rememberScrollState())) {
+        Text("등록할 혜택을 고르세요. 등록한 뒤에도 하나씩 수정할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        drafts.forEachIndexed { i, b ->
+          Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(checked = i in selected, onCheckedChange = { selected = if (it) selected + i else selected - i })
+            Column(Modifier.weight(1f)) {
+              Text(b.title, fontWeight = FontWeight.SemiBold, color = Gray900)
+              Text(benefitSummary(b), style = MaterialTheme.typography.bodySmall, color = Gray600)
+            }
+          }
+        }
+        if (!hasProfile && minPerf != null) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            androidx.compose.material3.Checkbox(checked = setTarget, onCheckedChange = { setTarget = it })
+            Text("실적 기준도 ${Formatters.formatCurrency(minPerf)}(으)로 설정", color = Gray900)
+          }
+        }
+        Text("AI가 읽은 내용이라 틀릴 수 있어요. 할인율과 한도를 한 번 확인해 주세요.", style = MaterialTheme.typography.bodySmall, color = AccentOrange, modifier = Modifier.padding(top = 6.dp))
+      }
+    },
+    confirmButton = {
+      TextButton(enabled = selected.isNotEmpty(), onClick = { onAdd(drafts.filterIndexed { i, _ -> i in selected }, setTarget && !hasProfile) }) {
+        Text("${selected.size}개 등록", fontWeight = FontWeight.Bold)
+      }
+    },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+  )
 }

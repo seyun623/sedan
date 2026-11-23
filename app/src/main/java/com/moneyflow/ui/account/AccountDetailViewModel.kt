@@ -9,7 +9,11 @@ import com.moneyflow.data.repository.LedgerRepository
 import com.moneyflow.data.repository.LedgerResult
 import com.moneyflow.ui.common.UserMessageBus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -32,6 +36,14 @@ data class AccountDetailUiState(
   val isLoading: Boolean = true
 )
 
+/** "AI로 혜택 등록" progress. */
+sealed interface BenefitReadState {
+  data object Idle : BenefitReadState
+  data object Loading : BenefitReadState
+  data class Done(val drafts: List<com.moneyflow.data.model.CardBenefitEntity>) : BenefitReadState
+  data class Failed(val message: String) : BenefitReadState
+}
+
 sealed interface AccountEvent {
   data object Deleted : AccountEvent
   /** Deletion needs confirmation because the account is in use. */
@@ -45,6 +57,7 @@ class AccountDetailViewModel @Inject constructor(
   private val ledger: LedgerRepository,
   settings: com.moneyflow.data.repository.SettingsRepository,
   private val cards: com.moneyflow.data.repository.CardRepository,
+  private val benefitReader: com.moneyflow.domain.card.BenefitReader,
   private val messages: UserMessageBus
 ) : ViewModel() {
   private val accountId: Long = checkNotNull(savedState.get<Long>(ARG_ACCOUNT_ID))
@@ -63,6 +76,15 @@ class AccountDetailViewModel @Inject constructor(
       cardProfile = card.first, cardBenefits = card.second, cardStatus = card.third, isLoading = false
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())
+
+  /** AI provider name when AI is set up (enables "AI로 혜택 등록"), else null. */
+  val aiLabel: StateFlow<String?> = settings.settings
+    .map { if (it.isAiReady) it.aiProvider.label else null }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+  private val _benefitRead = MutableStateFlow<BenefitReadState>(BenefitReadState.Idle)
+  val benefitRead: StateFlow<BenefitReadState> = _benefitRead.asStateFlow()
+  private var benefitJob: Job? = null
 
   private val _events = Channel<AccountEvent>(Channel.BUFFERED)
   val events = _events.receiveAsFlow()
@@ -115,6 +137,35 @@ class AccountDetailViewModel @Inject constructor(
   fun deleteBenefit(benefit: com.moneyflow.data.model.CardBenefitEntity) = viewModelScope.launch {
     cards.deleteBenefit(benefit)
     messages.show("'${benefit.title}' 혜택을 삭제했어요.")
+  }
+
+  /** Reads benefit text (pasted from the card company's benefit page) with AI. */
+  fun readBenefits(text: String) {
+    if (text.isBlank() || _benefitRead.value == BenefitReadState.Loading) return
+    benefitJob?.cancel()
+    _benefitRead.value = BenefitReadState.Loading
+    benefitJob = viewModelScope.launch {
+      _benefitRead.value = try {
+        val drafts = benefitReader.read(text)
+        if (drafts.isEmpty()) BenefitReadState.Failed("글에서 할인·적립 혜택을 찾지 못했어요. 혜택 안내 부분을 복사해 다시 시도해 주세요.")
+        else BenefitReadState.Done(drafts)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        BenefitReadState.Failed(e.message ?: "AI가 혜택을 읽지 못했어요.")
+      }
+    }
+  }
+
+  fun closeBenefitRead() {
+    benefitJob?.cancel()
+    _benefitRead.value = BenefitReadState.Idle
+  }
+
+  fun addBenefits(drafts: List<com.moneyflow.data.model.CardBenefitEntity>, setTarget: Boolean) = viewModelScope.launch {
+    _benefitRead.value = BenefitReadState.Idle
+    if (drafts.isEmpty()) return@launch
+    messages.show(com.moneyflow.ui.cardimport.benefitMessage(cards.addBenefits(accountId, drafts, setTarget)))
   }
 
   fun transfer(to: AccountEntity, amount: Long, memo: String) = viewModelScope.launch {

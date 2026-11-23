@@ -47,6 +47,7 @@ class TransactionFormViewModel @Inject constructor(
   private val ledger: LedgerRepository,
   private val suggester: CategorySuggester,
   settings: SettingsRepository,
+  private val cards: com.moneyflow.data.repository.CardRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
 
@@ -71,6 +72,14 @@ class TransactionFormViewModel @Inject constructor(
   /** AI suggestion is available (turned on with an API key in Settings → AI 설정). */
   val aiReady: StateFlow<Boolean> = settings.settings.map { it.isAiReady }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+  /** Card statuses used for "이 결제는 ○○카드가 유리해요". */
+  val cardStatuses: StateFlow<List<com.moneyflow.domain.card.CardStatus>> =
+    cards.statuses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  fun recommendCard(
+    statuses: List<com.moneyflow.domain.card.CardStatus>, category: String, memo: String, amount: Long
+  ): List<com.moneyflow.domain.card.CardPick> = cards.recommend(statuses, category, memo, amount)
 
   private val _suggestion = MutableStateFlow<CategorySuggestionUiState>(CategorySuggestionUiState.Idle)
   val categorySuggestionState: StateFlow<CategorySuggestionUiState> = _suggestion.asStateFlow()

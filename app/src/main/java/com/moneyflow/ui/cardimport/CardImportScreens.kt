@@ -107,6 +107,7 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit) {
         listOf(
           "앱 안에서 카드사 홈페이지가 열리면 직접 로그인하세요. 카드사 앱 승인·인증서도 평소처럼 쓰면 돼요.",
           "이용내역·명세서·실적 화면을 연 뒤 아래 '이 화면 가져오기'를 누르면 내용을 읽어 미리보기를 보여 줘요.",
+          "카드 혜택 안내 화면을 'AI로 읽기'로 가져오면 혜택(할인율·한도·실적 조건)을 한 번에 등록할 수 있어요.",
           "미리보기에서 확인한 내역만 가계부에 추가돼요. 이미 있는 내역은 '중복'으로 표시하고 빼 둬요.",
           "아이디·비밀번호는 머니플로우에 저장되지 않아요. 화면을 닫으면 로그인 기록(쿠키 등)을 지워요.",
           "'기기에서 읽기'는 내용을 밖으로 보내지 않아요. 'AI로 읽기'는 화면 글자(카드 이용내역)가 AI 설정에서 고른 서비스로 전송돼요."
@@ -225,7 +226,7 @@ fun CardBrowserScreen(
             shape = RoundedCornerShape(14.dp)
           ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
           Text(
-            "이용내역·명세서·실적 화면에서 눌러 주세요",
+            "이용내역·명세서·실적·혜택 화면에서 눌러 주세요",
             style = MaterialTheme.typography.labelSmall,
             color = Gray600,
             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
@@ -284,7 +285,7 @@ fun CardBrowserScreen(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text("기기에서 읽기: 화면 내용을 밖으로 보내지 않아요. 카드사 화면 모양에 따라 일부를 못 읽을 수 있어요.", style = MaterialTheme.typography.bodySmall)
           Text(
-            if (aiLabel != null) "AI로 읽기: 화면 글자(카드 이용내역)를 ${aiLabel}(으)로 보내 정확하게 읽어요."
+            if (aiLabel != null) "AI로 읽기: 화면 글자(카드 이용내역·혜택)를 ${aiLabel}(으)로 보내 정확하게 읽어요. 혜택 화면은 AI로만 읽을 수 있어요."
             else "AI로 읽기: 설정 → AI 설정에서 AI를 켜면 쓸 수 있어요.",
             style = MaterialTheme.typography.bodySmall,
             color = Gray600
@@ -378,11 +379,17 @@ fun CardImportPreviewScreen(
       Surface(color = CardSurface, shadowElevation = 6.dp) {
         Button(
           onClick = viewModel::import,
-          enabled = !s.busy && s.account != null && (s.selected.isNotEmpty() || (s.savePerformance && s.extraction?.performance?.isNotEmpty() == true)),
+          enabled = s.canImport,
           modifier = Modifier.fillMaxWidth().padding(12.dp).height(52.dp).testTag("card_import_button"),
           colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
           shape = RoundedCornerShape(14.dp)
-        ) { Text(if (s.selected.isEmpty()) "실적만 저장" else "${s.selected.size}건 가계부에 추가", fontWeight = FontWeight.Bold) }
+        ) {
+          val label = listOfNotNull(
+            s.selected.size.takeIf { it > 0 }?.let { "내역 ${it}건" },
+            s.selectedBenefits.size.takeIf { it > 0 }?.let { "혜택 ${it}개" }
+          ).joinToString(" · ")
+          Text(if (label.isEmpty()) "실적만 저장" else "$label 추가", fontWeight = FontWeight.Bold)
+        }
       }
     }
   ) { padding ->
@@ -433,6 +440,32 @@ fun CardImportPreviewScreen(
               Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Text("이 카드 계좌에 실적 저장", modifier = Modifier.weight(1f), color = Gray900)
                 Switch(checked = s.savePerformance, onCheckedChange = viewModel::setSavePerformance)
+              }
+            }
+          }
+        }
+      }
+
+      if (extraction.benefits.isNotEmpty()) {
+        item(key = "benefits") {
+          Surface(shape = RoundedCornerShape(16.dp), color = CardSurface, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(vertical = 12.dp, horizontal = 8.dp)) {
+              Text("카드사 화면의 혜택", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.padding(horizontal = 8.dp))
+              Text(
+                "고른 혜택이 이 카드 계좌에 등록돼요. 같은 이름의 혜택은 건너뛰어요. 실적 조건이 없으면 혜택에 필요한 전월 실적으로 설정해요.",
+                style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+              )
+              extraction.benefits.forEachIndexed { i, b ->
+                Row(
+                  Modifier.fillMaxWidth().clickable { viewModel.toggleBenefit(i) }.padding(vertical = 4.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Checkbox(checked = i in s.selectedBenefits, onCheckedChange = { viewModel.toggleBenefit(i) })
+                  Column(Modifier.weight(1f)) {
+                    Text(b.title, fontWeight = FontWeight.SemiBold, color = Gray900, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(com.moneyflow.ui.account.benefitSummary(b), style = MaterialTheme.typography.bodySmall, color = Gray600)
+                  }
+                }
               }
             }
           }

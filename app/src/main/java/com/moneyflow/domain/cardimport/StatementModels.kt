@@ -20,5 +20,9 @@ data class StatementExtraction(
   val items: List<StatementItem>,
   val performance: List<PerformanceInfo>,
   /** "기기에서 읽기" or the AI provider name. */
-  val readBy: String
-)
+  val readBy: String,
+  /** Benefits found on a benefit screen (AI reading only); accountId is set when saving. */
+  val benefits: List<com.moneyflow.data.model.CardBenefitEntity> = emptyList()
+) {
+  val isEmpty: Boolean get() = items.isEmpty() && performance.isEmpty() && benefits.isEmpty()
+}

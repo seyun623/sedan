@@ -451,3 +451,34 @@ internal fun ExcludeFromBudgetRow(checked: Boolean, onCheckedChange: (Boolean) -
     )
   }
 }
+
+/** "이 결제는 ○○카드가 유리해요 · 약 600원 혜택" under the account picker (expenses only). */
+@Composable
+internal fun CardPickHint(
+  picks: List<com.moneyflow.domain.card.CardPick>,
+  accounts: List<AccountEntity>,
+  selectedId: Long,
+  onUse: (Long) -> Unit
+) {
+  val best = picks.firstOrNull { p -> accounts.any { it.id == p.accountId } } ?: return
+  val name = accounts.first { it.id == best.accountId }.name
+  val selectedIsBest = best.accountId == selectedId
+  val text = when {
+    best.forPerformance && selectedIsBest -> "이 카드는 실적이 ${com.moneyflow.util.Formatters.formatCurrency(best.shortage)} 남았어요"
+    best.forPerformance -> "혜택 카드는 없어요. ${name} 실적이 ${com.moneyflow.util.Formatters.formatCurrency(best.shortage)} 남았어요"
+    selectedIsBest -> "가장 유리한 카드예요 · 약 ${com.moneyflow.util.Formatters.formatCurrency(best.expected)} 혜택 (${best.benefit?.title.orEmpty()})"
+    else -> "${name}(으)로 내면 약 ${com.moneyflow.util.Formatters.formatCurrency(best.expected)} 혜택 (${best.benefit?.title.orEmpty()})"
+  }
+  androidx.compose.material3.Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    color = if (selectedIsBest) com.moneyflow.ui.theme.Gray100 else com.moneyflow.ui.theme.TossBlueContainer,
+    modifier = Modifier.fillMaxWidth().padding(top = 6.dp).testTag("card_pick_hint")
+  ) {
+    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+      Text("💳 $text", style = MaterialTheme.typography.bodySmall, color = Gray900, modifier = Modifier.weight(1f))
+      if (!selectedIsBest) {
+        androidx.compose.material3.TextButton(onClick = { onUse(best.accountId) }) { Text("이 카드로", fontWeight = FontWeight.Bold) }
+      }
+    }
+  }
+}
