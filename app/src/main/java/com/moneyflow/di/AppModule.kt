@@ -41,5 +41,10 @@ object AppModule {
   fun provideSecretStore(): SecretStore = KeystoreSecretStore()
 
   @Provides
+  @Singleton
+  fun provideCaptureNotifier(@ApplicationContext context: Context): com.moneyflow.domain.capture.CaptureNotifier =
+    com.moneyflow.work.AndroidCaptureNotifier(context)
+
+  @Provides
   fun provideStatsCalculator(clock: AppClock): MonthlyStatsCalculator = MonthlyStatsCalculator(clock.zone)
 }

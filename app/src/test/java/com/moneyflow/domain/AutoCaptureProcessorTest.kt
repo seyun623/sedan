@@ -29,6 +29,10 @@ class AutoCaptureProcessorTest {
   private lateinit var settings: SettingsRepository
   private lateinit var processor: AutoCaptureProcessor
   private val clock = FakeClock()
+  private val prompts = mutableListOf<com.moneyflow.domain.capture.ForeignPaymentPrompt>()
+  private val notifier = object : com.moneyflow.domain.capture.CaptureNotifier {
+    override fun foreignPayment(prompt: com.moneyflow.domain.capture.ForeignPaymentPrompt) { prompts += prompt }
+  }
   private var cardId = 0L
   private var bankId = 0L
 
@@ -41,7 +45,7 @@ class AutoCaptureProcessorTest {
     settings = testSettingsRepository()
     settings.setNotificationCapture(true)
     settings.setSmsCapture(true)
-    processor = AutoCaptureProcessor(db, ledger, settings, clock)
+    processor = AutoCaptureProcessor(db, ledger, settings, clock, notifier)
     bankId = ledger.addAccount(bank(balance = 1_000_000))
     cardId = ledger.addAccount(card(name = "신한카드 Deep", number = "1234-56**-****-1234"))
   }
@@ -122,5 +126,51 @@ class AutoCaptureProcessorTest {
     val next = salary.replace("11/25", "12/25")
     processor.process(CaptureChannel.SMS, "15778000", null, "", next, clock.nowMillis())
     assertEquals(listOf("급여", "급여"), txs().map { it.category })
+  }
+
+  // ---- 1.6: rules, installments, foreign payments ----
+
+  private val installment = "[Web발신] 신한카드(1234)승인 홍*동 300,001원(03개월)11/21 14:32 하이마트 누적1,234,560원"
+
+  @Test fun ignoreRuleSkipsAndCategoryRuleWins() = runBlocking {
+    db.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "스타 벅스", category = "식비"))
+    processor.process(CaptureChannel.SMS, "15447200", null, "", approval, clock.nowMillis())
+    assertEquals("식비", txs().single().category)
+    db.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "하이마트", action = com.moneyflow.data.model.RuleAction.IGNORE))
+    val out = processor.process(CaptureChannel.SMS, "15447200", null, "", installment, clock.nowMillis())
+    assertTrue(out is CaptureOutcome.Skipped)
+    assertEquals(1, txs().size)
+  }
+
+  @Test fun installmentIsSplitWhenEnabledAndCancelRemovesAllParts() = runBlocking {
+    settings.setSplitInstallments(true)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", installment, clock.nowMillis())
+    val parts = txs().sortedBy { it.timestamp }
+    assertEquals(listOf(100_001L, 100_000L, 100_000L), parts.map { it.amount })
+    assertEquals("하이마트 (할부 1/3)", parts[0].memo)
+    assertEquals(300_001, db.accountDao().getById(cardId)!!.balance)
+    val cancel = "[Web발신] 신한카드(1234)승인취소 홍*동 300,001원 11/22 10:00 하이마트"
+    clock.advanceMillis(24 * 3_600_000L)
+    assertTrue(processor.process(CaptureChannel.SMS, "15447200", null, "", cancel, clock.nowMillis()) is CaptureOutcome.CancelledOriginal)
+    assertTrue(txs().isEmpty())
+    assertEquals(0, db.accountDao().getById(cardId)!!.balance)
+  }
+
+  @Test fun installmentNotSplitByDefault() = runBlocking {
+    processor.process(CaptureChannel.SMS, "15447200", null, "", installment, clock.nowMillis())
+    assertEquals("하이마트 (할부 3개월)", txs().single().memo)
+  }
+
+  @Test fun foreignPaymentPromptsOnceWithPrefill() = runBlocking {
+    val msg = "[Web발신] 신한카드(1234)해외승인 홍*동 USD 12.50 11/21 03:10 AMAZON"
+    val out = processor.process(CaptureChannel.SMS, "15447200", null, "", msg, clock.nowMillis())
+    assertTrue(out is CaptureOutcome.NeedsKrwAmount)
+    processor.process(CaptureChannel.NOTIFICATION, shinhanApp, "신한 SOL페이", "신한카드", msg, clock.nowMillis() + 60_000)
+    assertEquals(1, prompts.size)
+    val p = prompts.single().prefill
+    assertEquals(cardId, p.accountId)
+    assertTrue(p.memo.startsWith("AMAZON"))
+    assertTrue(p.memo.contains("12.50"))
+    assertTrue(txs().isEmpty())
   }
 }

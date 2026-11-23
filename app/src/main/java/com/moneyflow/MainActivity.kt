@@ -32,6 +32,7 @@ class MainActivity : FragmentActivity() {
     enableEdgeToEdge()
     // Hide content in the recents screen until settings say otherwise.
     applySecureScreen(true)
+    com.moneyflow.work.PrefillIntents.take(intent)?.let(appViewModel.prefill::request)
     setContent {
       val settings by appViewModel.settings.collectAsStateWithLifecycle()
       val locked by appViewModel.locked.collectAsStateWithLifecycle()
@@ -51,7 +52,7 @@ class MainActivity : FragmentActivity() {
           )
           else -> {
             contentState.SaveableStateProvider("app-content") {
-              MoneyFlowNavHost(messages = appViewModel.messages, navController = navController)
+              MoneyFlowNavHost(messages = appViewModel.messages, navController = navController, prefill = appViewModel.prefill)
             }
             val whatsNew by appViewModel.whatsNew.collectAsStateWithLifecycle()
             com.moneyflow.ui.whatsnew.WhatsNewDialog(whatsNew, onDismiss = appViewModel::dismissWhatsNew)
@@ -59,6 +60,11 @@ class MainActivity : FragmentActivity() {
         }
       }
     }
+  }
+
+  override fun onNewIntent(intent: android.content.Intent) {
+    super.onNewIntent(intent)
+    com.moneyflow.work.PrefillIntents.take(intent)?.let(appViewModel.prefill::request)
   }
 
   private fun applySecureScreen(secure: Boolean) {

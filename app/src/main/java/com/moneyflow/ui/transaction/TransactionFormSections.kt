@@ -482,3 +482,26 @@ internal fun CardPickHint(
     }
   }
 }
+
+/** 일시불 / 2·3·6·10·12개월 — the purchase is recorded as one expense per month. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun InstallmentChips(months: Int, amount: Long, onSelect: (Int) -> Unit) {
+  Text("할부", style = MaterialTheme.typography.labelLarge, color = Gray900, fontWeight = FontWeight.SemiBold)
+  FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("installment_chips")) {
+    listOf(0, 2, 3, 6, 10, 12).forEach { m ->
+      androidx.compose.material3.FilterChip(
+        selected = months == m,
+        onClick = { onSelect(m) },
+        label = { Text(if (m == 0) "일시불" else "${m}개월") }
+      )
+    }
+  }
+  if (months > 1 && amount >= months) {
+    Text(
+      "매달 약 ${com.moneyflow.util.Formatters.formatCurrency(amount / months)}씩 ${months}개월로 나눠 기록해요 (카드 잔액에는 전액 반영)",
+      style = MaterialTheme.typography.bodySmall,
+      color = com.moneyflow.ui.theme.Gray600
+    )
+  }
+}

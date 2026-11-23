@@ -20,7 +20,9 @@ class AppViewModel @Inject constructor(
   private val settingsRepo: SettingsRepository,
   private val ledger: com.moneyflow.data.repository.LedgerRepository,
   private val lock: AppLockManager,
-  val messages: UserMessageBus
+  val messages: UserMessageBus,
+  /** Add-form requests from notifications / the widget. */
+  val prefill: com.moneyflow.ui.common.PrefillStore
 ) : ViewModel() {
 
   /** null until settings have loaded (avoid flashing the wrong theme / lock state). */

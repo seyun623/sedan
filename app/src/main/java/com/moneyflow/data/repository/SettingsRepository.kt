@@ -67,6 +67,8 @@ data class AppSettings(
   val budgetAlertsEnabled: Boolean = false,
   /** Last month's summary on the 1st. */
   val monthlySummaryEnabled: Boolean = false,
+  /** Split installment purchases (auto-captured / imported) into monthly parts. */
+  val splitInstallments: Boolean = false,
   /** Show amounts on the home screen widget while app lock is on. */
   val widgetShowAmountsWhenLocked: Boolean = false
 ) {
@@ -121,6 +123,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val BUDGET_ALERTS = booleanPreferencesKey("budget_alerts")
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
+    val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
@@ -162,7 +165,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       backupReminderEnabled = p[Keys.BACKUP_REMINDER] ?: true,
       budgetAlertsEnabled = p[Keys.BUDGET_ALERTS] ?: false,
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
-      widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false
+      widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
+      splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false
     )
   }
 
@@ -276,6 +280,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     }
   }
 
+  suspend fun setSplitInstallments(enabled: Boolean) = store.edit { it[Keys.SPLIT_INSTALLMENTS] = enabled }
   suspend fun setBackupReminder(enabled: Boolean) = store.edit { it[Keys.BACKUP_REMINDER] = enabled }
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }

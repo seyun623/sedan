@@ -64,9 +64,17 @@ class MigrationTest {
     helper.runMigrationsAndValidate(DB24, 4, true, MIGRATION_2_3, com.moneyflow.data.local.MIGRATION_3_4)
   }
 
+  @Test fun migrate4To5_addsRules() {
+    helper.createDatabase(DB5, 4).close()
+    val db = helper.runMigrationsAndValidate(DB5, 5, true, com.moneyflow.data.local.MIGRATION_4_5)
+    db.execSQL("INSERT INTO category_rules(keyword,action,category) VALUES('스타벅스','CATEGORY','카페/간식')")
+    db.query("SELECT category FROM category_rules").use { c -> c.moveToNext(); assertEquals("카페/간식", c.getString(0)) }
+  }
+
   private companion object {
     const val DB = "migration-test"
     const val DB4 = "migration-test-4"
     const val DB24 = "migration-test-24"
+    const val DB5 = "migration-test-5"
   }
 }

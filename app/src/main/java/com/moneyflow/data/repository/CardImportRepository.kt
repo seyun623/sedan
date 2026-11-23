@@ -69,12 +69,13 @@ class CardImportRepository @Inject constructor(
   }
 
   private suspend fun categoryFor(merchant: String): String =
-    db.transactionDao().lastCategoryFor(TransactionType.EXPENSE, merchant)
+    com.moneyflow.data.model.CategoryRules.categoryFor(db.ruleDao().getAll(), TransactionType.EXPENSE, merchant)
+      ?: db.transactionDao().lastCategoryFor(TransactionType.EXPENSE, merchant)
       ?.takeIf { it in FinanceCategories.categoriesFor(TransactionType.EXPENSE) }
       ?: rules.classify(merchant, merchant)
 
   /** Adds the selected purchases; selected cancellations remove the matching purchase. */
-  suspend fun import(rows: List<ImportRow>, account: AccountEntity): ImportResult {
+  suspend fun import(rows: List<ImportRow>, account: AccountEntity, splitInstallments: Boolean = false): ImportResult {
     var added = 0
     var cancelled = 0
     var skipped = 0
@@ -95,19 +96,19 @@ class CardImportRepository @Inject constructor(
       }
       val key = dedupKey(account.id, item, index)
       if (db.transactionDao().countByDedupKey(key) > 0) { skipped++; continue }
-      ledger.addTransaction(
-        TransactionEntity(
-          type = TransactionType.EXPENSE,
-          amount = item.amount,
-          category = row.category,
-          accountId = account.id,
-          timestamp = millis,
-          memo = item.merchant + (item.installmentMonths?.let { " (할부 ${it}개월)" } ?: ""),
-          paymentMethod = "카드",
-          source = TransactionSource.CARD_IMPORT,
-          dedupKey = key
-        )
+      val tx = TransactionEntity(
+        type = TransactionType.EXPENSE,
+        amount = item.amount,
+        category = row.category,
+        accountId = account.id,
+        timestamp = millis,
+        memo = item.merchant + (item.installmentMonths?.let { " (할부 ${it}개월)" } ?: ""),
+        paymentMethod = "카드",
+        source = TransactionSource.CARD_IMPORT,
+        dedupKey = key
       )
+      val months = item.installmentMonths ?: 0
+      if (splitInstallments && months > 1) ledger.addInstallments(tx, months) else ledger.addTransaction(tx)
       added++
     }
     return ImportResult(added, cancelled, skipped)

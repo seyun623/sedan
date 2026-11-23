@@ -45,7 +45,8 @@ class BackupContent internal constructor(
   internal val goals: List<SavingGoalEntity>,
   internal val recurring: List<RecurringTransactionEntity>,
   internal val cardProfiles: List<CardProfileEntity> = emptyList(),
-  internal val cardBenefits: List<CardBenefitEntity> = emptyList()
+  internal val cardBenefits: List<CardBenefitEntity> = emptyList(),
+  internal val categoryRules: List<com.moneyflow.data.model.CategoryRuleEntity> = emptyList()
 )
 
 /**
@@ -90,6 +91,9 @@ class BackupRepository @Inject constructor(
             .put("merchantKeywords", it.merchantKeywords).put("kind", it.kind.name).put("value", it.value).put("monthlyCap", it.monthlyCap)
             .put("minPerformance", it.minPerformance).put("minAmount", it.minAmount).put("isActive", it.isActive)
         }))
+        .put("categoryRules", JSONArray(db.ruleDao().getAll().map {
+          JSONObject().put("id", it.id).put("keyword", it.keyword).put("action", it.action.name).put("category", it.category)
+        }))
     }
     val bytes = withContext(Dispatchers.Default) {
       BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
@@ -132,6 +136,15 @@ class BackupRepository @Inject constructor(
         )
       }
 
+      // Added in database v5.
+      val categoryRules = root.optJSONArray("categoryRules")?.objects().orEmpty().map {
+        com.moneyflow.data.model.CategoryRuleEntity(
+          id = it.getLong("id"), keyword = it.getString("keyword"),
+          action = enumOf(it.optString("action", "CATEGORY"), com.moneyflow.data.model.RuleAction.CATEGORY),
+          category = it.optString("category")
+        )
+      }
+
       val accountIds = accounts.map { it.id }.toSet()
       if (transactions.any { it.accountId !in accountIds || (it.toAccountId != null && it.toAccountId !in accountIds) }) {
         throw BackupFormatException("백업 파일의 거래와 계좌 정보가 맞지 않아요.")
@@ -152,7 +165,8 @@ class BackupRepository @Inject constructor(
         goals = goals,
         recurring = recurring,
         cardProfiles = cardProfiles,
-        cardBenefits = cardBenefits
+        cardBenefits = cardBenefits,
+        categoryRules = categoryRules
       )
     } catch (e: BackupFormatException) {
       throw e
@@ -166,6 +180,7 @@ class BackupRepository @Inject constructor(
     db.withTransaction {
       db.cardDao().clearBenefits()
       db.cardDao().clearProfiles()
+      db.ruleDao().clear()
       dao.clearTransactions()
       dao.clearRecurring()
       dao.clearGoals()
@@ -180,6 +195,7 @@ class BackupRepository @Inject constructor(
       dao.insertRecurring(content.recurring)
       db.cardDao().insertProfiles(content.cardProfiles)
       db.cardDao().insertBenefits(content.cardBenefits)
+      db.ruleDao().insertAll(content.categoryRules)
     }
     // The default auto-capture account may not exist in the restored data.
     val defaultId = settings.current().autoCaptureDefaultAccountId

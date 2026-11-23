@@ -38,6 +38,7 @@ fun SettingsScreen(
   onOpenAi: () -> Unit = {},
   onOpenCardImport: () -> Unit = {},
   onOpenReleaseHistory: () -> Unit = {},
+  onOpenRules: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -171,6 +172,21 @@ fun SettingsScreen(
         icon = Icons.Filled.CreditCard,
         onClick = onOpenCardImport,
         modifier = Modifier.testTag("settings_card_import")
+      )
+      SettingsItem(
+        title = "자동 분류 규칙",
+        subtitle = "가맹점별 카테고리 지정, 기록하지 않을 알림 정하기",
+        icon = Icons.Filled.CreditCard,
+        onClick = onOpenRules,
+        modifier = Modifier.testTag("settings_rules")
+      )
+      SettingsSwitchItem(
+        title = "할부 결제 나눠 기록",
+        subtitle = "자동 기록·카드사 가져오기에서 할부 결제를 개월 수만큼 매달 지출로 나눠요",
+        icon = Icons.Filled.CreditCard,
+        checked = settings.splitInstallments,
+        onCheckedChange = viewModel::setSplitInstallments,
+        modifier = Modifier.testTag("settings_split_installments")
       )
       val lastBackup = state.settings.lastBackupAt
       SettingsItem(

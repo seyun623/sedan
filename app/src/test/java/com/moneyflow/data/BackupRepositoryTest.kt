@@ -104,6 +104,17 @@ class BackupRepositoryTest {
     assertEquals(1_500_000L, BudgetRepository(target).observeBudget(YearMonth.of(2026, 11)).first().total)
   }
 
+  @Test fun categoryRulesAreBackedUp() = runBlocking {
+    seedSource()
+    source.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "스타벅스", category = "카페/간식"))
+    source.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "광고", action = com.moneyflow.data.model.RuleAction.IGNORE))
+    target.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "지울 규칙", category = "식비"))
+    val file = BackupRepository(source, settings, clock).createBackup(pw, "1.6.0")
+    val repo = BackupRepository(target, settings, clock)
+    repo.restore(repo.readBackup(file, pw))
+    assertEquals(source.ruleDao().getAll().sortedBy { it.id }, target.ruleDao().getAll().sortedBy { it.id })
+  }
+
   @Test fun restoreClearsDefaultCaptureAccountThatNoLongerExists() = runBlocking {
     seedSource()
     val file = BackupRepository(source, settings, clock).createBackup(pw, "1.0.0")

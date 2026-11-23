@@ -88,3 +88,14 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_benefits_accountId` ON `card_benefits` (`accountId`)")
   }
 }
+
+/** v4 -> v5: user category / ignore rules for auto-captured and imported payments. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `category_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`keyword` TEXT NOT NULL, `action` TEXT NOT NULL, `category` TEXT NOT NULL)"
+    )
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_category_rules_keyword` ON `category_rules` (`keyword`)")
+  }
+}

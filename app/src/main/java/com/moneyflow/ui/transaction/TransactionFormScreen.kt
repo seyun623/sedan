@@ -129,6 +129,8 @@ fun TransactionFormScreen(
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
   var showTimePicker by rememberSaveable { mutableStateOf(false) }
   var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+  var installmentMonths by rememberSaveable { mutableStateOf(0) }
+  val installmentParts by viewModel.installmentParts.collectAsStateWithLifecycle()
   var showDiscardConfirm by rememberSaveable { mutableStateOf(false) }
   var saving by remember { mutableStateOf(false) }
   var closed by remember { mutableStateOf(false) }
@@ -155,6 +157,19 @@ fun TransactionFormScreen(
     timestamp = tx.timestamp
     paymentMethod = tx.paymentMethod
     excludeFromBudget = tx.isExcludedFromBudget
+    prefilled = true
+  }
+
+  // Create mode from a notification (e.g. a foreign-currency payment): start with its values.
+  LaunchedEffect(Unit) {
+    val p = viewModel.prefill ?: return@LaunchedEffect
+    if (prefilled) return@LaunchedEffect
+    type = p.type
+    p.amount?.let { amount = it.toString() }
+    memo = p.memo
+    p.category?.takeIf { it in FinanceCategories.categoriesFor(p.type) }?.let { category = it }
+    p.accountId?.let { accountId = it }
+    p.timestamp?.let { timestamp = it }
     prefilled = true
   }
 
@@ -245,7 +260,8 @@ fun TransactionFormScreen(
       memo = memo,
       paymentMethod = paymentMethod,
       isExcludedFromBudget = type == TransactionType.EXPENSE && excludeFromBudget,
-      keepOpen = keepOpen
+      keepOpen = keepOpen,
+      installmentMonths = if (type == TransactionType.EXPENSE && !isEditMode) installmentMonths else 0
     )
   }
 
@@ -477,6 +493,16 @@ fun TransactionFormScreen(
               Spacer(Modifier.height(4.dp))
               SectionLabel("결제 수단")
               PaymentMethodChips(selected = paymentMethod, onSelect = { paymentMethod = it })
+              val isCard = paymentMethod == "신용카드" ||
+                accountList.orEmpty().firstOrNull { it.id == accountId }?.accountType == com.moneyflow.data.model.AccountType.CREDIT_CARD
+              if (type == TransactionType.EXPENSE && !isEditMode && isCard) {
+                Spacer(Modifier.height(8.dp))
+                InstallmentChips(
+                  months = installmentMonths,
+                  amount = amount.toLongOrNull() ?: 0L,
+                  onSelect = { installmentMonths = it }
+                )
+              }
             }
             if (type == TransactionType.EXPENSE) {
               Spacer(Modifier.height(8.dp))
@@ -541,13 +567,29 @@ fun TransactionFormScreen(
   }
 
   if (showDeleteConfirm) {
-    ConfirmDialog(
-      title = "내역을 삭제할까요?",
-      message = "삭제한 뒤 바로 실행 취소할 수 있어요.",
-      confirmLabel = "삭제",
-      onConfirm = { viewModel.delete() },
-      onDismiss = { showDeleteConfirm = false }
-    )
+    LaunchedEffect(Unit) { viewModel.loadInstallmentGroup() }
+    if (installmentParts > 1) {
+      AlertDialog(
+        onDismissRequest = { showDeleteConfirm = false },
+        title = { Text("할부 내역을 삭제할까요?", fontWeight = FontWeight.Bold) },
+        text = { Text("이 결제는 ${installmentParts}개월 할부로 나눠 기록돼 있어요. 이 달 것만 지우거나 모두 지울 수 있어요.") },
+        confirmButton = { TextButton(onClick = { showDeleteConfirm = false; viewModel.deleteInstallmentGroup() }) { Text("${installmentParts}건 모두 삭제", color = AccentRed, fontWeight = FontWeight.Bold) } },
+        dismissButton = {
+          Row {
+            TextButton(onClick = { showDeleteConfirm = false }) { Text("취소") }
+            TextButton(onClick = { showDeleteConfirm = false; viewModel.delete() }) { Text("이것만 삭제") }
+          }
+        }
+      )
+    } else {
+      ConfirmDialog(
+        title = "내역을 삭제할까요?",
+        message = "삭제한 뒤 바로 실행 취소할 수 있어요.",
+        confirmLabel = "삭제",
+        onConfirm = { viewModel.delete() },
+        onDismiss = { showDeleteConfirm = false }
+      )
+    }
   }
 
   if (showDiscardConfirm) {

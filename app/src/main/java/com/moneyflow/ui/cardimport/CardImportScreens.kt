@@ -516,6 +516,19 @@ fun CardImportPreviewScreen(
           }
         }
       }
+      if (s.rows.any { (it.item.installmentMonths ?: 0) > 1 && !it.item.isCancel }) {
+        item(key = "installments") {
+          Surface(shape = RoundedCornerShape(14.dp), color = CardSurface, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) {
+                Text("할부는 개월 수만큼 나눠 기록", color = Gray900, fontWeight = FontWeight.SemiBold)
+                Text("매달 지출이 실제 청구액과 맞아요", style = MaterialTheme.typography.bodySmall, color = Gray600)
+              }
+              Switch(checked = s.splitInstallments, onCheckedChange = viewModel::setSplitInstallments)
+            }
+          }
+        }
+      }
       item(key = "note") {
         Text(
           "'이미 있음'은 같은 날 같은 금액의 내역이 이 계좌에 있어서 빼 둔 거예요. 필요하면 직접 선택하세요.",

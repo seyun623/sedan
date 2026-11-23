@@ -95,6 +95,8 @@ data class PreviewState(
   val rows: List<ImportRow> = emptyList(),
   val selected: Set<Int> = emptySet(),
   val savePerformance: Boolean = true,
+  /** Record installment purchases as monthly parts. */
+  val splitInstallments: Boolean = false,
   /** Indexes of extraction.benefits to add. */
   val selectedBenefits: Set<Int> = emptySet(),
   val busy: Boolean = false
@@ -109,6 +111,7 @@ class CardImportPreviewViewModel @Inject constructor(
   private val repo: CardImportRepository,
   private val ledger: LedgerRepository,
   private val cards: CardRepository,
+  private val settings: com.moneyflow.data.repository.SettingsRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
   private val _state = MutableStateFlow(PreviewState())
@@ -122,7 +125,11 @@ class CardImportPreviewViewModel @Inject constructor(
       val (site, extraction) = session.current.value ?: return@launch
       val accounts = ledger.accounts.first()
       val account = repo.suggestAccount(site.provider, accounts)
-      _state.value = PreviewState(site, extraction, accounts, account, selectedBenefits = extraction.benefits.indices.toSet())
+      _state.value = PreviewState(
+        site, extraction, accounts, account,
+        splitInstallments = settings.current().splitInstallments,
+        selectedBenefits = extraction.benefits.indices.toSet()
+      )
       account?.let { selectAccount(it) }
     }
   }
@@ -148,6 +155,7 @@ class CardImportPreviewViewModel @Inject constructor(
   }
 
   fun setSavePerformance(on: Boolean) { _state.value = _state.value.copy(savePerformance = on) }
+  fun setSplitInstallments(on: Boolean) { _state.value = _state.value.copy(splitInstallments = on) }
 
   fun toggleBenefit(index: Int) {
     val s = _state.value
@@ -158,7 +166,7 @@ class CardImportPreviewViewModel @Inject constructor(
     val s = _state.value
     val account = s.account ?: return@launch
     _state.value = s.copy(busy = true)
-    val result = repo.import(s.rows.filterIndexed { i, _ -> i in s.selected }, account)
+    val result = repo.import(s.rows.filterIndexed { i, _ -> i in s.selected }, account, s.splitInstallments)
     if (s.savePerformance) s.extraction?.performance?.firstOrNull()?.let { repo.savePerformance(account.id, it) }
     val benefits = s.extraction?.benefits.orEmpty().filterIndexed { i, _ -> i in s.selectedBenefits }
     val benefitResult = if (benefits.isEmpty()) null else cards.addBenefits(account.id, benefits, setTargetIfMissing = true)

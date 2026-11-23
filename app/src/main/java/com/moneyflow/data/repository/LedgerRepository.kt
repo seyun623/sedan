@@ -68,6 +68,25 @@ class LedgerRepository @Inject constructor(
     LedgerResult.Ok
   }
 
+  /** Records an installment purchase as one expense per month; returns the first part's id. */
+  suspend fun addInstallments(tx: TransactionEntity, months: Int): Long = db.withTransaction {
+    com.moneyflow.domain.InstallmentSplitter.split(tx, months, clock.zone).map { insertWithEffects(it) }.first()
+  }
+
+  /** All parts of the split installment purchase [tx] belongs to (just [tx] if it isn't one). */
+  suspend fun installmentGroup(tx: TransactionEntity): List<TransactionEntity> {
+    if (com.moneyflow.domain.InstallmentSplitter.partOf(tx.memo) == null) return listOf(tx)
+    val group = com.moneyflow.domain.InstallmentSplitter.groupKey(tx.dedupKey) ?: return listOf(tx)
+    return txDao.getInstallmentGroup(group).ifEmpty { listOf(tx) }
+  }
+
+  /** Deletes every part of a split installment purchase; returns how many were deleted. */
+  suspend fun deleteInstallmentGroup(tx: TransactionEntity): Int = db.withTransaction {
+    val parts = installmentGroup(tx)
+    parts.forEach { p -> txDao.getById(p.id)?.let { deleteWithEffects(it) } }
+    parts.size
+  }
+
   suspend fun deleteTransaction(tx: TransactionEntity): TransactionEntity? = db.withTransaction {
     val current = txDao.getById(tx.id) ?: return@withTransaction null
     txDao.delete(current)

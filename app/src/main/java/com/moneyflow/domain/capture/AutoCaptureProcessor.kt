@@ -4,12 +4,14 @@ import androidx.room.withTransaction
 import com.moneyflow.data.local.AppDatabase
 import com.moneyflow.data.model.AccountEntity
 import com.moneyflow.data.model.AccountType
+import com.moneyflow.data.model.CategoryRules
 import com.moneyflow.data.model.TransactionEntity
 import com.moneyflow.data.model.TransactionSource
 import com.moneyflow.data.model.TransactionType
 import com.moneyflow.data.repository.LedgerRepository
 import com.moneyflow.data.repository.SettingsRepository
 import com.moneyflow.domain.AppClock
+import com.moneyflow.domain.InstallmentSplitter
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,6 +21,8 @@ enum class CaptureChannel { NOTIFICATION, SMS }
 sealed interface CaptureOutcome {
   data class Recorded(val transactionId: Long, val payment: ParsedPayment, val account: AccountEntity) : CaptureOutcome
   data class CancelledOriginal(val removed: TransactionEntity) : CaptureOutcome
+  /** Foreign-currency payment: the user was asked to enter the KRW amount. */
+  data class NeedsKrwAmount(val prompt: ForeignPaymentPrompt) : CaptureOutcome
   data class Skipped(val reason: String) : CaptureOutcome
 }
 
@@ -37,7 +41,8 @@ class AutoCaptureProcessor @Inject constructor(
   private val db: AppDatabase,
   private val ledger: LedgerRepository,
   private val settings: SettingsRepository,
-  private val clock: AppClock
+  private val clock: AppClock,
+  private val notifier: CaptureNotifier
 ) {
   private val parser = PaymentMessageParser(clock.zone)
 
@@ -61,6 +66,9 @@ class AutoCaptureProcessor @Inject constructor(
       CaptureChannel.SMS -> if (!s.smsCaptureEnabled) return CaptureOutcome.Skipped("문자 자동 등록 꺼짐")
     }
 
+    val rules = db.ruleDao().getAll()
+    CategoryRules.ignores(rules, title, body)?.let { return CaptureOutcome.Skipped("무시 규칙: ${it.keyword}") }
+
     val result = parser.parse(title, body, receivedAt)
     val payment = when (result) {
       is ParseResult.Ignored -> return CaptureOutcome.Skipped(result.reason)
@@ -69,11 +77,9 @@ class AutoCaptureProcessor @Inject constructor(
     if (channel == CaptureChannel.SMS && payment.provider == null) {
       return CaptureOutcome.Skipped("카드사/은행 이름이 없는 문자")
     }
-    if (payment.kind == PaymentKind.FOREIGN_CURRENCY) {
-      return CaptureOutcome.Skipped("외화 결제는 원화 금액 확정 후 직접 입력해 주세요 (${payment.foreignAmount})")
-    }
-
     val timestamp = payment.paidAt ?: receivedAt
+    if (payment.kind == PaymentKind.FOREIGN_CURRENCY) return foreignPayment(payment, timestamp, s, rules)
+
     return db.withTransaction {
       if (payment.kind == PaymentKind.CANCELLATION) {
         return@withTransaction cancelOriginal(payment, timestamp)
@@ -91,15 +97,16 @@ class AutoCaptureProcessor @Inject constructor(
       val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
         ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
 
-      // Reuse the category the user last used for this merchant/sender (e.g. salary from a company).
-      val category = db.transactionDao().lastCategoryFor(payment.type, payment.merchant)
-        ?.takeIf { it in com.moneyflow.data.model.FinanceCategories.categoriesFor(payment.type) }
+      // A user rule wins; otherwise reuse the category last used for this merchant/sender.
+      val category = CategoryRules.categoryFor(rules, payment.type, payment.merchant)
+        ?: db.transactionDao().lastCategoryFor(payment.type, payment.merchant)
+          ?.takeIf { it in com.moneyflow.data.model.FinanceCategories.categoriesFor(payment.type) }
         ?: payment.category
       val memo = buildString {
         append(payment.merchant)
         payment.installmentMonths?.let { append(" (할부 ${it}개월)") }
       }
-      val id = ledger.insertWithEffects(
+      val tx =
         TransactionEntity(
           type = payment.type,
           amount = payment.amount,
@@ -115,7 +122,12 @@ class AutoCaptureProcessor @Inject constructor(
           source = if (channel == CaptureChannel.SMS) TransactionSource.SMS else TransactionSource.NOTIFICATION,
           dedupKey = key
         )
-      )
+      val months = payment.installmentMonths
+      val id = if (s.splitInstallments && months != null && months > 1 && payment.type == TransactionType.EXPENSE) {
+        InstallmentSplitter.split(tx, months, clock.zone).map { ledger.insertWithEffects(it) }.first()
+      } else {
+        ledger.insertWithEffects(tx)
+      }
       CaptureOutcome.Recorded(id, payment, account)
     }
   }
@@ -127,9 +139,48 @@ class AutoCaptureProcessor @Inject constructor(
     )
     val original = candidates.firstOrNull { it.source.isAutoCaptured && sameMerchant(it.memo, payment.merchant) }
       ?: candidates.firstOrNull { it.source.isAutoCaptured }
+    if (original != null) {
+      ledger.deleteWithEffects(original)
+      return CaptureOutcome.CancelledOriginal(original)
+    }
+    // A purchase that was split into monthly installment parts: remove all parts.
+    val firstPart = db.transactionDao().getBetween(timestamp - CANCEL_LOOKBACK_MS, timestamp + DUPLICATE_WINDOW_MS)
+      .filter { it.source.isAutoCaptured && InstallmentSplitter.partOf(it.memo)?.first == 1 && sameMerchant(it.memo, payment.merchant) }
+      .firstOrNull { ledger.installmentGroup(it).sumOf { p -> p.amount } == payment.amount }
       ?: return CaptureOutcome.Skipped("취소할 원거래를 찾지 못함")
-    ledger.deleteWithEffects(original)
-    return CaptureOutcome.CancelledOriginal(original)
+    ledger.installmentGroup(firstPart).forEach { ledger.deleteWithEffects(it) }
+    return CaptureOutcome.CancelledOriginal(firstPart)
+  }
+
+  /** Asks the user (once per payment) to enter the KRW amount of a foreign-currency payment. */
+  private suspend fun foreignPayment(
+    payment: ParsedPayment,
+    timestamp: Long,
+    s: com.moneyflow.data.repository.AppSettings,
+    rules: List<com.moneyflow.data.model.CategoryRuleEntity>
+  ): CaptureOutcome {
+    // The same payment can arrive by SMS and by app push a little apart: look ±3 minutes.
+    fun keyAt(minute: Long) = "foreign|" + sha("${payment.merchant.replace(" ", "")}|${payment.foreignAmount}|$minute")
+    val minute = timestamp / 60_000
+    if ((minute - 3..minute + 3).any { keyAt(it) in s.sentCardAlerts }) return CaptureOutcome.Skipped("이미 알린 외화 결제")
+    val key = keyAt(minute)
+    val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+    val prompt = ForeignPaymentPrompt(
+      key = key,
+      merchant = payment.merchant,
+      foreignAmount = payment.foreignAmount.orEmpty(),
+      provider = payment.provider,
+      prefill = FormPrefill(
+        type = TransactionType.EXPENSE,
+        memo = "${payment.merchant} (${payment.foreignAmount.orEmpty()})".replace(" ()", ""),
+        category = CategoryRules.categoryFor(rules, TransactionType.EXPENSE, payment.merchant) ?: payment.category,
+        accountId = account?.id,
+        timestamp = timestamp
+      )
+    )
+    settings.markAlertsSent(listOf(key))
+    notifier.foreignPayment(prompt)
+    return CaptureOutcome.NeedsKrwAmount(prompt)
   }
 
   private fun sameMerchant(memo: String, merchant: String): Boolean {
@@ -160,10 +211,11 @@ class AutoCaptureProcessor @Inject constructor(
 
   private fun dedupKey(p: ParsedPayment, timestamp: Long): String {
     val minute = timestamp / 60_000
-    val raw = "${p.type}|${p.amount}|${p.merchant.replace(" ", "")}|$minute"
-    val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
-    return digest.joinToString("") { "%02x".format(it) }.take(32)
+    return sha("${p.type}|${p.amount}|${p.merchant.replace(" ", "")}|$minute")
   }
+
+  private fun sha(raw: String): String =
+    MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 
   companion object {
     const val DUPLICATE_WINDOW_MS = 3 * 60_000L

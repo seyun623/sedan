@@ -48,11 +48,15 @@ class TransactionFormViewModel @Inject constructor(
   private val suggester: CategorySuggester,
   settings: SettingsRepository,
   private val cards: com.moneyflow.data.repository.CardRepository,
-  private val messages: UserMessageBus
+  private val messages: UserMessageBus,
+  prefillStore: com.moneyflow.ui.common.PrefillStore
 ) : ViewModel() {
 
   private val editingId: Long = savedState.get<Long>(ARG_TRANSACTION_ID) ?: 0L
   val isEditMode: Boolean get() = editingId > 0
+
+  /** Values to start a new transaction with (from a notification); applied once by the screen. */
+  val prefill: com.moneyflow.domain.capture.FormPrefill? = if (editingId > 0) null else prefillStore.take()
 
   /** All accounts; null until the first load completes (so the UI can tell "loading" from "none"). */
   val accounts: StateFlow<List<AccountEntity>?> =
@@ -107,7 +111,8 @@ class TransactionFormViewModel @Inject constructor(
     memo: String,
     paymentMethod: String,
     isExcludedFromBudget: Boolean,
-    keepOpen: Boolean = false
+    keepOpen: Boolean = false,
+    installmentMonths: Int = 0
   ) = viewModelScope.launch {
     val error = when {
       amount <= 0 -> "금액을 입력해 주세요."
@@ -143,9 +148,10 @@ class TransactionFormViewModel @Inject constructor(
         is LedgerResult.Rejected -> _events.send(FormEvent.Error(r.reason))
       }
     } else {
-      runCatching { ledger.addTransaction(base) }
+      val split = type == TransactionType.EXPENSE && installmentMonths > 1
+      runCatching { if (split) ledger.addInstallments(base, installmentMonths) else ledger.addTransaction(base) }
         .onSuccess {
-          messages.show("${type.title} 내역을 저장했어요.")
+          messages.show(if (split) "할부 ${installmentMonths}개월로 나눠 저장했어요." else "${type.title} 내역을 저장했어요.")
           _events.send(if (keepOpen) FormEvent.SavedKeepOpen else FormEvent.Closed)
         }
         .onFailure { _events.send(FormEvent.Error(it.message ?: "저장하지 못했어요.")) }
@@ -158,6 +164,22 @@ class TransactionFormViewModel @Inject constructor(
     val original = _editing.value ?: return false
     return isEditMode && type == TransactionType.TRANSFER &&
       original.type == TransactionType.TRANSFER && original.toAccountId == null
+  }
+
+  /** Number of parts when the edited transaction is part of a split installment purchase (else 0). */
+  private val _installmentParts = MutableStateFlow(0)
+  val installmentParts: StateFlow<Int> = _installmentParts.asStateFlow()
+
+  fun loadInstallmentGroup() = viewModelScope.launch {
+    val tx = _editing.value ?: return@launch
+    _installmentParts.value = ledger.installmentGroup(tx).size.takeIf { it > 1 } ?: 0
+  }
+
+  fun deleteInstallmentGroup() = viewModelScope.launch {
+    val tx = _editing.value ?: return@launch
+    val n = ledger.deleteInstallmentGroup(tx)
+    messages.show("할부 ${n}건을 모두 삭제했어요.")
+    _events.send(FormEvent.Closed)
   }
 
   fun delete() = viewModelScope.launch {

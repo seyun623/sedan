@@ -121,11 +121,11 @@ class ScreenshotTest {
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
-  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus)
+  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus, com.moneyflow.ui.common.PrefillStore())
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
-  private fun settingsVm() = SettingsViewModel(settings, ledger, AppLockManager(settings, clock), AutoCaptureProcessor(db, ledger, settings, clock), seeder, bus)
+  private fun settingsVm() = SettingsViewModel(settings, ledger, AppLockManager(settings, clock), AutoCaptureProcessor(db, ledger, settings, clock, object : com.moneyflow.domain.capture.CaptureNotifier { override fun foreignPayment(prompt: com.moneyflow.domain.capture.ForeignPaymentPrompt) {} }), seeder, bus)
   @Test fun settingsLight() { val vm = settingsVm(); shot("06_settings", false) { SettingsScreen({}, {}, {}, viewModel = vm) } }
   @Test fun settingsDark() { val vm = settingsVm(); shot("06_settings", true) { SettingsScreen({}, {}, {}, viewModel = vm) } }
 
@@ -166,7 +166,7 @@ class ScreenshotTest {
     val text = "전월 이용실적 412,000원\n2026.11.22 스타벅스 역삼점 5,600원\n2026.11.21 점심 식사 12,000원\n2026.11.20 쿠팡 32,000원\n2026.11.19 GS25 강남점 승인취소 -3,500원\n2026.11.18 이마트 성수점 120,000원 3개월"
     session.put(com.moneyflow.domain.cardimport.CardSites.byId("hyundai")!!, com.moneyflow.domain.cardimport.StatementTextParser(clock.today()).parse(text))
     return com.moneyflow.ui.cardimport.CardImportPreviewViewModel(session,
-      com.moneyflow.data.repository.CardImportRepository(db, ledger, settings, clock), ledger, com.moneyflow.data.repository.CardRepository(db, clock), bus)
+      com.moneyflow.data.repository.CardImportRepository(db, ledger, settings, clock), ledger, com.moneyflow.data.repository.CardRepository(db, clock), settings, bus)
   }
   @Test fun cardPreview() { val vm = previewVm(); shot("15_cardpreview", false) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
   @Test fun cardPreviewDark() { val vm = previewVm(); shot("15_cardpreview", true) { com.moneyflow.ui.cardimport.CardImportPreviewScreen({}, {}, viewModel = vm) } }
@@ -196,4 +196,12 @@ class ScreenshotTest {
   }
   @Test fun cardGuide() = guideShot(false)
   @Test fun cardGuideDark() = guideShot(true)
+  @Test fun rules() {
+    runBlocking {
+      db.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "스타벅스", category = "카페/간식"))
+      db.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "포인트 적립", action = com.moneyflow.data.model.RuleAction.IGNORE))
+    }
+    val vm = com.moneyflow.ui.settings.RulesViewModel(com.moneyflow.data.repository.RuleRepository(db), bus)
+    shot("19_rules", false) { com.moneyflow.ui.settings.RulesScreen({}, viewModel = vm) }
+  }
 }

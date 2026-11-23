@@ -69,6 +69,10 @@ interface TransactionDao {
   @Query("SELECT * FROM transactions WHERE timestamp BETWEEN :start AND :end ORDER BY timestamp DESC, id DESC")
   suspend fun getBetween(start: Long, end: Long): List<TransactionEntity>
 
+  /** Parts of a split installment purchase (dedupKey = group or group#n). */
+  @Query("SELECT * FROM transactions WHERE dedupKey = :group OR dedupKey LIKE :group || '#%' ORDER BY timestamp")
+  suspend fun getInstallmentGroup(group: String): List<TransactionEntity>
+
   @Query("SELECT MIN(timestamp) FROM transactions")
   suspend fun earliestTimestamp(): Long?
 

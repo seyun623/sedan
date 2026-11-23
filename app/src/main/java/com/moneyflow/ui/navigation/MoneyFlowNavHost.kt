@@ -57,8 +57,21 @@ import com.moneyflow.ui.transaction.ARG_TRANSACTION_ID
 import com.moneyflow.ui.transaction.TransactionFormScreen
 
 @Composable
-fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController = rememberNavController()) {
+fun MoneyFlowNavHost(
+  messages: UserMessageBus,
+  navController: NavHostController = rememberNavController(),
+  prefill: com.moneyflow.ui.common.PrefillStore? = null
+) {
   val snackbarHostState = remember { SnackbarHostState() }
+  // A notification / widget asked for the add form (e.g. "해외 결제 원화 금액 입력").
+  if (prefill != null) LaunchedEffect(prefill) {
+    prefill.pending.collect { p ->
+      if (p != null) {
+        prefill.opened()
+        navController.navigate(Routes.transaction()) { launchSingleTop = false }
+      }
+    }
+  }
   LaunchedEffect(messages) {
     messages.messages.collect { msg ->
       snackbarHostState.currentSnackbarData?.dismiss()
@@ -159,9 +172,11 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
           onOpenBackup = { navController.navigate(Routes.BACKUP) },
           onOpenAi = { navController.navigate(Routes.AI) },
           onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) },
-          onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) }
+          onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) },
+          onOpenRules = { navController.navigate(Routes.RULES) }
         )
       }
+      composable(Routes.RULES) { com.moneyflow.ui.settings.RulesScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.AUTO_CAPTURE) { AutoCaptureSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.CARD_IMPORT) {
