@@ -26,6 +26,8 @@ data class AppSettings(
   val lockTimeoutSeconds: Int = 30,
   val failedPinAttempts: Int = 0,
   val pinLockedUntil: Long = 0L,
+  /** Wall-clock time of the last wrong PIN (detects the device clock being set back). */
+  val pinLastFailureAt: Long = 0L,
   val secureScreen: Boolean = true,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   val notificationCaptureEnabled: Boolean = false,
@@ -51,6 +53,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val LOCK_TIMEOUT = intPreferencesKey("lock_timeout_seconds")
     val FAILED = intPreferencesKey("failed_pin_attempts")
     val LOCKED_UNTIL = longPreferencesKey("pin_locked_until")
+    val LAST_FAILURE = longPreferencesKey("pin_last_failure_at")
     val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
     val THEME = stringPreferencesKey("theme_mode")
     val NOTI_CAPTURE = booleanPreferencesKey("notification_capture")
@@ -68,6 +71,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       lockTimeoutSeconds = p[Keys.LOCK_TIMEOUT] ?: 30,
       failedPinAttempts = p[Keys.FAILED] ?: 0,
       pinLockedUntil = p[Keys.LOCKED_UNTIL] ?: 0L,
+      pinLastFailureAt = p[Keys.LAST_FAILURE] ?: 0L,
       secureScreen = p[Keys.SECURE_SCREEN] ?: true,
       themeMode = p[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
       notificationCaptureEnabled = p[Keys.NOTI_CAPTURE] ?: false,
@@ -95,9 +99,10 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     it[Keys.LOCKED_UNTIL] = 0L
   }
 
-  suspend fun recordPinFailure(attempts: Int, lockedUntil: Long) = store.edit {
+  suspend fun recordPinFailure(attempts: Int, lockedUntil: Long, failedAt: Long) = store.edit {
     it[Keys.FAILED] = attempts
     it[Keys.LOCKED_UNTIL] = lockedUntil
+    it[Keys.LAST_FAILURE] = failedAt
   }
 
   suspend fun resetPinFailures() = store.edit {

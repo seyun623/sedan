@@ -39,6 +39,9 @@ interface AccountDao {
   @Update
   suspend fun update(account: AccountEntity)
 
+  @Query("UPDATE accounts SET isFavorite = NOT isFavorite WHERE id = :accountId")
+  suspend fun toggleFavorite(accountId: Long)
+
   @Query("UPDATE accounts SET balance = balance + :delta WHERE id = :accountId")
   suspend fun adjustBalance(accountId: Long, delta: Long)
 

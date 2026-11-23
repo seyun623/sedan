@@ -256,7 +256,11 @@ internal fun SetBudgetDialog(
   onDismiss: () -> Unit,
   onSave: (total: Long, limits: Map<String, Long>) -> Unit
 ) {
-  val categories = remember { FinanceCategories.categoriesFor(TransactionType.EXPENSE) }
+  // Standard categories plus any older/custom category that already has a limit (so it isn't dropped).
+  val categories = remember(budget) {
+    val standard = FinanceCategories.categoriesFor(TransactionType.EXPENSE)
+    standard + (budget?.categoryLimits?.keys.orEmpty() - standard.toSet()).sorted()
+  }
   var totalText by rememberSaveable { mutableStateOf((budget?.total ?: 0L).toAmountInput()) }
   val limitTexts = rememberSaveable(
     saver = listSaver<SnapshotStateList<String>, String>(save = { it.toList() }, restore = { it.toMutableStateList() })
@@ -353,7 +357,11 @@ internal fun RecurringDialog(
   var memo by rememberSaveable { mutableStateOf(initial?.memo ?: "") }
   var paymentMethod by rememberSaveable { mutableStateOf(initial?.paymentMethod ?: "계좌이체") }
 
-  val categories = FinanceCategories.categoriesFor(type)
+  // Keep an item's existing category selectable even if it is not in the standard list.
+  val categories = FinanceCategories.categoriesFor(type).let { standard ->
+    val existing = initial?.category?.takeIf { initial.type == type && it !in standard }
+    if (existing != null) standard + existing else standard
+  }
   val methods = remember(paymentMethod) {
     if (paymentMethod in recurringPaymentMethods) recurringPaymentMethods else recurringPaymentMethods + paymentMethod
   }
@@ -677,7 +685,7 @@ internal fun GoalDepositDialog(
     title = "${goal.iconEmoji} 저축하기",
     subtitle = goal.title,
     confirmLabel = "저축하기",
-    confirmEnabled = amount > 0 && account != null,
+    confirmEnabled = amount > 0 && account != null && amount <= account.balance,
     onConfirm = {
       val acc = account ?: return@FormDialog
       if (amount > 0) {
@@ -693,7 +701,8 @@ internal fun GoalDepositDialog(
       value = amountText,
       onValueChange = { amountText = it },
       label = "저축할 금액",
-      supportingText = if (account != null && amount > account.balance) "계좌 잔액보다 큰 금액이에요" else null,
+      isError = account != null && amount > account.balance,
+      supportingText = if (account != null && amount > account.balance) "계좌 잔액(${Formatters.formatCurrency(account.balance)})보다 많이 저축할 수 없어요" else null,
       modifier = Modifier.testTag("goal_deposit_amount_input")
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

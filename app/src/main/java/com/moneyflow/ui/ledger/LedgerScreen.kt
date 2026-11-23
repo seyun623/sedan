@@ -85,7 +85,7 @@ fun LedgerScreen(
     val zone = ZoneId.systemDefault()
     state.transactions.groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
   }
-  val today = remember { LocalDate.now() }
+  val today = state.today
 
   Column(
     modifier = Modifier
@@ -99,7 +99,11 @@ fun LedgerScreen(
       onNextMonth = viewModel::nextMonth,
       onCurrentMonth = viewModel::goToCurrentMonth,
       onToggleCalendar = viewModel::toggleCalendarView,
-      onExportCsv = { CsvExportHelper.exportTransactionsToCsv(context, state.transactions, state.monthLabel) }
+      onExportCsv = {
+        // Export exactly what is listed; name the file after the shown range (and mark filtered lists).
+        val suffix = if (state.filters.isAnyActive) "${state.dateRangeLabel}_검색결과" else state.monthLabel
+        CsvExportHelper.exportTransactionsToCsv(context, state.transactions, suffix)
+      }
     )
 
     LazyColumn(
@@ -291,7 +295,7 @@ private fun DayHeader(dayTxs: List<TransactionEntity>) {
 private fun SwipeToDeleteRow(
   transaction: TransactionEntity,
   onClick: () -> Unit,
-  onDelete: () -> kotlinx.coroutines.Job
+  onDelete: () -> kotlinx.coroutines.Deferred<Boolean>
 ) {
   val dismissState = rememberSwipeToDismissBoxState()
   val scope = rememberCoroutineScope()
@@ -302,9 +306,8 @@ private fun SwipeToDeleteRow(
     onDismiss = { value ->
       if (value == SwipeToDismissBoxValue.EndToStart) {
         scope.launch {
-          onDelete().join()
-          // If the row is still shown (e.g. delete failed or was undone), bring it back.
-          dismissState.reset()
+          // Leave the row dismissed while the list updates; bring it back only if nothing was deleted.
+          if (!onDelete().await()) dismissState.reset()
         }
       }
     },

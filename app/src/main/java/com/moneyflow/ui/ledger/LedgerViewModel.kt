@@ -14,7 +14,9 @@ import com.moneyflow.ui.common.UserMessage
 import com.moneyflow.ui.common.UserMessageBus
 import com.moneyflow.util.Formatters
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -71,6 +73,8 @@ data class LedgerUiState(
   val dailyExpense: Map<Int, Long> = emptyMap(),
   val dailyIncome: Map<Int, Long> = emptyMap(),
   val accounts: List<AccountEntity> = emptyList(),
+  /** Today per the app clock (recomputed whenever the list updates). */
+  val today: LocalDate = LocalDate.now(),
   val isLoading: Boolean = true
 )
 
@@ -142,6 +146,7 @@ class LedgerViewModel @Inject constructor(
         .groupBy { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth }
         .mapValues { (_, l) -> l.sumOf { it.amount } },
       accounts = accounts,
+      today = today,
       isLoading = false
     )
   }
@@ -178,8 +183,9 @@ class LedgerViewModel @Inject constructor(
     filters.update { LedgerFilters(isCalendarView = it.isCalendarView) }
   }
 
-  fun delete(tx: TransactionEntity) = viewModelScope.launch {
-    val removed = ledger.deleteTransaction(tx) ?: return@launch
+  /** Deletes with an undo snackbar. Completes with true if the row was deleted. */
+  fun delete(tx: TransactionEntity): Deferred<Boolean> = viewModelScope.async {
+    val removed = ledger.deleteTransaction(tx) ?: return@async false
     messages.show(
       UserMessage(
         text = "'${removed.memo.ifBlank { removed.category }}' 내역을 삭제했어요.",
@@ -187,5 +193,6 @@ class LedgerViewModel @Inject constructor(
         onAction = { ledger.restoreTransaction(removed) }
       )
     )
+    true
   }
 }

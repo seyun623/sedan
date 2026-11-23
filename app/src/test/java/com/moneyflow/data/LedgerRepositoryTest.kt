@@ -123,4 +123,30 @@ class LedgerRepositoryTest {
     assertNull(kept.goalId)
     assertEquals(400_000, balance(a))
   }
+
+  @Test fun editingGoalDepositNeverCreditsAnotherAccount() = runBlocking {
+    val a = ledger.addAccount(bank("A", 500_000))
+    val b = ledger.addAccount(bank("B", 100_000))
+    val goalId = ledger.addGoal(SavingGoalEntity(title = "여행", targetAmount = 1_000_000, currentAmount = 0, targetDate = 0))
+    val txId = ledger.depositToGoal(db.savingGoalDao().getById(goalId)!!, a, 50_000)
+    // An edit that (wrongly) tries to attach a receiving account
+    val edited = ledger.getTransaction(txId)!!.copy(memo = "메모 수정", toAccountId = b)
+    assertEquals(LedgerResult.Ok, ledger.updateTransaction(edited))
+    assertEquals(450_000, balance(a))
+    assertEquals(100_000, balance(b))
+    assertEquals(50_000, db.savingGoalDao().getById(goalId)!!.currentAmount)
+    assertNull(ledger.getTransaction(txId)!!.toAccountId)
+  }
+
+  @Test fun accountEditKeepsBalanceChangedWhileFormWasOpen() = runBlocking {
+    val a = ledger.addAccount(bank("A", 100_000))
+    val shown = db.accountDao().getById(a)!!          // form opened, shows 100,000
+    ledger.addTransaction(tx(TransactionType.EXPENSE, 30_000, a)) // captured while form open
+    ledger.updateAccount(shown.copy(name = "새 이름"), balanceShownWhenEditing = shown.balance)
+    assertEquals(70_000, balance(a))
+    assertEquals("새 이름", db.accountDao().getById(a)!!.name)
+    // an explicit balance correction is still applied
+    ledger.updateAccount(db.accountDao().getById(a)!!.copy(balance = 65_000), balanceShownWhenEditing = 70_000)
+    assertEquals(65_000, balance(a))
+  }
 }

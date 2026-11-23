@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -96,6 +97,10 @@ private fun AnalyticsContent(
 ) {
   val monthKey = state.month.toString()
   var selectedCategory by rememberSaveable(monthKey) { mutableStateOf<String?>(null) }
+  // Clear the selection when that category no longer has spending (deleted / edited away).
+  LaunchedEffect(state.categoryBreakdown) {
+    if (selectedCategory != null && state.categoryBreakdown.none { it.category == selectedCategory }) selectedCategory = null
+  }
   // "이번 달" only for the current month; otherwise "11월".
   val periodLabel = if (state.isCurrentMonth) "이번 달" else "${state.month.monthValue}월"
 

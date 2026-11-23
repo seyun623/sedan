@@ -163,7 +163,7 @@ fun SecuritySettingsScreen(
       onDismiss = { flow = null },
       onSetPin = { pin, done -> viewModel.setPin(pin) { ok -> done(ok, if (ok) null else "PIN은 숫자 4~6자리로 정해 주세요.") } },
       onChangePin = { old, new, done -> viewModel.changePin(old, new, done) },
-      onDisable = { pin, done -> viewModel.disableLock(pin) { ok -> done(ok, if (ok) null else "PIN이 맞지 않아요.") } }
+      onDisable = { pin, done -> viewModel.disableLock(pin, done) }
     )
   }
 }

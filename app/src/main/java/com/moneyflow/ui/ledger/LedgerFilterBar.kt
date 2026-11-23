@@ -348,7 +348,7 @@ internal fun LedgerFilterBar(
   if (showRangePicker) {
     CustomRangeDialog(
       initialStart = filters.customStart ?: state.month.atDay(1),
-      initialEnd = filters.customEnd ?: minOf(state.month.atEndOfMonth(), LocalDate.now().coerceAtLeast(state.month.atDay(1))),
+      initialEnd = filters.customEnd ?: minOf(state.month.atEndOfMonth(), state.today.coerceAtLeast(state.month.atDay(1))),
       onDismiss = { showRangePicker = false },
       onConfirm = { s, e ->
         onCustomRange(s, e)

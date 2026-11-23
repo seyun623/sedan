@@ -96,7 +96,7 @@ class TransactionFormViewModel @Inject constructor(
     val error = when {
       amount <= 0 -> "금액을 입력해 주세요."
       accountId <= 0 -> "계좌를 선택해 주세요."
-      type == TransactionType.TRANSFER && toAccountId == null -> "받는 계좌를 선택해 주세요."
+      type == TransactionType.TRANSFER && toAccountId == null && !allowsNoReceiver(type) -> "받는 계좌를 선택해 주세요."
       type == TransactionType.TRANSFER && toAccountId == accountId -> "보내는 계좌와 받는 계좌가 같아요."
       else -> null
     }
@@ -135,6 +135,13 @@ class TransactionFormViewModel @Inject constructor(
         .onFailure { _events.send(FormEvent.Error(it.message ?: "저장하지 못했어요.")) }
     }
     resetCategorySuggestion()
+  }
+
+  /** Editing a transfer that was recorded without a receiving account (e.g. a goal deposit). */
+  private fun allowsNoReceiver(type: TransactionType): Boolean {
+    val original = _editing.value ?: return false
+    return isEditMode && type == TransactionType.TRANSFER &&
+      original.type == TransactionType.TRANSFER && original.toAccountId == null
   }
 
   fun delete() = viewModelScope.launch {

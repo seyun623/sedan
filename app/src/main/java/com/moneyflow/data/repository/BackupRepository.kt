@@ -13,6 +13,8 @@ import com.moneyflow.data.model.TransactionSource
 import com.moneyflow.data.model.TransactionType
 import com.moneyflow.domain.AppClock
 import com.moneyflow.domain.backup.BackupCrypto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -75,7 +77,9 @@ class BackupRepository @Inject constructor(
         .put("goals", JSONArray(dao.goals().map(::goalJson)))
         .put("recurring", JSONArray(dao.recurring().map(::recurringJson)))
     }
-    val bytes = BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
+    val bytes = withContext(Dispatchers.Default) {
+      BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
+    }
     settings.setLastBackupAt(clock.nowMillis())
     return bytes
   }

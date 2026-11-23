@@ -169,10 +169,15 @@ fun TransactionFormScreen(
     if (!isEditMode && list.none { it.id == accountId }) accountId = list.firstOrNull()?.id ?: 0L
   }
 
+  // A transfer recorded without a receiving account (goal deposits, captured card-bill payments)
+  // must stay that way when edited; never auto-pick an account for it.
+  val editingWithoutReceiver = isEditMode && editing?.let { it.type == TransactionType.TRANSFER && it.toAccountId == null } == true
+  val keepWithoutReceiver = editingWithoutReceiver && type == TransactionType.TRANSFER
+
   // Transfer: the receiving account must exist and differ from the sending account.
   LaunchedEffect(type, accountId, accounts, prefilled) {
     val list = accounts ?: return@LaunchedEffect
-    if (type != TransactionType.TRANSFER || (isEditMode && !prefilled)) return@LaunchedEffect
+    if (type != TransactionType.TRANSFER || (isEditMode && !prefilled) || keepWithoutReceiver) return@LaunchedEffect
     if (toAccountId == accountId || list.none { it.id == toAccountId }) {
       toAccountId = list.firstOrNull { it.id != accountId }?.id ?: 0L
     }
@@ -218,7 +223,7 @@ fun TransactionFormScreen(
       tx.type != type || tx.amount.toString() != amount || tx.category != category ||
         tx.accountId != accountId || tx.timestamp != timestamp || tx.memo != memo ||
         tx.paymentMethod != paymentMethod || tx.isExcludedFromBudget != excludeFromBudget ||
-        (type == TransactionType.TRANSFER && (tx.toAccountId ?: 0L) != toAccountId)
+        (type == TransactionType.TRANSFER && !keepWithoutReceiver && (tx.toAccountId ?: 0L) != toAccountId)
       )
   } else {
     amount.isNotEmpty() || memo.isNotBlank()
@@ -240,7 +245,7 @@ fun TransactionFormScreen(
       amount = value,
       category = category,
       accountId = accountId,
-      toAccountId = if (type == TransactionType.TRANSFER) toAccountId.takeIf { it > 0 } else null,
+      toAccountId = if (type == TransactionType.TRANSFER && !keepWithoutReceiver) toAccountId.takeIf { it > 0 } else null,
       timestamp = timestamp,
       memo = memo,
       paymentMethod = paymentMethod,
@@ -437,7 +442,14 @@ fun TransactionFormScreen(
               selectedId = accountId,
               onSelect = { accountId = it }
             )
-            if (isTransfer) {
+            if (isTransfer && keepWithoutReceiver) {
+              Spacer(Modifier.height(4.dp))
+              Text(
+                if (editing?.goalId != null) "저축 목표로 보낸 이체예요. 받는 계좌는 없어요." else "받는 계좌 없이 기록된 이체예요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Gray600
+              )
+            } else if (isTransfer) {
               Spacer(Modifier.height(4.dp))
               val others = accountList.orEmpty().filter { it.id != accountId }
               if (others.isEmpty()) {

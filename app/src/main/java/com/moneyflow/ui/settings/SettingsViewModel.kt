@@ -12,6 +12,7 @@ import com.moneyflow.data.repository.ThemeMode
 import com.moneyflow.domain.capture.AutoCaptureProcessor
 import com.moneyflow.domain.capture.ParseResult
 import com.moneyflow.security.AppLockManager
+import com.moneyflow.security.PinCheckResult
 import com.moneyflow.security.PinHasher
 import com.moneyflow.ui.common.UserMessageBus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,18 +56,28 @@ class SettingsViewModel @Inject constructor(
 
   /** Changes the PIN after verifying the current one. */
   fun changePin(currentPin: String, newPin: String, onDone: (Boolean, String?) -> Unit) = viewModelScope.launch {
-    if (!lock.checkPinOnly(currentPin)) { onDone(false, "현재 PIN이 맞지 않아요."); return@launch }
+    pinError(lock.checkPin(currentPin))?.let { onDone(false, it); return@launch }
     if (!PinHasher.isValidPin(newPin)) { onDone(false, "PIN은 숫자 4~6자리로 정해 주세요."); return@launch }
     lock.setPin(newPin)
     messages.show("PIN을 변경했어요.")
     onDone(true, null)
   }
 
-  fun disableLock(currentPin: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
-    if (!lock.checkPinOnly(currentPin)) { onDone(false); return@launch }
+  fun disableLock(currentPin: String, onDone: (Boolean, String?) -> Unit) = viewModelScope.launch {
+    pinError(lock.checkPin(currentPin))?.let { onDone(false, it); return@launch }
     lock.disableLock()
     messages.show("앱 잠금을 껐어요.")
-    onDone(true)
+    onDone(true, null)
+  }
+
+  /** null when the PIN was correct, otherwise the message to show. */
+  private fun pinError(result: PinCheckResult): String? = when (result) {
+    PinCheckResult.Success -> null
+    is PinCheckResult.Wrong -> "현재 PIN이 맞지 않아요. (${result.attemptsLeft}회 남음)"
+    is PinCheckResult.LockedOut -> {
+      val secs = ((result.untilMillis - System.currentTimeMillis()) / 1000).coerceAtLeast(1)
+      "PIN을 여러 번 틀렸어요. ${if (secs >= 60) "${secs / 60}분" else "${secs}초"} 뒤에 다시 시도해 주세요."
+    }
   }
 
   fun setBiometricEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBiometricEnabled(enabled) }

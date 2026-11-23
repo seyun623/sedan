@@ -59,7 +59,10 @@ class LedgerRepository @Inject constructor(
     val old = txDao.getById(updated.id) ?: return@withTransaction LedgerResult.Rejected("거래를 찾을 수 없습니다.")
     validate(updated)?.let { return@withTransaction LedgerResult.Rejected(it) }
     revertEffects(old)
-    val normalized = withAccountNames(updated)
+    // A goal deposit has no receiving account; never let an edit attach one (it would credit
+    // an account and the goal with the same money).
+    val safe = if (old.goalId != null && updated.goalId != null) updated.copy(toAccountId = null) else updated
+    val normalized = withAccountNames(safe)
     txDao.update(normalized)
     applyEffects(normalized)
     LedgerResult.Ok
@@ -152,12 +155,18 @@ class LedgerRepository @Inject constructor(
 
   suspend fun addAccount(account: AccountEntity): Long = accountDao.insert(account.copy(id = 0))
 
-  suspend fun updateAccount(updated: AccountEntity): LedgerResult = db.withTransaction {
+  /**
+   * Updates account details. If [balanceShownWhenEditing] is given and the edited balance equals
+   * it (the user did not touch the balance), the current stored balance is kept, so transactions
+   * recorded while the edit form was open are not overwritten.
+   */
+  suspend fun updateAccount(updated: AccountEntity, balanceShownWhenEditing: Long? = null): LedgerResult = db.withTransaction {
     val old = accountDao.getById(updated.id) ?: return@withTransaction LedgerResult.Rejected("계좌를 찾을 수 없습니다.")
     if (old.isDebt != updated.isDebt && txDao.countByAccount(old.id) > 0) {
       return@withTransaction LedgerResult.Rejected("거래 내역이 있는 계좌는 자산/부채 구분을 바꿀 수 없습니다.")
     }
-    accountDao.update(updated)
+    val balance = if (balanceShownWhenEditing != null && updated.balance == balanceShownWhenEditing) old.balance else updated.balance
+    accountDao.update(updated.copy(balance = balance))
     if (old.name != updated.name) {
       txDao.renameAccount(updated.id, updated.name)
       txDao.renameToAccount(updated.id, updated.name)
@@ -165,6 +174,8 @@ class LedgerRepository @Inject constructor(
     }
     LedgerResult.Ok
   }
+
+  suspend fun toggleFavorite(accountId: Long) = accountDao.toggleFavorite(accountId)
 
   data class AccountUsage(val transactionCount: Int, val recurringCount: Int) {
     val isUsed: Boolean get() = transactionCount > 0 || recurringCount > 0

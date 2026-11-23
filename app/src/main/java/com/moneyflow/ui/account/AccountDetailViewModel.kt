@@ -53,16 +53,15 @@ class AccountDetailViewModel @Inject constructor(
   private val _events = Channel<AccountEvent>(Channel.BUFFERED)
   val events = _events.receiveAsFlow()
 
-  fun update(updated: AccountEntity) = viewModelScope.launch {
-    when (val r = ledger.updateAccount(updated.copy(id = accountId))) {
+  fun update(updated: AccountEntity, balanceShownWhenEditing: Long? = null) = viewModelScope.launch {
+    when (val r = ledger.updateAccount(updated.copy(id = accountId), balanceShownWhenEditing)) {
       LedgerResult.Ok -> messages.show("계좌 정보를 수정했어요.")
       is LedgerResult.Rejected -> _events.send(AccountEvent.Error(r.reason))
     }
   }
 
   fun toggleFavorite() = viewModelScope.launch {
-    val a = uiState.value.account ?: return@launch
-    ledger.updateAccount(a.copy(isFavorite = !a.isFavorite))
+    ledger.toggleFavorite(accountId)
   }
 
   /** First call without [deleteRelated]; if the account is in use the UI is asked to confirm. */

@@ -16,7 +16,17 @@ class FakeClock(start: LocalDateTime = LocalDateTime.of(2026, 11, 21, 12, 0)) : 
   override val zone: ZoneId = ZoneId.of("Asia/Seoul")
   var instant: Instant = start.atZone(zone).toInstant()
   override fun now(): Instant = instant
-  fun set(dateTime: LocalDateTime) { instant = dateTime.atZone(zone).toInstant() }
+  /** Monotonic clock; advances with [set]/[advance] unless [setWallClockOnly] is used. */
+  var elapsed: Long = 1_000_000L
+  override fun elapsedRealtime(): Long = elapsed
+  fun set(dateTime: LocalDateTime) {
+    val next = dateTime.atZone(zone).toInstant()
+    if (next.isAfter(instant)) elapsed += next.toEpochMilli() - instant.toEpochMilli()
+    instant = next
+  }
+  /** Changes only the wall clock (the user changing the device time). */
+  fun setWallClockOnly(dateTime: LocalDateTime) { instant = dateTime.atZone(zone).toInstant() }
+  fun advanceMillis(ms: Long) { instant = instant.plusMillis(ms); elapsed += ms }
   fun millis(dateTime: LocalDateTime): Long = dateTime.atZone(zone).toInstant().toEpochMilli()
 }
 

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +38,10 @@ class MainActivity : FragmentActivity() {
       val settings by appViewModel.settings.collectAsStateWithLifecycle()
       val locked by appViewModel.locked.collectAsStateWithLifecycle()
       val s = settings
+      // The lock screen replaces the app content, but the content's state (back stack, form
+      // inputs, pending file-picker results) is kept and restored after unlocking.
+      val contentState = rememberSaveableStateHolder()
+      val navController = rememberNavController()
       MoneyFlowTheme(themeMode = s?.themeMode ?: com.moneyflow.data.repository.ThemeMode.SYSTEM) {
         LaunchedEffect(s?.secureScreen) { s?.let { applySecureScreen(it.secureScreen) } }
         when {
@@ -45,7 +51,9 @@ class MainActivity : FragmentActivity() {
             onVerifyPin = appViewModel::verifyPin,
             onBiometricSuccess = appViewModel::unlockWithBiometric
           )
-          else -> MoneyFlowNavHost(messages = appViewModel.messages)
+          else -> contentState.SaveableStateProvider("app-content") {
+            MoneyFlowNavHost(messages = appViewModel.messages, navController = navController)
+          }
         }
       }
     }

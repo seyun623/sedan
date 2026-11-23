@@ -12,6 +12,8 @@ interface AppClock {
   val zone: ZoneId
 
   fun nowMillis(): Long = now().toEpochMilli()
+  /** Monotonic time since boot; unaffected by the user changing the device clock. */
+  fun elapsedRealtime(): Long = android.os.SystemClock.elapsedRealtime()
   fun today(): LocalDate = now().atZone(zone).toLocalDate()
   fun currentMonth(): YearMonth = YearMonth.from(today())
   fun nowZoned(): ZonedDateTime = now().atZone(zone)

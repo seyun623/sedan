@@ -48,4 +48,46 @@ class SecurityTest {
     assertEquals(PinCheckResult.Success, lock.verifyPin("482915"))
     assertEquals(0, settings.current().failedPinAttempts)
   }
+
+  @Test fun settingTheClockBackDoesNotEndALockout() = runBlocking {
+    val clock = FakeClock(LocalDateTime.of(2026, 11, 21, 12, 0))
+    val lock = AppLockManager(testSettingsRepository(), clock)
+    lock.setPin("482915")
+    repeat(AppLockManager.FREE_ATTEMPTS) { lock.verifyPin("000000") }
+    clock.setWallClockOnly(LocalDateTime.of(2026, 11, 20, 12, 0)) // a day back
+    assertTrue(lock.verifyPin("482915") is PinCheckResult.LockedOut)
+    clock.setWallClockOnly(LocalDateTime.of(2026, 11, 22, 12, 0)) // a day forward
+    assertTrue(lock.verifyPin("482915") is PinCheckResult.LockedOut) // monotonic penalty still running
+  }
+
+  @Test fun settingsPinChecksShareTheRateLimit() = runBlocking {
+    val clock = FakeClock(LocalDateTime.of(2026, 11, 21, 12, 0))
+    val lock = AppLockManager(testSettingsRepository(), clock)
+    lock.setPin("482915")
+    repeat(AppLockManager.FREE_ATTEMPTS - 1) { assertTrue(lock.checkPin("111111") is PinCheckResult.Wrong) }
+    assertTrue(lock.checkPin("111111") is PinCheckResult.LockedOut)
+    assertTrue(lock.checkPin("482915") is PinCheckResult.LockedOut)
+  }
+
+  @Test fun relocksSynchronouslyAfterTimeoutMeasuredOnMonotonicClock() = runBlocking {
+    val clock = FakeClock(LocalDateTime.of(2026, 11, 21, 12, 0))
+    val settings = testSettingsRepository()
+    val lock = AppLockManager(settings, clock)
+    lock.setPin("482915")
+    settings.setLockTimeout(30)
+    val owner = object : androidx.lifecycle.LifecycleOwner {
+      override val lifecycle = androidx.lifecycle.LifecycleRegistry(this)
+    }
+    // let the cached settings catch up
+    repeat(20) { Thread.sleep(25); org.robolectric.shadows.ShadowLooper.idleMainLooper() }
+
+    lock.onStop(owner); clock.advanceMillis(10_000); lock.onStart(owner)
+    assertFalse(lock.locked.value)
+
+    lock.onStop(owner)
+    clock.setWallClockOnly(LocalDateTime.of(2026, 11, 21, 11, 0)) // device time set back
+    clock.elapsed += 31_000
+    lock.onStart(owner)
+    assertTrue(lock.locked.value) // decided immediately, no coroutine needed
+  }
 }

@@ -79,6 +79,9 @@ fun AccountDetailScreen(
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   var showEdit by rememberSaveable { mutableStateOf(false) }
+  // Balance shown when the edit dialog was opened; if the user leaves it unchanged, the
+  // current balance is kept (a transaction may have changed it while the dialog was open).
+  var editBaselineBalance by rememberSaveable { mutableStateOf<Long?>(null) }
   var showTransfer by rememberSaveable { mutableStateOf(false) }
   var confirmDelete by rememberSaveable { mutableStateOf(false) }
   var confirmDeleteRelated by rememberSaveable { mutableStateOf<String?>(null) }
@@ -114,7 +117,7 @@ fun AccountDetailScreen(
                 tint = if (account.isFavorite) AccentOrange else Gray600
               )
             }
-            IconButton(onClick = { showEdit = true }) { Icon(Icons.Filled.Edit, contentDescription = "계좌 수정", tint = Gray600) }
+            IconButton(onClick = { editBaselineBalance = account?.balance; showEdit = true }) { Icon(Icons.Filled.Edit, contentDescription = "계좌 수정", tint = Gray600) }
             IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "계좌 삭제", tint = Gray600) }
           }
         },
@@ -183,7 +186,8 @@ fun AccountDetailScreen(
           account.copy(
             name = d.name, bankName = d.bankName, accountType = d.type, accountNumber = d.accountNumber,
             balance = d.balance, colorHex = d.colorHex, isDebt = d.isDebt
-          )
+          ),
+          balanceShownWhenEditing = editBaselineBalance
         )
         showEdit = false
       }
