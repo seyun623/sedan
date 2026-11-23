@@ -47,6 +47,8 @@ data class AppSettings(
   /** Base URL for [AiProvider.CUSTOM]. */
   val aiCustomBaseUrl: String = "",
   val cardAlertsEnabled: Boolean = false,
+  /** Version whose "what's new" was last shown (null = never). */
+  val lastSeenVersion: String? = null,
   /** Alerts already sent ("kind|account|period"), so each is sent once. */
   val sentCardAlerts: Set<String> = emptySet(),
   /** Last "실적" figure read from each card company screen, by account id. */
@@ -86,6 +88,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
     val CARD_PERFORMANCE = stringPreferencesKey("card_performance_json")
     val CARD_ALERTS = booleanPreferencesKey("card_alerts_enabled")
+    val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
     val SENT_CARD_ALERTS = androidx.datastore.preferences.core.stringSetPreferencesKey("sent_card_alerts")
     val AI_PROVIDER = stringPreferencesKey("ai_provider")
     val AI_CUSTOM_URL = stringPreferencesKey("ai_custom_base_url")
@@ -123,6 +126,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
       cardAlertsEnabled = p[Keys.CARD_ALERTS] ?: false,
+      lastSeenVersion = p[Keys.LAST_SEEN_VERSION],
       sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet()
     )
   }
@@ -162,6 +166,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
   suspend fun setAiEnabled(enabled: Boolean) = store.edit { it[Keys.AI_ENABLED] = enabled }
+  suspend fun setLastSeenVersion(version: String) = store.edit { it[Keys.LAST_SEEN_VERSION] = version }
+
   suspend fun setCardAlertsEnabled(enabled: Boolean) = store.edit { it[Keys.CARD_ALERTS] = enabled }
 
   /** Records sent alerts; keeps only the most recent ones. */

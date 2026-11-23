@@ -158,7 +158,8 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
           onOpenAutoCapture = { navController.navigate(Routes.AUTO_CAPTURE) },
           onOpenBackup = { navController.navigate(Routes.BACKUP) },
           onOpenAi = { navController.navigate(Routes.AI) },
-          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) }
+          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) },
+          onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) }
         )
       }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
@@ -172,6 +173,9 @@ fun MoneyFlowNavHost(messages: UserMessageBus, navController: NavHostController 
       composable(Routes.CARD_PREVIEW) {
         // After importing, go back to the card site to read another month if needed.
         CardImportPreviewScreen(onBack = { navController.popBackStack() }, onDone = { navController.popBackStack() })
+      }
+      composable(Routes.RELEASE_HISTORY) {
+        com.moneyflow.ui.whatsnew.ReleaseHistoryScreen(onBack = { navController.popBackStack() }, currentVersion = com.moneyflow.BuildConfig.VERSION_NAME)
       }
       composable(Routes.AI) { AiSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.BACKUP) {

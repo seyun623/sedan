@@ -49,8 +49,12 @@ class MainActivity : FragmentActivity() {
             onVerifyPin = appViewModel::verifyPin,
             onBiometricSuccess = appViewModel::unlockWithBiometric
           )
-          else -> contentState.SaveableStateProvider("app-content") {
-            MoneyFlowNavHost(messages = appViewModel.messages, navController = navController)
+          else -> {
+            contentState.SaveableStateProvider("app-content") {
+              MoneyFlowNavHost(messages = appViewModel.messages, navController = navController)
+            }
+            val whatsNew by appViewModel.whatsNew.collectAsStateWithLifecycle()
+            com.moneyflow.ui.whatsnew.WhatsNewDialog(whatsNew, onDismiss = appViewModel::dismissWhatsNew)
           }
         }
       }

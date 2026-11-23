@@ -37,6 +37,7 @@ fun SettingsScreen(
   onOpenBackup: () -> Unit = {},
   onOpenAi: () -> Unit = {},
   onOpenCardImport: () -> Unit = {},
+  onOpenReleaseHistory: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -179,8 +180,14 @@ fun SettingsScreen(
         showChevron = false
       )
       SettingsItem(
+        title = "업데이트 내역",
+        subtitle = "버전마다 바뀐 점을 볼 수 있어요",
+        onClick = onOpenReleaseHistory,
+        modifier = Modifier.testTag("settings_release_history")
+      )
+      SettingsItem(
         title = "데이터 보관",
-        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요. 휴대폰을 바꿀 때는 백업 파일을 이용하세요. AI 추천을 켜면 메모만 Google로 전송돼요.",
+        subtitle = "거래와 계좌 기록은 이 기기 안에 암호화되어 저장돼요. 휴대폰을 바꿀 때는 백업 파일을 이용하세요. AI 추천을 켜면 메모만 선택한 AI 서비스로 전송돼요.",
         showChevron = false
       )
     }

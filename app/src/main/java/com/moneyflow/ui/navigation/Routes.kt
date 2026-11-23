@@ -23,6 +23,7 @@ object Routes {
   const val AUTO_CAPTURE = "settings/auto-capture"
   const val BACKUP = "settings/backup"
   const val AI = "settings/ai"
+  const val RELEASE_HISTORY = "settings/release-history"
   const val CARD_IMPORT = "card-import"
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"

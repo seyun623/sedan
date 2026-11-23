@@ -1,0 +1,70 @@
+package com.moneyflow.ui.whatsnew
+
+/** What changed in each version, newest first. Add an entry for every release. */
+data class ReleaseNote(val version: String, val date: String, val items: List<String>)
+
+object ReleaseNotes {
+  val all = listOf(
+    ReleaseNote(
+      "1.3.1", "2026.11",
+      listOf(
+        "업데이트 후 처음 실행하면 이렇게 바뀐 점을 알려 드려요",
+        "설정 → 앱 정보 → 업데이트 내역에서 지난 내용도 볼 수 있어요"
+      )
+    ),
+    ReleaseNote(
+      "1.3.0", "2026.11",
+      listOf(
+        "카드 실적 관리: 카드 계좌에서 전월 실적 기준을 설정하면 이번 기간 실적과 남은 금액을 보여 줘요",
+        "카드 혜택 관리: 카페 10% 할인처럼 혜택을 등록하면 받은 혜택과 남은 한도를 계산해요",
+        "홈 화면에 카드별 실적 요약이 생겼어요",
+        "설정 → 카드 실적·혜택 알림: 실적이 모자라거나 혜택 한도를 다 쓰면 알려 드려요"
+      )
+    ),
+    ReleaseNote(
+      "1.2.0", "2026.11",
+      listOf(
+        "설정 → 카드사에서 가져오기: 카드사 홈페이지에 직접 로그인해 이용내역·실적을 불러와요",
+        "AI 서비스를 고를 수 있어요: Gemini, OpenRouter, Groq, 직접 입력",
+        "자주 쓰는 가맹점은 AI 없이 바로 분류해서 무료 사용량을 아껴요"
+      )
+    ),
+    ReleaseNote(
+      "1.1.0", "2026.11",
+      listOf("설정 → AI 설정: 내 API 키를 등록해 메모로 카테고리를 추천받을 수 있어요")
+    ),
+    ReleaseNote(
+      "1.0.2", "2026.11",
+      listOf(
+        "은행 입금 문자에서 보낸 곳(회사명)과 은행을 정확히 인식해요",
+        "같은 곳에서 온 입금은 지난번에 고른 카테고리로 자동 분류해요 (급여 등)"
+      )
+    ),
+    ReleaseNote(
+      "1.0.1", "2026.11",
+      listOf("기본판(바로 설치)과 자동 등록판으로 나뉘었어요")
+    ),
+    ReleaseNote(
+      "1.0.0", "2026.11",
+      listOf("머니플로우 첫 버전: 가계부, 자산, 소비 분석, 예산·목표, 앱 잠금, 백업·복원")
+    )
+  )
+
+  /** Notes newer than [lastSeen] up to [current]; only the current one if [lastSeen] is unknown. */
+  fun since(lastSeen: String?, current: String): List<ReleaseNote> {
+    val upToCurrent = all.filter { compare(it.version, current) <= 0 }
+    if (lastSeen.isNullOrBlank()) return upToCurrent.take(1)
+    return upToCurrent.filter { compare(it.version, lastSeen) > 0 }
+  }
+
+  /** Compares "1.10.2" style versions numerically. */
+  fun compare(a: String, b: String): Int {
+    val pa = a.split('.', '-').mapNotNull { it.toIntOrNull() }
+    val pb = b.split('.', '-').mapNotNull { it.toIntOrNull() }
+    for (i in 0 until maxOf(pa.size, pb.size)) {
+      val d = (pa.getOrElse(i) { 0 }).compareTo(pb.getOrElse(i) { 0 })
+      if (d != 0) return d
+    }
+    return 0
+  }
+}
