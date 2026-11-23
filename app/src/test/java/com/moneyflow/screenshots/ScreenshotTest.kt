@@ -118,7 +118,7 @@ class ScreenshotTest {
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
-  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient()), settings, bus)
+  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, bus)
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
@@ -150,7 +150,7 @@ class ScreenshotTest {
     val vm = home(); shot("12_firstrun", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) }
   }
   private fun aiVm() = com.moneyflow.ui.settings.AiSettingsViewModel(settings, com.moneyflow.testing.PlainSecretStore,
-    CategorySuggester(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient()), bus)
+    com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), bus)
   @Test fun aiLight() { runBlocking { settings.setAiApiKeyEncrypted("enc:k"); settings.setAiEnabled(true) }; val vm = aiVm(); shot("13_ai", false) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
   @Test fun aiDark() { val vm = aiVm(); shot("13_ai", true) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
   @Test fun lockDark() = shot("07_lock", true) { LockScreen(lockSettings, { _, _ -> }, {}) }

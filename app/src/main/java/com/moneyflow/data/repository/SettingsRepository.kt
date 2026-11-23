@@ -9,14 +9,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.moneyflow.ai.AiProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/** Used until the user picks a model from the list their key can access. */
-const val DEFAULT_AI_MODEL = "gemini-2.5-flash"
 
 enum class ThemeMode(val label: String) { SYSTEM("시스템 설정"), LIGHT("라이트"), DARK("다크") }
 
@@ -40,14 +38,22 @@ data class AppSettings(
   val onboardingDone: Boolean = false,
   /** When a backup file was last created (0 = never). */
   val lastBackupAt: Long = 0L,
-  /** AI category suggestion (user's own Gemini API key). */
+  /** AI (user's own API key). */
   val aiEnabled: Boolean = false,
-  /** API key encrypted with the Android Keystore (never stored in plain text). */
-  val aiApiKeyEncrypted: String? = null,
-  val aiModel: String = DEFAULT_AI_MODEL
+  val aiProvider: AiProvider = AiProvider.GEMINI,
+  /** API keys per provider, encrypted with the Android Keystore (never stored in plain text). */
+  val aiKeysEncrypted: Map<AiProvider, String> = emptyMap(),
+  val aiModels: Map<AiProvider, String> = emptyMap(),
+  /** Base URL for [AiProvider.CUSTOM]. */
+  val aiCustomBaseUrl: String = ""
 ) {
+  val aiApiKeyEncrypted: String? get() = aiKeysEncrypted[aiProvider]
+  val aiModel: String get() = aiModels[aiProvider]?.takeIf { it.isNotBlank() } ?: aiProvider.defaultModel
+  val aiBaseUrl: String? get() = if (aiProvider == AiProvider.CUSTOM) aiCustomBaseUrl else aiProvider.defaultBaseUrl
   val hasAiKey: Boolean get() = !aiApiKeyEncrypted.isNullOrBlank()
-  val isAiReady: Boolean get() = aiEnabled && hasAiKey
+  val isAiReady: Boolean
+    get() = aiEnabled && hasAiKey && aiModel.isNotBlank() &&
+      (aiProvider != AiProvider.CUSTOM || aiCustomBaseUrl.startsWith("https://"))
 
   val isLockEnabled: Boolean get() = pinHash != null && pinSalt != null
 }
@@ -73,8 +79,13 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val ONBOARDING = booleanPreferencesKey("onboarding_done")
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
-    val AI_KEY = stringPreferencesKey("ai_api_key_enc")
-    val AI_MODEL = stringPreferencesKey("ai_model")
+    val AI_PROVIDER = stringPreferencesKey("ai_provider")
+    val AI_CUSTOM_URL = stringPreferencesKey("ai_custom_base_url")
+    /** v1.1.0 single Gemini key / model (read as the Gemini entries). */
+    val LEGACY_AI_KEY = stringPreferencesKey("ai_api_key_enc")
+    val LEGACY_AI_MODEL = stringPreferencesKey("ai_model")
+    fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
+    fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
 
   val settings: Flow<AppSettings> = store.data.map { p ->
@@ -94,8 +105,14 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       onboardingDone = p[Keys.ONBOARDING] ?: false,
       lastBackupAt = p[Keys.LAST_BACKUP] ?: 0L,
       aiEnabled = p[Keys.AI_ENABLED] ?: false,
-      aiApiKeyEncrypted = p[Keys.AI_KEY],
-      aiModel = p[Keys.AI_MODEL] ?: DEFAULT_AI_MODEL
+      aiProvider = p[Keys.AI_PROVIDER]?.let { runCatching { AiProvider.valueOf(it) }.getOrNull() } ?: AiProvider.GEMINI,
+      aiKeysEncrypted = AiProvider.entries.mapNotNull { pr ->
+        (p[Keys.aiKey(pr)] ?: if (pr == AiProvider.GEMINI) p[Keys.LEGACY_AI_KEY] else null)?.let { pr to it }
+      }.toMap(),
+      aiModels = AiProvider.entries.mapNotNull { pr ->
+        (p[Keys.aiModel(pr)] ?: if (pr == AiProvider.GEMINI) p[Keys.LEGACY_AI_MODEL] else null)?.let { pr to it }
+      }.toMap(),
+      aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: ""
     )
   }
 
@@ -134,9 +151,25 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setNotificationCapture(enabled: Boolean) = store.edit { it[Keys.NOTI_CAPTURE] = enabled }
   suspend fun setSmsCapture(enabled: Boolean) = store.edit { it[Keys.SMS_CAPTURE] = enabled }
   suspend fun setAiEnabled(enabled: Boolean) = store.edit { it[Keys.AI_ENABLED] = enabled }
-  suspend fun setAiModel(model: String) = store.edit { it[Keys.AI_MODEL] = model }
+  suspend fun setAiProvider(provider: AiProvider) = store.edit { it[Keys.AI_PROVIDER] = provider.name }
+  suspend fun setAiCustomBaseUrl(url: String) = store.edit { it[Keys.AI_CUSTOM_URL] = url.trim() }
+
+  /** Sets the model of the currently selected provider. */
+  suspend fun setAiModel(model: String) = store.edit {
+    val provider = it[Keys.AI_PROVIDER]?.let { n -> runCatching { AiProvider.valueOf(n) }.getOrNull() } ?: AiProvider.GEMINI
+    it[Keys.aiModel(provider)] = model
+  }
+
+  /** Sets (or with null removes) the key of the currently selected provider. Removing turns AI off. */
   suspend fun setAiApiKeyEncrypted(encrypted: String?) = store.edit {
-    if (encrypted == null) { it.remove(Keys.AI_KEY); it[Keys.AI_ENABLED] = false } else it[Keys.AI_KEY] = encrypted
+    val provider = it[Keys.AI_PROVIDER]?.let { n -> runCatching { AiProvider.valueOf(n) }.getOrNull() } ?: AiProvider.GEMINI
+    if (provider == AiProvider.GEMINI) it.remove(Keys.LEGACY_AI_KEY)
+    if (encrypted == null) {
+      it.remove(Keys.aiKey(provider))
+      it[Keys.AI_ENABLED] = false
+    } else {
+      it[Keys.aiKey(provider)] = encrypted
+    }
   }
   suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }
