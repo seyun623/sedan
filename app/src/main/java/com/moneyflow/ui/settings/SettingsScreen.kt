@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -39,6 +40,7 @@ fun SettingsScreen(
   onOpenCardImport: () -> Unit = {},
   onOpenReleaseHistory: () -> Unit = {},
   onOpenRules: () -> Unit = {},
+  onOpenFamily: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -163,6 +165,16 @@ fun SettingsScreen(
           onSelect = { viewModel.setThemeMode(mode) }
         )
       }
+    }
+
+    SettingsSection("가족") {
+      SettingsItem(
+        title = "가족 합산 보기",
+        subtitle = "가족의 백업 파일을 불러와 함께 쓴 돈을 봐요 (서버 없음)",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenFamily,
+        modifier = Modifier.testTag("settings_family")
+      )
     }
 
     SettingsSection("데이터") {

@@ -71,10 +71,19 @@ class MigrationTest {
     db.query("SELECT category FROM category_rules").use { c -> c.moveToNext(); assertEquals("카페/간식", c.getString(0)) }
   }
 
+  @Test fun migrate5To6_addsFamilyTables() {
+    helper.createDatabase(DB6, 5).close()
+    val db = helper.runMigrationsAndValidate(DB6, 6, true, com.moneyflow.data.local.MIGRATION_5_6)
+    db.execSQL("INSERT INTO family_members(name,deviceId,backupCreatedAt,importedAt) VALUES('엄마','x',1,2)")
+    db.execSQL("INSERT INTO family_transactions(memberId,type,amount,category,timestamp,memo,isExcludedFromBudget) VALUES(1,'EXPENSE',100,'식비',1,'',0)")
+    db.query("SELECT COUNT(*) FROM family_transactions").use { c -> c.moveToNext(); assertEquals(1, c.getInt(0)) }
+  }
+
   private companion object {
     const val DB = "migration-test"
     const val DB4 = "migration-test-4"
     const val DB24 = "migration-test-24"
     const val DB5 = "migration-test-5"
+    const val DB6 = "migration-test-6"
   }
 }

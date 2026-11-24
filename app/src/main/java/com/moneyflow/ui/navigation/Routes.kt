@@ -25,9 +25,11 @@ object Routes {
   const val AI = "settings/ai"
   const val RELEASE_HISTORY = "settings/release-history"
   const val RULES = "settings/rules"
+  const val FAMILY = "family"
   const val CARD_IMPORT = "card-import"
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"
+  const val FILE_IMPORT = "card-import/file"
   fun cardBrowser(siteId: String) = "card-import/site/$siteId"
 
   fun transaction(id: Long? = null) = if (id == null) "transaction" else "transaction?transactionId=$id"

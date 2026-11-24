@@ -43,6 +43,8 @@ data class AnalyticsUiState(
   val topExpenses: List<TransactionEntity> = emptyList(),
   /** Unfiltered transactions of the month. */
   val monthTransactions: List<TransactionEntity> = emptyList(),
+  /** #tag totals of the month. */
+  val tags: List<com.moneyflow.util.TagSpend> = emptyList(),
   val isLoading: Boolean = true
 )
 
@@ -75,6 +77,7 @@ class AnalyticsViewModel @Inject constructor(
       weeklyProgress = stats.weeklyProgress(monthTxs, month),
       topExpenses = monthTxs.filter { it.type == TransactionType.EXPENSE }.sortedByDescending { it.amount },
       monthTransactions = monthTxs,
+      tags = com.moneyflow.util.Tags.summarize(monthTxs),
       isLoading = false
     )
   }.flowOn(Dispatchers.Default)

@@ -124,6 +124,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
+    val INSTALL_ID = stringPreferencesKey("install_id")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
@@ -285,6 +286,17 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }
   suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
+
+  /** Random id of this installation (tells family backups apart from this phone's own). */
+  suspend fun installId(): String {
+    store.data.first()[Keys.INSTALL_ID]?.let { return it }
+    var id = ""
+    store.edit { p -> id = p[Keys.INSTALL_ID] ?: java.util.UUID.randomUUID().toString().also { p[Keys.INSTALL_ID] = it } }
+    return id
+  }
+
+  /** After restoring this person's backup on a new phone, keep their id so family copies update in place. */
+  suspend fun setInstallId(id: String) = store.edit { it[Keys.INSTALL_ID] = id }
 
   suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }

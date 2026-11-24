@@ -173,14 +173,26 @@ fun MoneyFlowNavHost(
           onOpenAi = { navController.navigate(Routes.AI) },
           onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) },
           onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) },
-          onOpenRules = { navController.navigate(Routes.RULES) }
+          onOpenRules = { navController.navigate(Routes.RULES) },
+          onOpenFamily = { navController.navigate(Routes.FAMILY) }
         )
       }
+      composable(Routes.FAMILY) { com.moneyflow.ui.family.FamilyScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.RULES) { com.moneyflow.ui.settings.RulesScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.AUTO_CAPTURE) { AutoCaptureSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.CARD_IMPORT) {
-        CardImportScreen(onBack = { navController.popBackStack() }, onOpenSite = { navController.navigate(Routes.cardBrowser(it.id)) })
+        CardImportScreen(
+          onBack = { navController.popBackStack() },
+          onOpenSite = { navController.navigate(Routes.cardBrowser(it.id)) },
+          onOpenFile = { navController.navigate(Routes.FILE_IMPORT) }
+        )
+      }
+      composable(Routes.FILE_IMPORT) {
+        com.moneyflow.ui.cardimport.FileImportScreen(
+          onBack = { navController.popBackStack() },
+          onOpenPreview = { navController.navigate(Routes.CARD_PREVIEW) }
+        )
       }
       composable(Routes.CARD_BROWSER, arguments = listOf(navArgument(ARG_SITE_ID) { type = NavType.StringType })) {
         CardBrowserScreen(onClose = { navController.popBackStack() }, onOpenPreview = { navController.navigate(Routes.CARD_PREVIEW) })

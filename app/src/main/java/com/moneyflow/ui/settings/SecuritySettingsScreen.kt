@@ -141,6 +141,16 @@ fun SecuritySettingsScreen(
         onCheckedChange = viewModel::setSecureScreen,
         modifier = Modifier.testTag("security_secure_screen_switch")
       )
+      if (settings.isLockEnabled) {
+        SettingsSwitchItem(
+          title = "잠금 중에도 위젯에 금액 표시",
+          subtitle = "끄면 앱 잠금을 켠 동안 홈 화면 위젯에 금액을 보여 주지 않아요",
+          icon = Icons.Filled.VisibilityOff,
+          checked = settings.widgetShowAmountsWhenLocked,
+          onCheckedChange = viewModel::setWidgetShowAmountsWhenLocked,
+          modifier = Modifier.testTag("security_widget_amounts")
+        )
+      }
     }
 
     if (settings.isLockEnabled) {

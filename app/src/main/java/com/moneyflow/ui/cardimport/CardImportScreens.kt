@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -90,8 +91,17 @@ import org.json.JSONArray
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit) {
+fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenFile: () -> Unit = {}) {
   SettingsScaffold(title = "카드사에서 가져오기", onBack = onBack) {
+    SettingsSection("파일로 가져오기") {
+      SettingsItem(
+        title = "엑셀·CSV 파일에서 가져오기",
+        subtitle = "카드사·은행에서 받은 이용내역 파일로 예전 내역을 한 번에 넣어요",
+        icon = Icons.Filled.UploadFile,
+        onClick = onOpenFile,
+        modifier = Modifier.testTag("card_import_file")
+      )
+    }
     SettingsSection("카드사 선택") {
       CardSites.all.forEach { site ->
         SettingsItem(
@@ -475,7 +485,7 @@ fun CardImportPreviewScreen(
       if (s.rows.isNotEmpty()) {
         item(key = "header") {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("결제 내역 ${s.rows.size}건 · 선택 ${s.selected.size}건", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
+            Text("내역 ${s.rows.size}건 · 선택 ${s.selected.size}건", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
             TextButton(onClick = { viewModel.setAll(s.selected.size != s.rows.size) }) {
               Text(if (s.selected.size == s.rows.size) "모두 해제" else "모두 선택")
             }
@@ -497,6 +507,7 @@ fun CardImportPreviewScreen(
                   item.installmentMonths?.let { add("할부 ${it}개월") }
                   if (row.isDuplicate) add("이미 있음")
                   if (item.isCancel) add("취소 → 원래 결제 삭제")
+                  if (item.isIncome) add("입금")
                 }
                 Text(
                   "${item.date.monthValue}.${item.date.dayOfMonth}${item.time?.let { " $it" } ?: ""} · ${tags.joinToString(" · ")}",
@@ -508,9 +519,9 @@ fun CardImportPreviewScreen(
               }
               Spacer(Modifier.width(8.dp))
               Text(
-                (if (item.isCancel) "+" else "-") + Formatters.formatCurrency(item.amount),
+                (if (item.isCancel || item.isIncome) "+" else "-") + Formatters.formatCurrency(item.amount),
                 fontWeight = FontWeight.Bold,
-                color = if (item.isCancel) TossBlue else AccentRed
+                color = if (item.isCancel || item.isIncome) TossBlue else AccentRed
               )
             }
           }

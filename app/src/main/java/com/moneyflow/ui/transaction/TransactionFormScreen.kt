@@ -110,6 +110,7 @@ fun TransactionFormScreen(
   // The AI suggestion UI appears only when AI is turned on with an API key (Settings → AI 설정).
   val showAi by viewModel.aiReady.collectAsStateWithLifecycle()
   val cardStatuses by viewModel.cardStatuses.collectAsStateWithLifecycle()
+  val recentTags by viewModel.recentTags.collectAsStateWithLifecycle()
   val isEditMode = viewModel.isEditMode
   val zone = remember { ZoneId.systemDefault() }
 
@@ -406,6 +407,10 @@ fun TransactionFormScreen(
                 }
               }
             )
+            if (recentTags.isNotEmpty() && type != TransactionType.TRANSFER) {
+              Spacer(Modifier.height(6.dp))
+              TagChips(tags = recentTags, memo = memo, onToggle = { tag -> memo = com.moneyflow.util.Tags.append(memo, tag) })
+            }
             if (showAi) {
               Spacer(Modifier.height(6.dp))
               AiExampleChips { sample ->

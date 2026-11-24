@@ -53,6 +53,23 @@ class CardImportRepositoryTest {
   private fun item(day: Int, merchant: String, amount: Long, cancel: Boolean = false) =
     StatementItem(LocalDate.of(2026, 11, day), LocalTime.of(10, 0), merchant, amount, cancel)
 
+  @Test fun bankFileDepositsBecomeIncomeAndBankProviderPrefersBankAccount() = runBlocking {
+    val bankAcc = ledger.getAccounts().first { it.accountType == com.moneyflow.data.model.AccountType.BANK }
+    assertEquals(bankAcc.id, repo.suggestAccount("토스뱅크", ledger.getAccounts())!!.id)
+    val rows = repo.review(listOf(
+      StatementItem(LocalDate.of(2026, 11, 21), null, "(주)머니회사 급여", 3_000_000, isIncome = true),
+      StatementItem(LocalDate.of(2026, 11, 21), null, "관리비", 150_000)
+    ), bankAcc.id)
+    assertEquals(com.moneyflow.data.model.FinanceCategories.SALARY, rows[0].category)
+    repo.import(rows, bankAcc)
+    val txs = db.transactionDao().observeAll().first()
+    assertEquals(TransactionType.INCOME, txs.first { it.amount == 3_000_000L }.type)
+    assertEquals(TransactionType.EXPENSE, txs.first { it.amount == 150_000L }.type)
+    assertEquals(1_000_000 + 3_000_000 - 150_000L, db.accountDao().getById(bankAcc.id)!!.balance)
+    // Importing the same file again marks both as already there.
+    assertTrue(repo.review(rows.map { it.item }, bankAcc.id).all { it.isDuplicate })
+  }
+
   @Test fun suggestsMatchingCardAccount() = runBlocking {
     assertEquals(cardId, repo.suggestAccount("현대카드", ledger.getAccounts())!!.id)
   }

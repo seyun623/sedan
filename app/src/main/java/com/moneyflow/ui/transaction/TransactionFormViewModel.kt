@@ -77,6 +77,10 @@ class TransactionFormViewModel @Inject constructor(
   val aiReady: StateFlow<Boolean> = settings.settings.map { it.isAiReady }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+  /** Recently used #tags (quick chips under the memo). */
+  val recentTags: StateFlow<List<String>> = ledger.transactions.map { com.moneyflow.util.Tags.recent(it) }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
   /** Card statuses used for "이 결제는 ○○카드가 유리해요". */
   val cardStatuses: StateFlow<List<com.moneyflow.domain.card.CardStatus>> =
     cards.statuses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

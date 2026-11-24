@@ -97,6 +97,7 @@ private fun AnalyticsContent(
 ) {
   val monthKey = state.month.toString()
   var selectedCategory by rememberSaveable(monthKey) { mutableStateOf<String?>(null) }
+  var selectedTag by rememberSaveable(monthKey) { mutableStateOf<String?>(null) }
   // Clear the selection when that category no longer has spending (deleted / edited away).
   LaunchedEffect(state.categoryBreakdown) {
     if (selectedCategory != null && state.categoryBreakdown.none { it.category == selectedCategory }) selectedCategory = null
@@ -239,6 +240,27 @@ private fun AnalyticsContent(
             SectionTitle("주차별 지출", "${state.monthLabel} 주마다 얼마나 썼는지 보여드려요")
             Spacer(Modifier.height(16.dp))
             WeeklyProgressList(weeks = state.weeklyProgress)
+          }
+        }
+      }
+
+      if (state.tags.isNotEmpty()) {
+        item(key = "tags") {
+          TagCard(
+            tags = state.tags,
+            periodLabel = periodLabel,
+            selected = selectedTag,
+            onSelect = { selectedTag = if (selectedTag == it) null else it }
+          )
+        }
+        state.tags.firstOrNull { it.tag == selectedTag }?.let { t ->
+          items(t.transactions, key = { "tag_${it.id}" }) { tx ->
+            TransactionRow(
+              transaction = tx,
+              onClick = { onOpenTransaction(tx.id) },
+              showDate = true,
+              modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(CardSurface)
+            )
           }
         }
       }
@@ -608,4 +630,27 @@ private fun SectionCard(modifier: Modifier = Modifier, content: @Composable Colu
       .padding(20.dp),
     content = content
   )
+}
+
+/** "#여행 3건 · 320,000원" rows; tapping one lists its transactions below. */
+@Composable
+private fun TagCard(tags: List<com.moneyflow.util.TagSpend>, periodLabel: String, selected: String?, onSelect: (String) -> Unit) {
+  SectionCard(modifier = Modifier.testTag("tag_card")) {
+    Text("$periodLabel 태그별", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Gray900)
+    Text("메모에 #여행 처럼 붙인 태그로 모아 봐요", style = MaterialTheme.typography.bodySmall, color = Gray600)
+    Spacer(Modifier.height(8.dp))
+    tags.take(10).forEach { t ->
+      Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+          .background(if (selected == t.tag) Gray100 else androidx.compose.ui.graphics.Color.Transparent)
+          .clickable { onSelect(t.tag) }
+          .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("#${t.tag}", fontWeight = FontWeight.SemiBold, color = TossBlue, modifier = Modifier.weight(1f))
+        Text("${t.transactions.size}건 · ", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        Text(Formatters.formatCurrency(t.expense), fontWeight = FontWeight.Bold, color = Gray900)
+      }
+    }
+  }
 }

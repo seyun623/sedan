@@ -38,6 +38,8 @@ data class BackupSummary(
 /** A decrypted, parsed and validated backup ready to restore. */
 class BackupContent internal constructor(
   val summary: BackupSummary,
+  /** Install id of the phone that made the backup ("" for backups before 2.0). */
+  val deviceId: String = "",
   internal val accounts: List<AccountEntity>,
   internal val transactions: List<TransactionEntity>,
   internal val budgets: List<BudgetEntity>,
@@ -67,8 +69,10 @@ class BackupRepository @Inject constructor(
 
   /** Creates the encrypted backup file contents. */
   suspend fun createBackup(password: CharArray, appVersion: String): ByteArray {
+    val deviceId = settings.installId()
     val json = db.withTransaction {
       JSONObject()
+        .put("deviceId", deviceId)
         .put("format", FORMAT)
         .put("formatVersion", FORMAT_VERSION)
         .put("dbVersion", AppDatabase.VERSION)
@@ -158,6 +162,7 @@ class BackupRepository @Inject constructor(
           goalCount = goals.size,
           recurringCount = recurring.size
         ),
+        deviceId = root.optString("deviceId"),
         accounts = accounts,
         transactions = transactions,
         budgets = budgets,
@@ -197,6 +202,8 @@ class BackupRepository @Inject constructor(
       db.cardDao().insertBenefits(content.cardBenefits)
       db.ruleDao().insertAll(content.categoryRules)
     }
+    // The same person on a new phone: family members' copies of this person keep updating in place.
+    if (content.deviceId.isNotEmpty()) settings.setInstallId(content.deviceId)
     // The default auto-capture account may not exist in the restored data.
     val defaultId = settings.current().autoCaptureDefaultAccountId
     if (defaultId != null && content.accounts.none { it.id == defaultId }) settings.setDefaultCaptureAccount(null)

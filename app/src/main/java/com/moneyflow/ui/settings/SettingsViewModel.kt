@@ -82,6 +82,7 @@ class SettingsViewModel @Inject constructor(
 
   fun setBiometricEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBiometricEnabled(enabled) }
   fun setLockTimeout(seconds: Int) = viewModelScope.launch { settingsRepo.setLockTimeout(seconds) }
+  fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = viewModelScope.launch { settingsRepo.setWidgetShowAmountsWhenLocked(enabled) }
   fun setSecureScreen(enabled: Boolean) = viewModelScope.launch { settingsRepo.setSecureScreen(enabled) }
   fun lockNow() = lock.lockNow()
 

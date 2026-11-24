@@ -10,7 +10,9 @@ data class StatementItem(
   val merchant: String,
   val amount: Long,
   val isCancel: Boolean = false,
-  val installmentMonths: Int? = null
+  val installmentMonths: Int? = null,
+  /** A deposit (bank statement files); recorded as income. */
+  val isIncome: Boolean = false
 )
 
 /** A spending-goal ("실적") figure shown on the card company's screen. */

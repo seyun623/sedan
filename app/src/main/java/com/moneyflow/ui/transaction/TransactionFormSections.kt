@@ -505,3 +505,15 @@ internal fun InstallmentChips(months: Int, amount: Long, onSelect: (Int) -> Unit
     )
   }
 }
+
+/** Recently used #tags: tapping adds the tag to the memo. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun TagChips(tags: List<String>, memo: String, onToggle: (String) -> Unit) {
+  val used = com.moneyflow.util.Tags.extract(memo).toSet()
+  FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("tag_chips")) {
+    tags.forEach { t ->
+      androidx.compose.material3.FilterChip(selected = t in used, onClick = { onToggle(t) }, label = { Text("#$t") })
+    }
+  }
+}

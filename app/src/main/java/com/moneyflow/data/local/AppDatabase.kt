@@ -22,7 +22,9 @@ import com.moneyflow.data.model.TransactionEntity
     RecurringTransactionEntity::class,
     CardProfileEntity::class,
     CardBenefitEntity::class,
-    com.moneyflow.data.model.CategoryRuleEntity::class
+    com.moneyflow.data.model.CategoryRuleEntity::class,
+    com.moneyflow.data.model.FamilyMemberEntity::class,
+    com.moneyflow.data.model.FamilyTransactionEntity::class
   ],
   version = AppDatabase.VERSION,
   exportSchema = true
@@ -37,9 +39,10 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun backupDao(): BackupDao
   abstract fun cardDao(): CardDao
   abstract fun ruleDao(): RuleDao
+  abstract fun familyDao(): FamilyDao
 
   companion object {
-    const val VERSION = 5
+    const val VERSION = 6
     const val NAME = "moneyflow_finance.db"
   }
 }

@@ -53,6 +53,17 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+        <receiver
+            android:name=".widget.SpendingWidgetProvider"
+            android:exported="true"
+            android:label="머니플로우 지출">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_spending_info" />
+        </receiver>
     </application>
 
 </manifest>

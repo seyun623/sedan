@@ -99,3 +99,22 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_category_rules_keyword` ON `category_rules` (`keyword`)")
   }
 }
+
+/** v5 -> v6: family members' records loaded from their backup files (combined view). */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `family_members` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, " +
+        "`deviceId` TEXT NOT NULL, `backupCreatedAt` INTEGER NOT NULL, `importedAt` INTEGER NOT NULL)"
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_family_members_deviceId` ON `family_members` (`deviceId`)")
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `family_transactions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `memberId` INTEGER NOT NULL, " +
+        "`type` TEXT NOT NULL, `amount` INTEGER NOT NULL, `category` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `memo` TEXT NOT NULL, " +
+        "`isExcludedFromBudget` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`memberId`) REFERENCES `family_members`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_family_transactions_memberId` ON `family_transactions` (`memberId`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_family_transactions_timestamp` ON `family_transactions` (`timestamp`)")
+  }
+}

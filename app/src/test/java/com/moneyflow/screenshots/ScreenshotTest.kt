@@ -204,4 +204,20 @@ class ScreenshotTest {
     val vm = com.moneyflow.ui.settings.RulesViewModel(com.moneyflow.data.repository.RuleRepository(db), bus)
     shot("19_rules", false) { com.moneyflow.ui.settings.RulesScreen({}, viewModel = vm) }
   }
+  @Test fun family() {
+    val other = com.moneyflow.testing.inMemoryDb()
+    val otherSettings = com.moneyflow.testing.testSettingsRepository()
+    val repo = com.moneyflow.data.repository.FamilyRepository(db, com.moneyflow.data.repository.BackupRepository(db, settings, clock), settings, clock)
+    runBlocking {
+      val l = LedgerRepository(other, clock)
+      val a = l.addAccount(com.moneyflow.testing.bank("아내 통장"))
+      l.addTransaction(com.moneyflow.data.model.TransactionEntity(type = com.moneyflow.data.model.TransactionType.EXPENSE, amount = 84_000, category = "생활/마트", accountId = a, timestamp = clock.nowMillis(), memo = "장보기"))
+      l.addTransaction(com.moneyflow.data.model.TransactionEntity(type = com.moneyflow.data.model.TransactionType.INCOME, amount = 2_500_000, category = "급여", accountId = a, timestamp = clock.nowMillis(), memo = "급여"))
+      val file = com.moneyflow.data.repository.BackupRepository(other, otherSettings, clock).createBackup("1234".toCharArray(), "2.0.0")
+      repo.import(file, "1234".toCharArray(), "아내")
+    }
+    val vm = com.moneyflow.ui.family.FamilyViewModel(androidx.test.core.app.ApplicationProvider.getApplicationContext(), repo, bus, clock)
+    shot("20_family", false) { com.moneyflow.ui.family.FamilyScreen({}, viewModel = vm) }
+    other.close()
+  }
 }
