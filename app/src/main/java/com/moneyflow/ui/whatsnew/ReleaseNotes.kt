@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.3.0", "2026.11",
+      listOf(
+        "가족 합산 → 함께 모으는 목표: 가족이 각자 같은 이름의 저축 목표(예: 가족 여행)를 만들면 함께 모은 금액과 사람별 금액을 보여 줘요",
+        "암호화 저장, 잠금 화면 등을 실제 안드로이드 환경에서 자동으로 확인하도록 테스트를 늘렸어요"
+      )
+    ),
+    ReleaseNote(
       "2.2.0", "2026.11",
       listOf(
         "예산·목표 탭: 매달 직접 입력하는 비슷한 거래(구독료, 월급 등)를 찾아 '고정 거래로 등록'을 제안해요",

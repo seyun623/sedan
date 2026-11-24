@@ -16,7 +16,7 @@ android {
     targetSdk = 36
     // Overridable from CI: ./gradlew bundleRelease -PversionCode=12 -PversionName=1.2.0
     versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
-    versionName = (project.findProperty("versionName") as String?) ?: "2.2.0"
+    versionName = (project.findProperty("versionName") as String?) ?: "2.3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
