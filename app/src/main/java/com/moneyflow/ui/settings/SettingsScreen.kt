@@ -65,6 +65,53 @@ fun SettingsScreen(
       )
     }
 
+    SettingsSection("화면") {
+      SettingsSwitchItem(
+        title = "간단 모드",
+        subtitle = "글씨를 크게 하고, 첫 화면을 이번 달 쓴 돈과 큰 기록 버튼만으로 보여 줘요 (부모님용)",
+        icon = Icons.Filled.Info,
+        checked = settings.simpleMode,
+        onCheckedChange = viewModel::setSimpleMode,
+        modifier = Modifier.testTag("settings_simple_mode")
+      )
+      ThemeMode.entries.forEach { mode ->
+        SettingsRadioItem(
+          title = when (mode) {
+            ThemeMode.SYSTEM -> "시스템 설정 따르기"
+            ThemeMode.LIGHT -> "라이트"
+            ThemeMode.DARK -> "다크"
+          },
+          selected = settings.themeMode == mode,
+          onSelect = { viewModel.setThemeMode(mode) }
+        )
+      }
+    }
+
+    SettingsSection("백업·가족") {
+      val lastBackup = state.settings.lastBackupAt
+      SettingsItem(
+        title = "백업 및 복원",
+        subtitle = if (lastBackup > 0) "마지막 백업 ${Formatters.formatFullDate(lastBackup)}" else "아직 백업한 적이 없어요",
+        icon = Icons.Filled.Backup,
+        onClick = onOpenBackup,
+        modifier = Modifier.testTag("settings_backup")
+      )
+      SettingsItem(
+        title = "가족 가계부 보기",
+        subtitle = "가족이 함께 쓴 돈과 예산, 함께 모으는 목표를 봐요",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenFamily,
+        modifier = Modifier.testTag("settings_family")
+      )
+      SettingsItem(
+        title = "가족 자동 합산 설정 (구글 드라이브)",
+        subtitle = "처음 한 번만: 연결 파일 불러오기, 내 이름·가족 비밀번호 정하기",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenDrive,
+        modifier = Modifier.testTag("settings_drive")
+      )
+    }
+
     if (com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE) SettingsSection("결제 알림 자동 등록") {
       val on = listOfNotNull(
         "알림".takeIf { settings.notificationCaptureEnabled },
@@ -160,60 +207,7 @@ fun SettingsScreen(
       )
     }
 
-    SettingsSection("AI") {
-      SettingsItem(
-        title = "AI 카테고리 추천",
-        subtitle = when {
-          settings.isAiReady -> "사용 중 · ${settings.aiModel}"
-          settings.hasAiKey -> "API 키 등록됨 · 꺼져 있어요"
-          else -> "내 Gemini API 키를 등록해서 사용해요"
-        },
-        icon = Icons.Filled.AutoAwesome,
-        onClick = onOpenAi,
-        modifier = Modifier.testTag("settings_ai")
-      )
-    }
-
-    SettingsSection("화면") {
-      SettingsSwitchItem(
-        title = "간단 모드",
-        subtitle = "글씨를 크게 하고, 첫 화면을 이번 달 쓴 돈과 큰 기록 버튼만으로 보여 줘요 (부모님용)",
-        icon = Icons.Filled.Info,
-        checked = settings.simpleMode,
-        onCheckedChange = viewModel::setSimpleMode,
-        modifier = Modifier.testTag("settings_simple_mode")
-      )
-      ThemeMode.entries.forEach { mode ->
-        SettingsRadioItem(
-          title = when (mode) {
-            ThemeMode.SYSTEM -> "시스템 설정 따르기"
-            ThemeMode.LIGHT -> "라이트"
-            ThemeMode.DARK -> "다크"
-          },
-          selected = settings.themeMode == mode,
-          onSelect = { viewModel.setThemeMode(mode) }
-        )
-      }
-    }
-
-    SettingsSection("가족") {
-      SettingsItem(
-        title = "가족 가계부 보기",
-        subtitle = "가족이 함께 쓴 돈과 예산, 함께 모으는 목표를 봐요",
-        icon = Icons.Filled.FamilyRestroom,
-        onClick = onOpenFamily,
-        modifier = Modifier.testTag("settings_family")
-      )
-      SettingsItem(
-        title = "가족 자동 합산 설정 (구글 드라이브)",
-        subtitle = "처음 한 번만: 연결 파일 불러오기, 내 이름·가족 비밀번호 정하기",
-        icon = Icons.Filled.FamilyRestroom,
-        onClick = onOpenDrive,
-        modifier = Modifier.testTag("settings_drive")
-      )
-    }
-
-    SettingsSection("데이터") {
+    SettingsSection("기록 도구") {
       SettingsItem(
         title = "카드사에서 가져오기",
         subtitle = "카드사 홈페이지에 로그인해 이용내역·실적을 불러와요",
@@ -242,14 +236,6 @@ fun SettingsScreen(
         checked = settings.splitInstallments,
         onCheckedChange = viewModel::setSplitInstallments,
         modifier = Modifier.testTag("settings_split_installments")
-      )
-      val lastBackup = state.settings.lastBackupAt
-      SettingsItem(
-        title = "백업 및 복원",
-        subtitle = if (lastBackup > 0) "마지막 백업 ${Formatters.formatFullDate(lastBackup)}" else "아직 백업한 적이 없어요",
-        icon = Icons.Filled.Backup,
-        onClick = onOpenBackup,
-        modifier = Modifier.testTag("settings_backup")
       )
       SettingsItem(
         title = "전체 거래 CSV 내보내기",
@@ -280,6 +266,20 @@ fun SettingsScreen(
           modifier = Modifier.testTag("settings_load_sample")
         )
       }
+    }
+
+    SettingsSection("AI") {
+      SettingsItem(
+        title = "AI 카테고리 추천",
+        subtitle = when {
+          settings.isAiReady -> "사용 중 · ${settings.aiModel}"
+          settings.hasAiKey -> "API 키 등록됨 · 꺼져 있어요"
+          else -> "내 Gemini API 키를 등록해서 사용해요"
+        },
+        icon = Icons.Filled.AutoAwesome,
+        onClick = onOpenAi,
+        modifier = Modifier.testTag("settings_ai")
+      )
     }
 
     SettingsSection("앱 정보") {

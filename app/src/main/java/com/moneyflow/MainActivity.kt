@@ -48,7 +48,8 @@ class MainActivity : FragmentActivity() {
           s.isLockEnabled && locked -> LockScreen(
             settings = s,
             onVerifyPin = appViewModel::verifyPin,
-            onBiometricSuccess = appViewModel::unlockWithBiometric
+            onBiometricSuccess = appViewModel::unlockWithBiometric,
+            onRecover = appViewModel::recover
           )
           else -> {
             contentState.SaveableStateProvider("app-content") {

@@ -671,13 +671,14 @@ fun CardImportPreviewScreen(
                   add(row.category)
                   item.installmentMonths?.let { add("할부 ${it}개월") }
                   if (row.isDuplicate) add("이미 있음")
+                  if (row.cancelledInStatement) add("같은 명세서에서 취소됨")
                   if (item.isCancel) add("취소 → 원래 결제 삭제")
                   if (item.isIncome) add("입금")
                 }
                 Text(
                   "${item.date.monthValue}.${item.date.dayOfMonth}${item.time?.let { " $it" } ?: ""} · ${tags.joinToString(" · ")}",
                   style = MaterialTheme.typography.bodySmall,
-                  color = if (row.isDuplicate || item.isCancel) AccentOrange else Gray600,
+                  color = if (row.isDuplicate || item.isCancel || row.cancelledInStatement) AccentOrange else Gray600,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis
                 )

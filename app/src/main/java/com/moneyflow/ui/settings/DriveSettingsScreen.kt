@@ -263,6 +263,16 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         settings.familySyncError?.let {
           Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = AccentRed, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
+        var showFamilyPassword by rememberSaveable { mutableStateOf(false) }
+        SettingsItem(
+          title = "가족 비밀번호 보기",
+          subtitle = "새 가족 폰을 연결할 때 필요해요 (앱 잠금 PIN 확인)",
+          icon = Icons.Filled.Key,
+          showChevron = false,
+          onClick = { showFamilyPassword = true },
+          modifier = Modifier.testTag("family_show_password")
+        )
+        if (showFamilyPassword) SavedPasswordDialog(SavedPassword.FAMILY, settings.isLockEnabled, onDismiss = { showFamilyPassword = false })
         SettingsItem(
           title = "지금 합산하기",
           subtitle = "내 기록을 올리고 가족 기록을 받아요 (평소에는 자동)",

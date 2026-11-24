@@ -89,6 +89,33 @@ class AutoBackupRepository @Inject constructor(
     settings.setAutoBackupResult(clock.nowMillis(), null)
   }
 
+  private fun safetyFile() = java.io.File(java.io.File(context.filesDir, "backups").apply { mkdirs() }, "before-restore.${BackupRepository.FILE_EXTENSION}")
+
+  /**
+   * Keeps the current records in a private file just before a restore, so "복원 전으로 되돌리기"
+   * can bring them back if the wrong file was restored. Encrypted with a random password kept
+   * in the phone's secure storage.
+   */
+  suspend fun saveBeforeRestore() {
+    val password = java.util.UUID.randomUUID().toString() + java.util.UUID.randomUUID().toString()
+    val bytes = backups.createBackup(password.toCharArray(), BuildConfig.VERSION_NAME, recordAsBackup = false)
+    withContext(Dispatchers.IO) { safetyFile().writeBytes(bytes) }
+    settings.setPreRestore(clock.nowMillis(), secrets.encrypt(password))
+  }
+
+  /** The records as they were before the last restore. */
+  suspend fun readBeforeRestore(): BackupContent {
+    val enc = settings.current().preRestorePasswordEncrypted ?: throw IllegalStateException("되돌릴 기록이 없어요.")
+    val password = secrets.decrypt(enc) ?: throw IllegalStateException("되돌릴 기록을 열 수 없어요.")
+    val bytes = withContext(Dispatchers.IO) { safetyFile().takeIf { it.exists() }?.readBytes() } ?: throw IllegalStateException("되돌릴 기록이 없어요.")
+    return backups.readBackup(bytes, password.toCharArray())
+  }
+
+  suspend fun clearBeforeRestore() {
+    withContext(Dispatchers.IO) { safetyFile().delete() }
+    settings.setPreRestore(0, null)
+  }
+
   suspend fun disable() {
     val folder = settings.current().autoBackupFolder
     settings.clearAutoBackup()

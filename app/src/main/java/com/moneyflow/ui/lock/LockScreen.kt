@@ -72,7 +72,8 @@ private const val MIN_PIN = 4
 fun LockScreen(
   settings: AppSettings,
   onVerifyPin: (String, (PinCheckResult) -> Unit) -> Unit,
-  onBiometricSuccess: () -> Unit
+  onBiometricSuccess: () -> Unit,
+  onRecover: (String, (PinCheckResult) -> Unit) -> Unit = { _, _ -> }
 ) {
   val context = LocalContext.current
   val activity = context as? FragmentActivity
@@ -251,7 +252,9 @@ fun LockScreen(
       TextButton(onClick = { forgotHelp = true }, modifier = Modifier.testTag("lock_forgot_pin")) {
         Text("PIN을 잊었어요", color = Gray600)
       }
-      if (forgotHelp) {
+      if (forgotHelp && settings.hasRecoveryCode) {
+        RecoveryCodeDialog(onDismiss = { forgotHelp = false }, onRecover = onRecover)
+      } else if (forgotHelp) {
         androidx.compose.material3.AlertDialog(
           onDismissRequest = { forgotHelp = false },
           title = { Text("PIN을 잊었을 때", fontWeight = FontWeight.Bold) },
@@ -268,4 +271,55 @@ fun LockScreen(
       }
     }
   }
+}
+
+/** Unlock with the recovery code made when the PIN was set; the PIN is then turned off. */
+@Composable
+private fun RecoveryCodeDialog(onDismiss: () -> Unit, onRecover: (String, (PinCheckResult) -> Unit) -> Unit) {
+  var code by remember { mutableStateOf("") }
+  var error by remember { mutableStateOf<String?>(null) }
+  var busy by remember { mutableStateOf(false) }
+  androidx.compose.material3.AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("복구 코드로 열기", fontWeight = FontWeight.Bold) },
+    text = {
+      Column {
+        Text(
+          "앱 잠금을 켤 때 적어 둔 복구 코드(예: ABCD-EFGH-JKLM-NPQR)를 입력해 주세요. 맞으면 앱이 열리고 PIN은 꺼져요. 설정 → 보안에서 새 PIN을 정해 주세요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
+        androidx.compose.material3.OutlinedTextField(
+          value = code,
+          onValueChange = { code = it.uppercase().take(19); error = null },
+          label = { Text("복구 코드") },
+          singleLine = true,
+          isError = error != null,
+          supportingText = error?.let { { Text(it) } },
+          keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters,
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
+          ),
+          modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("lock_recovery_code")
+        )
+      }
+    },
+    confirmButton = {
+      TextButton(
+        enabled = !busy && code.count { it.isLetterOrDigit() } == 16,
+        onClick = {
+          busy = true
+          onRecover(code) { r ->
+            busy = false
+            when (r) {
+              PinCheckResult.Success -> onDismiss()
+              is PinCheckResult.Wrong -> error = "복구 코드가 맞지 않아요."
+              is PinCheckResult.LockedOut -> error = "입력 시도가 너무 많아요. 잠시 후 다시 시도해 주세요."
+            }
+          }
+        },
+        modifier = Modifier.testTag("lock_recovery_submit")
+      ) { Text("열기", fontWeight = FontWeight.Bold) }
+    },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+  )
 }

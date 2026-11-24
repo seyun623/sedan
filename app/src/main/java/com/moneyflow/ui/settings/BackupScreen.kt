@@ -185,6 +185,16 @@ fun BackupScreen(
         listOf(1 to "매일", 7 to "매주").forEach { (days, label) ->
           SettingsRadioItem(title = "$label 백업", selected = auto.intervalDays == days, onSelect = { viewModel.setAutoBackupInterval(days) })
         }
+        var showPassword by rememberSaveable { mutableStateOf(false) }
+        SettingsItem(
+          title = "자동 백업 비밀번호 보기",
+          subtitle = "잊었을 때: 앱 잠금 PIN을 넣으면 보여 드려요",
+          icon = Icons.Filled.Backup,
+          showChevron = false,
+          onClick = { showPassword = true },
+          modifier = Modifier.testTag("auto_backup_show_password")
+        )
+        if (showPassword) SavedPasswordDialog(SavedPassword.AUTO_BACKUP, auto.lockEnabled, onDismiss = { showPassword = false })
         SettingsItem(
           title = "지금 자동 백업",
           subtitle = if (auto.toDrive) "드라이브 백업 파일을 바로 덮어써요" else "자동 백업 폴더에 바로 저장해요",
@@ -206,6 +216,28 @@ fun BackupScreen(
         onClick = { openDocument.launch(arrayOf("*/*")) },
         modifier = Modifier.testTag("backup_restore")
       )
+      val preRestoreAt by viewModel.preRestoreAt.collectAsStateWithLifecycle()
+      var confirmUndo by rememberSaveable { mutableStateOf(false) }
+      if (preRestoreAt > 0) {
+        SettingsItem(
+          title = "복원 전으로 되돌리기",
+          subtitle = "${Formatters.formatDateTime(preRestoreAt)}에 복원하기 직전 기록으로 돌아가요",
+          icon = Icons.Filled.Restore,
+          enabled = !busy,
+          showChevron = false,
+          onClick = { confirmUndo = true },
+          modifier = Modifier.testTag("backup_undo_restore")
+        )
+      }
+      if (confirmUndo) {
+        ConfirmDialog(
+          title = "복원 전으로 되돌릴까요?",
+          message = "지금 기록이 복원하기 직전의 기록으로 바뀌어요. 복원한 뒤에 적은 내역은 사라져요.",
+          confirmLabel = "되돌리기",
+          onConfirm = { confirmUndo = false; viewModel.undoRestore() },
+          onDismiss = { confirmUndo = false }
+        )
+      }
     }
 
     SettingsSection("알아 두세요") {

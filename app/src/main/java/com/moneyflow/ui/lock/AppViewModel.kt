@@ -57,4 +57,8 @@ class AppViewModel @Inject constructor(
   }
 
   fun unlockWithBiometric() = lock.unlockWithBiometric()
+
+  fun recover(code: String, onResult: (PinCheckResult) -> Unit) = viewModelScope.launch {
+    onResult(lock.recoverWithCode(code))
+  }
 }

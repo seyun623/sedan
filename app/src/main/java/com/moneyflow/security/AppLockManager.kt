@@ -103,10 +103,37 @@ class AppLockManager @Inject constructor(
    */
   suspend fun checkPin(pin: String): PinCheckResult = checkWithRateLimit(pin)
 
-  private suspend fun checkWithRateLimit(pin: String): PinCheckResult {
+  /**
+   * Makes a new recovery code for a forgotten PIN ("ABCD-EFGH-JKLM-NPQR"). Only its hash is
+   * stored; the code is shown once for the user to write down.
+   */
+  suspend fun createRecoveryCode(): String {
+    val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    val random = java.security.SecureRandom()
+    val raw = (1..16).map { alphabet[random.nextInt(alphabet.length)] }.joinToString("")
+    val hashed = withContext(Dispatchers.Default) { PinHasher.hash(normalizeCode(raw)) }
+    settings.setRecoveryCode(hashed.hash, hashed.salt)
+    return raw.chunked(4).joinToString("-")
+  }
+
+  /**
+   * Unlocks with the recovery code and turns the PIN off (the user sets a new one in Settings).
+   * Wrong codes count as wrong PIN attempts.
+   */
+  suspend fun recoverWithCode(code: String): PinCheckResult {
     val s = settings.current()
-    val hash = s.pinHash
-    val salt = s.pinSalt
+    if (s.recoveryHash == null || s.recoverySalt == null) return PinCheckResult.Wrong(0)
+    val result = checkWithRateLimit(normalizeCode(code), s.recoveryHash, s.recoverySalt)
+    if (result == PinCheckResult.Success) disableLock()
+    return result
+  }
+
+  private fun normalizeCode(code: String) = code.uppercase().filter { it.isLetterOrDigit() }
+
+  private suspend fun checkWithRateLimit(pin: String, expectedHash: String? = null, expectedSalt: String? = null): PinCheckResult {
+    val s = settings.current()
+    val hash = expectedHash ?: s.pinHash
+    val salt = expectedSalt ?: s.pinSalt
     if (hash == null || salt == null) return PinCheckResult.Success
 
     val now = clock.nowMillis()

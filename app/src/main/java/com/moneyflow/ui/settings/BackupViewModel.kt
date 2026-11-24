@@ -35,6 +35,7 @@ data class AutoBackupUi(
   val driveReady: Boolean = false,
   val driveFolderName: String? = null,
   val driveFileName: String = "moneyflow-backup.mfbackup",
+  val lockEnabled: Boolean = false,
   val folderName: String? = null,
   val intervalDays: Int = 7,
   val lastAt: Long = 0L,
@@ -65,6 +66,7 @@ class BackupViewModel @Inject constructor(
       toDrive = s.autoBackupFolder?.let(com.moneyflow.data.repository.AutoBackupRepository::isDrive) == true,
       driveReady = s.driveKeyEncrypted != null && s.driveFolderId != null,
       driveFolderName = s.driveFolderName,
+      lockEnabled = s.isLockEnabled,
       driveFileName = com.moneyflow.data.repository.AutoBackupRepository.driveFileNameFor(s.familySyncName ?: "나", settings.installId()),
       folderName = s.autoBackupFolder?.let {
         if (com.moneyflow.data.repository.AutoBackupRepository.isDrive(it)) "구글 드라이브 '${s.driveFolderName ?: "공유 폴더"}'의 ${it.removePrefix(com.moneyflow.data.repository.AutoBackupRepository.DRIVE_PREFIX)}"
@@ -169,11 +171,26 @@ class BackupViewModel @Inject constructor(
 
   fun confirmRestore() = run {
     val content = _pendingRestore.value ?: return@run
+    // A safety copy first, so a wrong file can be undone.
+    autoBackup.saveBeforeRestore()
     backups.restore(content)
     _pendingRestore.value = null
     // Record any fixed transactions that came due since the backup was made.
     recurring.applyDue()
     messages.show("백업에서 복원했어요.")
+    _events.send(BackupEvent.Restored)
+  }
+
+  val preRestoreAt: StateFlow<Long> = settingsRepo.settings.map { it.preRestoreAt }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+  /** Puts back the records from just before the last restore. */
+  fun undoRestore() = run {
+    val content = autoBackup.readBeforeRestore()
+    backups.restore(content)
+    autoBackup.clearBeforeRestore()
+    recurring.applyDue()
+    messages.show("복원하기 전 기록으로 되돌렸어요.")
     _events.send(BackupEvent.Restored)
   }
 

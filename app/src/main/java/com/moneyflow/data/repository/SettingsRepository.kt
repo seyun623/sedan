@@ -34,6 +34,10 @@ data class AppSettings(
   /** Lockout end on the monotonic clock, valid only within boot [pinLockBoot]. */
   val pinLockedUntilElapsed: Long = 0L,
   val pinLockBoot: String = "",
+  /** A recovery code was made for the PIN (only its hash is kept). */
+  val hasRecoveryCode: Boolean = false,
+  val recoveryHash: String? = null,
+  val recoverySalt: String? = null,
   val secureScreen: Boolean = true,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   val notificationCaptureEnabled: Boolean = false,
@@ -85,6 +89,9 @@ data class AppSettings(
   /** Family monthly budget for the combined view (0 = not set). */
   val familyBudget: Long = 0L,
   val billRemindersEnabled: Boolean = true,
+  /** When the safety copy made just before the last restore was taken (0 = none). */
+  val preRestoreAt: Long = 0L,
+  val preRestorePasswordEncrypted: String? = null,
   /** 간단 모드: big letters, one home screen with big buttons. */
   val simpleMode: Boolean = false,
   val ledgerSavedFilters: String? = null,
@@ -134,6 +141,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val LAST_FAILURE = longPreferencesKey("pin_last_failure_at")
     val LOCKED_UNTIL_ELAPSED = longPreferencesKey("pin_locked_until_elapsed")
     val LOCK_BOOT = stringPreferencesKey("pin_lock_boot_id")
+    val RECOVERY_HASH = stringPreferencesKey("pin_recovery_hash")
+    val RECOVERY_SALT = stringPreferencesKey("pin_recovery_salt")
     val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
     val THEME = stringPreferencesKey("theme_mode")
     val NOTI_CAPTURE = booleanPreferencesKey("notification_capture")
@@ -170,6 +179,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val DRIVE_FOLDER_NAME = stringPreferencesKey("drive_folder_name")
     val DRIVE_TEST_FILE = stringPreferencesKey("drive_test_file_name")
     val BILL_REMINDERS = booleanPreferencesKey("bill_reminders")
+    val PRE_RESTORE_AT = longPreferencesKey("pre_restore_at")
+    val PRE_RESTORE_PW = stringPreferencesKey("pre_restore_password_enc")
     val SIMPLE_MODE = booleanPreferencesKey("simple_mode")
     val LEDGER_FILTERS = stringPreferencesKey("ledger_saved_filters_json")
     val CLEANUP_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("cleanup_dismissed")
@@ -203,6 +214,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       pinLastFailureAt = p[Keys.LAST_FAILURE] ?: 0L,
       pinLockedUntilElapsed = p[Keys.LOCKED_UNTIL_ELAPSED] ?: 0L,
       pinLockBoot = p[Keys.LOCK_BOOT] ?: "",
+      hasRecoveryCode = p[Keys.RECOVERY_HASH] != null,
+      recoveryHash = p[Keys.RECOVERY_HASH],
+      recoverySalt = p[Keys.RECOVERY_SALT],
       secureScreen = p[Keys.SECURE_SCREEN] ?: true,
       themeMode = p[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
       notificationCaptureEnabled = p[Keys.NOTI_CAPTURE] ?: false,
@@ -242,6 +256,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       driveFolderName = p[Keys.DRIVE_FOLDER_NAME],
       driveTestFileName = p[Keys.DRIVE_TEST_FILE],
       billRemindersEnabled = p[Keys.BILL_REMINDERS] ?: true,
+      preRestoreAt = p[Keys.PRE_RESTORE_AT] ?: 0L,
+      preRestorePasswordEncrypted = p[Keys.PRE_RESTORE_PW],
       simpleMode = p[Keys.SIMPLE_MODE] ?: false,
       ledgerSavedFilters = p[Keys.LEDGER_FILTERS],
       cleanupDismissed = p[Keys.CLEANUP_DISMISSED] ?: emptySet(),
@@ -263,9 +279,16 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     it[Keys.LOCKED_UNTIL] = 0L
   }
 
+  suspend fun setRecoveryCode(hash: String, salt: String) = store.edit {
+    it[Keys.RECOVERY_HASH] = hash
+    it[Keys.RECOVERY_SALT] = salt
+  }
+
   suspend fun clearPin() = store.edit {
     it.remove(Keys.PIN_HASH)
     it.remove(Keys.PIN_SALT)
+    it.remove(Keys.RECOVERY_HASH)
+    it.remove(Keys.RECOVERY_SALT)
     it[Keys.BIOMETRIC] = false
     it[Keys.FAILED] = 0
     it[Keys.LOCKED_UNTIL] = 0L
@@ -466,6 +489,10 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   }
   suspend fun setLedgerSavedFilters(json: String) = store.edit { it[Keys.LEDGER_FILTERS] = json }
   suspend fun setSimpleMode(enabled: Boolean) = store.edit { it[Keys.SIMPLE_MODE] = enabled }
+  suspend fun setPreRestore(at: Long, passwordEncrypted: String?) = store.edit {
+    if (passwordEncrypted == null) { it.remove(Keys.PRE_RESTORE_AT); it.remove(Keys.PRE_RESTORE_PW) }
+    else { it[Keys.PRE_RESTORE_AT] = at; it[Keys.PRE_RESTORE_PW] = passwordEncrypted }
+  }
   suspend fun setBillReminders(enabled: Boolean) = store.edit { it[Keys.BILL_REMINDERS] = enabled }
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }

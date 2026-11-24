@@ -46,12 +46,20 @@ class SettingsViewModel @Inject constructor(
 
   // ---- Lock / PIN ----
 
+  private val _recoveryCode = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+  /** A just-made recovery code to show once (null = no dialog). */
+  val recoveryCode: StateFlow<String?> = _recoveryCode
+
+  fun newRecoveryCode() = viewModelScope.launch { _recoveryCode.value = lock.createRecoveryCode() }
+  fun recoveryCodeShown() { _recoveryCode.value = null }
+
   /** Sets a new PIN (first time). Returns false if the PIN format is invalid. */
   fun setPin(pin: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
     if (!PinHasher.isValidPin(pin)) { onDone(false); return@launch }
     lock.setPin(pin)
-    messages.show("앱 잠금을 켰어요.")
     onDone(true)
+    // A way back in if the PIN is forgotten.
+    _recoveryCode.value = lock.createRecoveryCode()
   }
 
   /** Changes the PIN after verifying the current one. */

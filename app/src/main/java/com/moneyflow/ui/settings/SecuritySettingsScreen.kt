@@ -94,6 +94,15 @@ fun SecuritySettingsScreen(
           onClick = { flow = PinFlow.CHANGE },
           modifier = Modifier.testTag("security_change_pin")
         )
+        SettingsItem(
+          title = if (settings.hasRecoveryCode) "복구 코드 새로 만들기" else "복구 코드 만들기",
+          subtitle = if (settings.hasRecoveryCode) "PIN을 잊었을 때 쓰는 코드예요. 새로 만들면 예전 코드는 쓸 수 없어요"
+            else "PIN을 잊었을 때 앱을 열 수 있는 코드를 만들어 두세요",
+          icon = Icons.Filled.Password,
+          showChevron = false,
+          onClick = viewModel::newRecoveryCode,
+          modifier = Modifier.testTag("security_recovery_code")
+        )
         if (biometricStatus == BiometricStatus.READY) {
           SettingsSwitchItem(
             title = "생체 인증",
@@ -165,6 +174,11 @@ fun SecuritySettingsScreen(
       }
     }
     Spacer(Modifier.height(24.dp))
+  }
+
+  val recoveryCode by viewModel.recoveryCode.collectAsStateWithLifecycle()
+  recoveryCode?.let { code ->
+    RecoveryCodeShownDialog(code, onDone = viewModel::recoveryCodeShown)
   }
 
   flow?.let { current ->
@@ -322,4 +336,33 @@ private fun PinFlowDialog(
       }
     }
   }
+}
+
+/** Shows a new recovery code once. It can't be seen again later. */
+@Composable
+private fun RecoveryCodeShownDialog(code: String, onDone: () -> Unit) {
+  val context = LocalContext.current
+  androidx.compose.material3.AlertDialog(
+    onDismissRequest = { },
+    title = { Text("복구 코드를 적어 두세요", fontWeight = FontWeight.Bold) },
+    text = {
+      androidx.compose.foundation.layout.Column {
+        Text(
+          "PIN을 잊었을 때 잠금 화면의 'PIN을 잊었어요'에서 이 코드를 넣으면 앱이 열려요. 이 화면을 닫으면 다시 볼 수 없어요. 종이에 적거나 가족에게 보내 두세요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
+        Text(
+          code,
+          style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+          fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+          modifier = Modifier.padding(vertical = 16.dp).testTag("recovery_code_text")
+        )
+        androidx.compose.material3.OutlinedButton(onClick = {
+          val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+          cm.setPrimaryClip(android.content.ClipData.newPlainText("복구 코드", code))
+        }) { Text("복사하기") }
+      }
+    },
+    confirmButton = { TextButton(onClick = onDone, modifier = Modifier.testTag("recovery_code_done")) { Text("적어 두었어요", fontWeight = FontWeight.Bold) } }
+  )
 }

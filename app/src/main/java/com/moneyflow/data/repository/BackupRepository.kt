@@ -68,7 +68,7 @@ class BackupRepository @Inject constructor(
   private val dao = db.backupDao()
 
   /** Creates the encrypted backup file contents. */
-  suspend fun createBackup(password: CharArray, appVersion: String): ByteArray {
+  suspend fun createBackup(password: CharArray, appVersion: String, recordAsBackup: Boolean = true): ByteArray {
     val deviceId = settings.installId()
     val json = db.withTransaction {
       JSONObject()
@@ -102,7 +102,7 @@ class BackupRepository @Inject constructor(
     val bytes = withContext(Dispatchers.Default) {
       BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
     }
-    settings.setLastBackupAt(clock.nowMillis())
+    if (recordAsBackup) settings.setLastBackupAt(clock.nowMillis())
     return bytes
   }
 

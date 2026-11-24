@@ -23,9 +23,11 @@ data class ImportRow(
   val item: StatementItem,
   val category: String,
   /** A transaction with the same amount on the same day (±1) already exists in the account. */
-  val isDuplicate: Boolean
+  val isDuplicate: Boolean,
+  /** Bought and cancelled within the same statement: neither needs recording. */
+  val cancelledInStatement: Boolean = false
 ) {
-  val selectedByDefault: Boolean get() = !isDuplicate && !item.isCancel
+  val selectedByDefault: Boolean get() = !isDuplicate && !item.isCancel && !cancelledInStatement
 }
 
 data class ImportResult(val added: Int, val cancelled: Int, val skipped: Int)
@@ -60,15 +62,23 @@ class CardImportRepository @Inject constructor(
     val from = MonthKeys.dayStartMillis(items.minOf { it.date }.minusDays(1), zone)
     val to = MonthKeys.dayEndMillis(items.maxOf { it.date }.plusDays(1), zone)
     val existing = db.transactionDao().getForAccountBetween(accountId, from, to)
+    // Purchases already split into monthly installment parts: compare with the whole amount.
+    val splitTotals = existing.filter { com.moneyflow.domain.InstallmentSplitter.partOf(it.memo)?.first == 1 }
+      .associate { it.id to ledger.installmentGroup(it).sumOf { p -> p.amount } }
     val used = mutableSetOf<Long>()
-    return items.map { item ->
+    val paired = pairCancellations(items)
+    return items.mapIndexed { index, item ->
       val wanted = if (item.isIncome) TransactionType.INCOME else TransactionType.EXPENSE
       val match = existing.firstOrNull { tx ->
-        tx.id !in used && tx.type == wanted && tx.amount == item.amount &&
+        tx.id !in used && tx.type == wanted && (tx.amount == item.amount || splitTotals[tx.id] == item.amount) &&
           kotlin.math.abs(MonthKeys.toLocalDate(tx.timestamp, zone).toEpochDay() - item.date.toEpochDay()) <= 1
       }
       if (match != null && !item.isCancel) used += match.id
-      ImportRow(item, if (item.isIncome) incomeCategoryFor(item.merchant) else categoryFor(item.merchant), isDuplicate = match != null && !item.isCancel)
+      ImportRow(
+        item, if (item.isIncome) incomeCategoryFor(item.merchant) else categoryFor(item.merchant),
+        isDuplicate = match != null && !item.isCancel,
+        cancelledInStatement = index in paired
+      )
     }
   }
 
@@ -157,7 +167,26 @@ class CardImportRepository @Inject constructor(
     return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
   }
 
-  private companion object {
+  companion object {
+    /**
+     * Rows of a purchase and its cancellation in the same statement (same place and amount, the
+     * cancellation on or after the purchase): both are left unselected.
+     */
+    fun pairCancellations(items: List<StatementItem>): Set<Int> {
+      val out = mutableSetOf<Int>()
+      fun norm(s: String) = s.replace(" ", "").lowercase()
+      items.forEachIndexed { ci, c ->
+        if (!c.isCancel) return@forEachIndexed
+        val pi = items.indices.firstOrNull { i ->
+          i !in out && !items[i].isCancel && !items[i].isIncome && items[i].amount == c.amount &&
+            norm(items[i].merchant) == norm(c.merchant) && !items[i].date.isAfter(c.date)
+        } ?: return@forEachIndexed
+        out += pi
+        out += ci
+      }
+      return out
+    }
+
     const val CANCEL_LOOKBACK_MS = 90L * 24 * 3_600_000
   }
 }

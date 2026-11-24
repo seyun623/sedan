@@ -105,8 +105,13 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
 
   fun usage(benefit: CardBenefitEntity, periodExpenses: List<TransactionEntity>, previousPerformance: Long): BenefitUsage {
     val eligible = benefit.minPerformance <= 0 || previousPerformance >= benefit.minPerformance
-    val matching = periodExpenses.filter { matches(benefit, it) }
-    val raw = matching.sumOf { tx -> benefitFor(benefit, tx.amount) }
+    // A purchase split into monthly installment parts gets its benefit once, on the whole
+    // amount, when it is bought (part 1); later parts are not new purchases.
+    val matching = periodExpenses.filter { matches(benefit, it) && (com.moneyflow.domain.InstallmentSplitter.partOf(it.memo)?.first ?: 1) == 1 }
+    val raw = matching.sumOf { tx ->
+      val parts = com.moneyflow.domain.InstallmentSplitter.partOf(tx.memo)?.second ?: 1
+      benefitFor(benefit, tx.amount * parts)
+    }
     val earned = if (!eligible) 0L else if (benefit.monthlyCap > 0) minOf(raw, benefit.monthlyCap) else raw
     return BenefitUsage(
       benefit = benefit,
