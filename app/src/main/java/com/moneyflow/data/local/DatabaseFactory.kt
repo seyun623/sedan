@@ -31,14 +31,24 @@ object DatabaseFactory {
     val tmp = File(dbFile.parentFile, "$name.encrypting")
     tmp.delete()
     val plain = SQLiteDatabase.openDatabase(dbFile.absolutePath, "", null, SQLiteDatabase.OPEN_READWRITE, null, null)
+    val version: Int
     try {
-      val version = plain.version
+      // One connection only: ATTACH applies to a single connection, and with write-ahead logging the
+      // pool may run the next statements on another one ("unknown database encrypted").
+      plain.disableWriteAheadLogging()
+      version = plain.version
       plain.rawExecSQL("ATTACH DATABASE '${tmp.absolutePath}' AS encrypted KEY '$passphrase'")
       plain.rawExecSQL("SELECT sqlcipher_export('encrypted')")
-      plain.rawExecSQL("PRAGMA encrypted.user_version = $version")
       plain.rawExecSQL("DETACH DATABASE encrypted")
     } finally {
       plain.close()
+    }
+    // Keep the schema version so Room runs the right migrations on the converted file.
+    val encrypted = SQLiteDatabase.openDatabase(tmp.absolutePath, passphrase, null, SQLiteDatabase.OPEN_READWRITE, null, null)
+    try {
+      encrypted.version = version
+    } finally {
+      encrypted.close()
     }
     listOf("-wal", "-shm", "-journal").forEach { File(dbFile.path + it).delete() }
     if (!dbFile.delete() || !tmp.renameTo(dbFile)) {
