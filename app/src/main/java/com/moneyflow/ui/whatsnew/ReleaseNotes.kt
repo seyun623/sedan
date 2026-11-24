@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.0.1", "2026.11",
+      listOf(
+        "신한카드처럼 가맹점 이름이 날짜 위에 있는 화면도 '기기에서 읽기'로 가맹점을 제대로 읽어요 ('자동납부'로 나오던 문제)",
+        "명세서·결제 예정 금액은 결제 내역으로 가져오지 않아요",
+        "AI로 읽기에서 고른 모델이 없어졌으면 쓸 수 있는 모델로 자동으로 바꿔서 다시 시도해요"
+      )
+    ),
+    ReleaseNote(
       "2.0.0", "2026.11",
       listOf(
         "홈 화면 위젯: 오늘·이번 달 지출과 남은 예산을 보고 '+ 기록'으로 바로 입력해요 (앱 잠금 중에는 금액을 가려요)",

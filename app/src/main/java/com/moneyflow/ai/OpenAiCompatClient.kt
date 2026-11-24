@@ -30,7 +30,7 @@ class OpenAiCompatClient @Inject constructor() {
     val (code, body) = transport.execute(
       "POST", "${base(baseUrl)}/chat/completions", headers(apiKey) + ("Content-Type" to "application/json"), request.toString()
     )
-    if (code !in 200..299) throw AiRequestException(GeminiClient.errorMessage(code, body))
+    if (code !in 200..299) throw aiFailure(code, body)
     parseContent(body) ?: throw AiRequestException("AI 응답이 비어 있어요.")
   }
 

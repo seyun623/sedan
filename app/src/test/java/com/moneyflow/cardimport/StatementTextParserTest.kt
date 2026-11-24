@@ -10,6 +10,50 @@ import java.time.LocalTime
 class StatementTextParserTest {
   private val parser = StatementTextParser(LocalDate.of(2026, 11, 23))
 
+  /** 신한카드 마이페이지: merchant above the date line, amount below; statement totals on top. */
+  @Test fun shinhanMerchantAboveDate() {
+    val r = parser.parse(
+      """
+      마이페이지
+      황*윤님
+      함께한지 25년이 되었어요.
+      12월 25일 명세서(예정)
+      신용
+      15,030원
+      11월 25일 대금명세서
+      92,820원
+      최근이용내역
+      DB손해보험
+      2026.11.23 12:05 · 본인 782* · 일시불 · 자동납부
+      33,170원
+      DB손해보험
+      2026.11.23 12:02 · 본인 782* · 일시불 · 자동납부
+      51,060원
+      쿠팡(쿠페이)
+      2026.11.19 09:14 · 본인 782* · 3개월
+      8,590원
+      """.trimIndent()
+    )
+    assertEquals(listOf("DB손해보험", "DB손해보험", "쿠팡 쿠페이"), r.items.map { it.merchant })
+    assertEquals(listOf(33_170L, 51_060L, 8_590L), r.items.map { it.amount })
+    assertEquals(LocalTime.of(12, 5), r.items[0].time)
+    assertEquals(3, r.items[2].installmentMonths)
+  }
+
+  @Test fun merchantAndAmountOnOneLineAboveDate() {
+    val r = parser.parse(
+      """
+      최근이용내역
+      스타벅스 역삼점 5,600원
+      2026.11.21 14:32 · 본인 · 일시불
+      GS25 강남점 3,500원
+      2026.11.20 09:10 · 본인 · 일시불
+      """.trimIndent()
+    )
+    assertEquals(listOf("스타벅스 역삼점", "GS25 강남점"), r.items.map { it.merchant })
+    assertEquals(listOf(5_600L, 3_500L), r.items.map { it.amount })
+  }
+
   @Test fun oneLineRows() {
     val r = parser.parse(
       """

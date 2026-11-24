@@ -11,7 +11,15 @@ import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-class AiRequestException(message: String) : IOException(message)
+open class AiRequestException(message: String) : IOException(message)
+
+/** The chosen model doesn't exist (any more) at the provider (HTTP 404). */
+class AiModelNotFoundException(message: String) : AiRequestException(message)
+
+/** Throws the right exception for an unsuccessful AI response. */
+internal fun aiFailure(code: Int, body: String): AiRequestException =
+  if (code == 404 && !body.contains("policy", ignoreCase = true)) AiModelNotFoundException(GeminiClient.errorMessage(code, body))
+  else AiRequestException(GeminiClient.errorMessage(code, body))
 
 /** Transport so the client can be tested without the network. */
 fun interface HttpTransport {
@@ -64,7 +72,7 @@ class GeminiClient @Inject constructor() {
         .put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("responseSchema", responseSchema))
       val url = "$BASE/models/${URLEncoder.encode(model.removePrefix("models/"), "UTF-8")}:generateContent"
       val (code, body) = transport.execute("POST", url, headers(apiKey) + ("Content-Type" to "application/json"), request.toString())
-      if (code !in 200..299) throw AiRequestException(errorMessage(code, body))
+      if (code !in 200..299) throw aiFailure(code, body)
       parseGeneratedText(body) ?: throw AiRequestException("AI 응답이 비어 있어요.")
     }
 
@@ -96,7 +104,9 @@ class GeminiClient @Inject constructor() {
       return when (code) {
         400 -> if (apiMessage.contains("API key", true)) "API 키가 올바르지 않아요." else "요청이 거부됐어요. 모델을 다시 골라 보세요."
         401, 403 -> "API 키가 올바르지 않거나 권한이 없어요."
-        404 -> "선택한 모델을 찾을 수 없어요. 모델 목록을 다시 불러와 주세요."
+        404 -> if (apiMessage.contains("policy", true))
+          "OpenRouter 계정의 개인정보 설정 때문에 무료 모델을 쓸 수 없어요. openrouter.ai → Settings → Privacy에서 무료 모델 사용(Free model publication)을 허용해 주세요."
+          else "선택한 모델을 찾을 수 없어요. 설정 → AI 설정에서 모델 목록을 다시 불러와 주세요."
         429 -> "사용 한도를 넘었어요. 잠시 후 다시 시도해 주세요."
         in 500..599 -> "AI 서버에 문제가 있어요. 잠시 후 다시 시도해 주세요."
         else -> "AI 요청에 실패했어요 ($code)."

@@ -27,12 +27,23 @@ class AiService @Inject constructor(
     val s = settings.current()
     if (!s.isAiReady) throw AiNotConfiguredException()
     val key = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
-    return when (s.aiProvider) {
-      AiProvider.GEMINI -> gemini.generateJson(key, s.aiModel, prompt, geminiSchema)
+    suspend fun call(model: String): String = when (s.aiProvider) {
+      AiProvider.GEMINI -> gemini.generateJson(key, model, prompt, geminiSchema)
       else -> compat.completeJson(
-        s.aiBaseUrl ?: throw AiNotConfiguredException(), key, s.aiModel,
+        s.aiBaseUrl ?: throw AiNotConfiguredException(), key, model,
         "$prompt\n\n반드시 다음 형식의 JSON 객체 하나로만 답하세요:\n$shapeHint"
       )
+    }
+    return try {
+      call(s.aiModel)
+    } catch (e: AiModelNotFoundException) {
+      // Providers retire models (and free model lists change): switch to an available one and retry once.
+      val available = runCatching { listModels(s.aiProvider, key, s.aiCustomBaseUrl) }.getOrDefault(emptyList())
+      val replacement = AiModelPicker.pick(s.aiProvider, available, exclude = s.aiModel) ?: throw AiRequestException(
+        "선택한 모델(${s.aiModel})을 찾을 수 없어요. 설정 → AI 설정에서 모델 목록을 다시 불러와 다른 모델을 골라 주세요."
+      )
+      settings.setAiModel(replacement)
+      call(replacement)
     }
   }
 

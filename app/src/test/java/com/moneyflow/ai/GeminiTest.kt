@@ -59,6 +59,35 @@ class GeminiTest {
   private fun service(settings: com.moneyflow.data.repository.SettingsRepository, gemini: FakeTransport? = null, compat: FakeTransport? = null) =
     AiService(settings, PlainSecretStore, GeminiClient().apply { gemini?.let { transport = it } }, OpenAiCompatClient().apply { compat?.let { transport = it } })
 
+  @Test fun retiredModelIsReplacedAutomatically() = runBlocking {
+    val settings = testSettingsRepository()
+    settings.setAiApiKeyEncrypted(PlainSecretStore.encrypt("MY-KEY"))
+    settings.setAiModel("gemini-1.5-flash")
+    settings.setAiEnabled(true)
+    val t = object : HttpTransport {
+      val urls = mutableListOf<String>()
+      override fun execute(method: String, url: String, headers: Map<String, String>, body: String?): Pair<Int, String> {
+        urls += url
+        return when {
+          url.contains("gemini-1.5-flash:generateContent") -> 404 to """{"error":{"message":"models/gemini-1.5-flash is not found"}}"""
+          url.contains("/models?") -> 200 to modelsJson
+          else -> 200 to answer("""{"ok":true}""")
+        }
+      }
+    }
+    val out = service(settings).let { AiService(settings, PlainSecretStore, GeminiClient().apply { transport = t }, OpenAiCompatClient()) }
+      .completeJson("p", JSONObject(), "{}")
+    assertEquals("""{"ok":true}""", out)
+    assertEquals("gemini-2.5-flash", settings.current().aiModel)
+    assertTrue(t.urls.last().contains("gemini-2.5-flash:generateContent"))
+  }
+
+  @Test fun openRouterDataPolicyErrorIsExplained() {
+    val e = com.moneyflow.ai.aiFailure(404, """{"error":{"message":"No endpoints found matching your data policy (Free model publication)"}}""")
+    assertTrue(e !is AiModelNotFoundException)
+    assertTrue(e.message!!.contains("Privacy"))
+  }
+
   @Test fun suggestionUsesStoredKeyModelAndAllowedCategories() = runBlocking {
     val db = com.moneyflow.testing.inMemoryDb()
     val settings = testSettingsRepository()
