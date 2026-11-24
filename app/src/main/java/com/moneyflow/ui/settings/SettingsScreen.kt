@@ -170,6 +170,14 @@ fun SettingsScreen(
     }
 
     SettingsSection("화면") {
+      SettingsSwitchItem(
+        title = "간단 모드",
+        subtitle = "글씨를 크게 하고, 첫 화면을 이번 달 쓴 돈과 큰 기록 버튼만으로 보여 줘요 (부모님용)",
+        icon = Icons.Filled.Info,
+        checked = settings.simpleMode,
+        onCheckedChange = viewModel::setSimpleMode,
+        modifier = Modifier.testTag("settings_simple_mode")
+      )
       ThemeMode.entries.forEach { mode ->
         SettingsRadioItem(
           title = when (mode) {

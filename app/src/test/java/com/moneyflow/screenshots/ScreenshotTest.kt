@@ -111,8 +111,8 @@ class ScreenshotTest {
   @Test fun homeLight() { val vm = home(); shot("01_home", false) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
   @Test fun homeDark() { val vm = home(); shot("01_home", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) } }
 
-  @Test fun ledgerLight() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock); shot("02_ledger", false) { LedgerScreen({}, {}, viewModel = vm) } }
-  @Test fun ledgerDark() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock); shot("02_ledger", true) { LedgerScreen({}, {}, viewModel = vm) } }
+  @Test fun ledgerLight() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock, settings); shot("02_ledger", false) { LedgerScreen({}, {}, viewModel = vm) } }
+  @Test fun ledgerDark() { val vm = LedgerViewModel(ledger, monthStore(), stats, bus, clock, settings); shot("02_ledger", true) { LedgerScreen({}, {}, viewModel = vm) } }
 
   @Test fun analyticsLight() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", false) { AnalyticsScreen({}, viewModel = vm) } }
   @Test fun analyticsDark() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", true) { AnalyticsScreen({}, viewModel = vm) } }

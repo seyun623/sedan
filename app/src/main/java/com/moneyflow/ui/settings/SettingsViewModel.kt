@@ -90,6 +90,7 @@ class SettingsViewModel @Inject constructor(
   fun setBudgetAlerts(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBudgetAlerts(enabled) }
   fun setMonthlySummary(enabled: Boolean) = viewModelScope.launch { settingsRepo.setMonthlySummary(enabled) }
   fun setSplitInstallments(enabled: Boolean) = viewModelScope.launch { settingsRepo.setSplitInstallments(enabled) }
+  fun setSimpleMode(enabled: Boolean) = viewModelScope.launch { settingsRepo.setSimpleMode(enabled) }
   fun setBillReminders(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBillReminders(enabled) }
   fun setBackupReminder(enabled: Boolean) = viewModelScope.launch { settingsRepo.setBackupReminder(enabled) }
 

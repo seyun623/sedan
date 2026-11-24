@@ -52,7 +52,12 @@ class MainActivity : FragmentActivity() {
           )
           else -> {
             contentState.SaveableStateProvider("app-content") {
-              MoneyFlowNavHost(messages = appViewModel.messages, navController = navController, prefill = appViewModel.prefill)
+              val density = androidx.compose.ui.platform.LocalDensity.current
+              // 간단 모드: everything a little bigger.
+              val scaled = if (s.simpleMode) androidx.compose.ui.unit.Density(density.density, density.fontScale * 1.15f) else density
+              androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
+                MoneyFlowNavHost(messages = appViewModel.messages, navController = navController, prefill = appViewModel.prefill, simpleMode = s.simpleMode)
+              }
             }
             val whatsNew by appViewModel.whatsNew.collectAsStateWithLifecycle()
             com.moneyflow.ui.whatsnew.WhatsNewDialog(whatsNew, onDismiss = appViewModel::dismissWhatsNew)

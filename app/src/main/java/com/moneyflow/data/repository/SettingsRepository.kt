@@ -80,6 +80,9 @@ data class AppSettings(
   /** Family monthly budget for the combined view (0 = not set). */
   val familyBudget: Long = 0L,
   val billRemindersEnabled: Boolean = true,
+  /** 간단 모드: big letters, one home screen with big buttons. */
+  val simpleMode: Boolean = false,
+  val ledgerSavedFilters: String? = null,
   /** Duplicate groups the user marked "not a duplicate" (ids joined by commas). */
   val cleanupDismissed: Set<String> = emptySet(),
   /** Family auto-sync through the Drive bot: my name, family password (Keystore-encrypted), my file in the folder. */
@@ -162,6 +165,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val DRIVE_FOLDER_NAME = stringPreferencesKey("drive_folder_name")
     val DRIVE_TEST_FILE = stringPreferencesKey("drive_test_file_name")
     val BILL_REMINDERS = booleanPreferencesKey("bill_reminders")
+    val SIMPLE_MODE = booleanPreferencesKey("simple_mode")
+    val LEDGER_FILTERS = stringPreferencesKey("ledger_saved_filters_json")
     val CLEANUP_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("cleanup_dismissed")
     val FAMILY_SYNC_NAME = stringPreferencesKey("family_sync_name")
     val FAMILY_SYNC_PW = stringPreferencesKey("family_sync_password_enc")
@@ -224,6 +229,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       driveFolderName = p[Keys.DRIVE_FOLDER_NAME],
       driveTestFileName = p[Keys.DRIVE_TEST_FILE],
       billRemindersEnabled = p[Keys.BILL_REMINDERS] ?: true,
+      simpleMode = p[Keys.SIMPLE_MODE] ?: false,
+      ledgerSavedFilters = p[Keys.LEDGER_FILTERS],
       cleanupDismissed = p[Keys.CLEANUP_DISMISSED] ?: emptySet(),
       familySyncName = p[Keys.FAMILY_SYNC_NAME],
       familySyncPasswordEncrypted = p[Keys.FAMILY_SYNC_PW],
@@ -416,6 +423,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun dismissDuplicate(key: String) = store.edit {
     it[Keys.CLEANUP_DISMISSED] = ((it[Keys.CLEANUP_DISMISSED] ?: emptySet()) + key).toList().takeLast(300).toSet()
   }
+  suspend fun setLedgerSavedFilters(json: String) = store.edit { it[Keys.LEDGER_FILTERS] = json }
+  suspend fun setSimpleMode(enabled: Boolean) = store.edit { it[Keys.SIMPLE_MODE] = enabled }
   suspend fun setBillReminders(enabled: Boolean) = store.edit { it[Keys.BILL_REMINDERS] = enabled }
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }

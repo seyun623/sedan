@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.8.0", "2026.11",
+      listOf(
+        "가계부 탭 → 상세 필터: 금액 범위, 계좌·카드 여러 개, #태그 여러 개로 거를 수 있어요",
+        "자주 쓰는 검색 조건을 이름 붙여 저장하고(★) 한 번에 적용해요",
+        "설정 → 화면 → 간단 모드: 글씨가 커지고, 첫 화면이 이번 달 쓴 돈과 큰 '돈 쓴 것 적기' 버튼만 보여요 (부모님용)"
+      )
+    ),
+    ReleaseNote(
       "2.7.0", "2026.11",
       listOf(
         "분석 탭 → 순자산 추이: 최근 12개월 월말 순자산(자산 - 카드 대금·대출)을 그래프로 보여 줘요",

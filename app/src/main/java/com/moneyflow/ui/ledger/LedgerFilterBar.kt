@@ -92,7 +92,9 @@ internal fun LedgerFilterBar(
   onPresetSelect: (DateRangePreset) -> Unit,
   onCustomRange: (LocalDate, LocalDate) -> Unit,
   onResetFilters: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onOpenDetail: () -> Unit = {},
+  onApplySaved: (SavedFilter) -> Unit = {}
 ) {
   val filters = state.filters
   var showRangePicker by rememberSaveable { mutableStateOf(false) }
@@ -194,6 +196,29 @@ internal fun LedgerFilterBar(
               )
             }
           }
+        }
+      }
+
+      // 2-1. Detail filter (amount, accounts, tags) and saved filters
+      LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        item(key = "detail") {
+          FilterPill(
+            label = if (filters.detailCount > 0) "상세 필터 ${filters.detailCount}" else "상세 필터",
+            selected = filters.detailCount > 0,
+            onClick = onOpenDetail,
+            leadingIcon = {
+              Icon(Icons.Default.FilterAlt, contentDescription = null, tint = if (filters.detailCount > 0) OnBrand else TossBlue, modifier = Modifier.size(14.dp))
+            },
+            modifier = Modifier.testTag("ledger_detail_filter")
+          )
+        }
+        items(state.savedFilters, key = { "saved_${it.name}" }) { f ->
+          FilterPill(label = "★ ${f.name}", selected = false, onClick = { onApplySaved(f) }, modifier = Modifier.testTag("saved_filter_${f.name}"))
         }
       }
 

@@ -60,7 +60,8 @@ import com.moneyflow.ui.transaction.TransactionFormScreen
 fun MoneyFlowNavHost(
   messages: UserMessageBus,
   navController: NavHostController = rememberNavController(),
-  prefill: com.moneyflow.ui.common.PrefillStore? = null
+  prefill: com.moneyflow.ui.common.PrefillStore? = null,
+  simpleMode: Boolean = false
 ) {
   val snackbarHostState = remember { SnackbarHostState() }
   // A notification / widget asked for the add form (e.g. "해외 결제 원화 금액 입력").
@@ -100,7 +101,7 @@ fun MoneyFlowNavHost(
     contentWindowInsets = WindowInsets.safeDrawing,
     snackbarHost = { SnackbarHost(snackbarHostState) },
     bottomBar = {
-      if (currentTab != null) {
+      if (currentTab != null && !simpleMode) {
         NavigationBar(containerColor = CardSurface, modifier = Modifier.testTag("bottom_nav_bar")) {
           TopLevelTab.entries.forEach { tab ->
             val selected = tab == currentTab
@@ -123,7 +124,7 @@ fun MoneyFlowNavHost(
       }
     },
     floatingActionButton = {
-      if (currentTab == TopLevelTab.HOME || currentTab == TopLevelTab.LEDGER) {
+      if (!simpleMode && (currentTab == TopLevelTab.HOME || currentTab == TopLevelTab.LEDGER)) {
         FloatingActionButton(
           onClick = { openTransaction(null) },
           containerColor = TossBlue,
@@ -136,6 +137,19 @@ fun MoneyFlowNavHost(
   ) { padding ->
     NavHost(navController, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
       composable(Routes.HOME) {
+        if (simpleMode) {
+          com.moneyflow.ui.home.SimpleHomeScreen(
+            onAddExpense = { openTransaction(null) },
+            onAddIncome = {
+              if (prefill != null) prefill.request(com.moneyflow.domain.capture.FormPrefill(type = com.moneyflow.data.model.TransactionType.INCOME))
+              else openTransaction(null)
+            },
+            onOpenTransaction = { openTransaction(it) },
+            onOpenLedger = { navController.navigate(Routes.LEDGER) },
+            onOpenSettings = { navController.navigate(Routes.SETTINGS) }
+          )
+          return@composable
+        }
         HomeScreen(
           onAddTransaction = { openTransaction(null) },
           onOpenTransaction = { openTransaction(it) },

@@ -49,7 +49,7 @@ class LedgerViewModelTest {
     db = inMemoryDb()
     ledger = LedgerRepository(db, clock)
     bus = UserMessageBus()
-    vm = LedgerViewModel(ledger, SelectedMonthStore(clock), MonthlyStatsCalculator(clock.zone), bus, clock)
+    vm = LedgerViewModel(ledger, SelectedMonthStore(clock), MonthlyStatsCalculator(clock.zone), bus, clock, com.moneyflow.testing.testSettingsRepository())
     val a = ledger.addAccount(bank(balance = 1_000_000))
     fun t(type: TransactionType, amount: Long, cat: String, memo: String, at: LocalDateTime) =
       TransactionEntity(type = type, amount = amount, category = cat, accountId = a, timestamp = clock.millis(at), memo = memo)

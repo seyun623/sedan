@@ -34,6 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -86,6 +88,16 @@ fun LedgerScreen(
     state.transactions.groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
   }
   val today = state.today
+  var showDetail by remember { mutableStateOf(false) }
+  if (showDetail) {
+    DetailFilterDialog(
+      state = state,
+      onDismiss = { showDetail = false },
+      onApply = viewModel::setDetail,
+      onSave = { viewModel.saveCurrent(it) },
+      onDeleteSaved = viewModel::deleteSaved
+    )
+  }
 
   Column(
     modifier = Modifier
@@ -121,7 +133,9 @@ fun LedgerScreen(
           onCategorySelect = viewModel::setCategory,
           onPresetSelect = viewModel::setPreset,
           onCustomRange = { s, e -> viewModel.setCustomRange(s, e) },
-          onResetFilters = viewModel::resetFilters
+          onResetFilters = viewModel::resetFilters,
+          onOpenDetail = { showDetail = true },
+          onApplySaved = viewModel::applySaved
         )
       }
 

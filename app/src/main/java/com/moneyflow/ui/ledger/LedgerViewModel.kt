@@ -48,10 +48,20 @@ data class LedgerFilters(
   val customEnd: LocalDate? = null,
   val isCalendarView: Boolean = false,
   /** Selected day in calendar view (filters the list to that day). */
-  val selectedDate: LocalDate? = null
+  val selectedDate: LocalDate? = null,
+  val minAmount: Long? = null,
+  val maxAmount: Long? = null,
+  /** Transactions of any of these accounts (empty = all). */
+  val accountIds: Set<Long> = emptySet(),
+  /** Transactions having all these #tags (empty = any). */
+  val tags: Set<String> = emptySet()
 ) {
+  /** Amount / account / tag conditions (set in the detail filter). */
+  val detailCount: Int
+    get() = (if (minAmount != null || maxAmount != null) 1 else 0) + (if (accountIds.isNotEmpty()) 1 else 0) + (if (tags.isNotEmpty()) 1 else 0)
+
   val isAnyActive: Boolean
-    get() = type != null || category != null || query.isNotBlank() || preset != DateRangePreset.THIS_MONTH || selectedDate != null
+    get() = type != null || category != null || query.isNotBlank() || preset != DateRangePreset.THIS_MONTH || selectedDate != null || detailCount > 0
 }
 
 data class LedgerUiState(
@@ -73,6 +83,9 @@ data class LedgerUiState(
   val dailyExpense: Map<Int, Long> = emptyMap(),
   val dailyIncome: Map<Int, Long> = emptyMap(),
   val accounts: List<AccountEntity> = emptyList(),
+  /** Every #tag used in the ledger, most used first. */
+  val allTags: List<String> = emptyList(),
+  val savedFilters: List<SavedFilter> = emptyList(),
   /** Today per the app clock (recomputed whenever the list updates). */
   val today: LocalDate = LocalDate.now(),
   val isLoading: Boolean = true
@@ -85,7 +98,8 @@ class LedgerViewModel @Inject constructor(
   private val monthStore: SelectedMonthStore,
   private val stats: MonthlyStatsCalculator,
   private val messages: UserMessageBus,
-  private val clock: AppClock
+  private val clock: AppClock,
+  private val settings: com.moneyflow.data.repository.SettingsRepository
 ) : ViewModel() {
 
   private val filters = MutableStateFlow(LedgerFilters())
@@ -100,8 +114,8 @@ class LedgerViewModel @Inject constructor(
   }
 
   val uiState: StateFlow<LedgerUiState> = combine(
-    ledger.transactions, ledger.accounts, monthStore.month, filters
-  ) { all, accounts, month, f -> build(all, accounts, month, f) }
+    ledger.transactions, ledger.accounts, monthStore.month, filters, settings.settings
+  ) { all, accounts, month, f, s -> build(all, accounts, month, f).copy(savedFilters = SavedFilters.decode(s.ledgerSavedFilters)) }
     .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LedgerUiState())
 
@@ -120,15 +134,7 @@ class LedgerViewModel @Inject constructor(
         range(all, minOf(s, e), maxOf(s, e)) to "${s.monthValue}.${s.dayOfMonth} ~ ${e.monthValue}.${e.dayOfMonth}"
       }
     }
-    val q = f.query.trim()
-    val filtered = base.filter { tx ->
-      (f.type == null || tx.type == f.type) &&
-        (f.category == null || tx.category == f.category) &&
-        (f.selectedDate == null || MonthKeys.toLocalDate(tx.timestamp, zone) == f.selectedDate) &&
-        (q.isEmpty() || tx.memo.contains(q, true) || tx.category.contains(q, true) ||
-          tx.accountName.contains(q, true) || (tx.toAccountName?.contains(q, true) == true) ||
-          tx.paymentMethod.contains(q, true) || tx.amount.toString().contains(q.replace(",", "")))
-    }
+    val filtered = base.filter { tx -> LedgerFilterMatch.matches(tx, f, zone) }
     return LedgerUiState(
       month = month,
       monthLabel = Formatters.formatMonth(month),
@@ -146,6 +152,7 @@ class LedgerViewModel @Inject constructor(
         .groupBy { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth }
         .mapValues { (_, l) -> l.sumOf { it.amount } },
       accounts = accounts,
+      allTags = com.moneyflow.util.Tags.summarize(all).sortedByDescending { it.transactions.size }.map { it.tag },
       today = today,
       isLoading = false
     )
@@ -177,6 +184,25 @@ class LedgerViewModel @Inject constructor(
     filters.update { it.copy(preset = DateRangePreset.CUSTOM, customStart = start, customEnd = end) }
   fun toggleCalendarView() = filters.update { it.copy(isCalendarView = !it.isCalendarView, selectedDate = null) }
   fun selectDate(date: LocalDate?) = filters.update { it.copy(selectedDate = if (it.selectedDate == date) null else date) }
+
+  fun setDetail(minAmount: Long?, maxAmount: Long?, accountIds: Set<Long>, tags: Set<String>) = filters.update {
+    it.copy(minAmount = minAmount, maxAmount = maxAmount, accountIds = accountIds, tags = tags)
+  }
+
+  fun applySaved(f: SavedFilter) {
+    _queryInput.value = f.query
+    filters.update { f.toFilters(it.isCalendarView) }
+  }
+
+  fun saveCurrent(name: String) = viewModelScope.launch {
+    val list = SavedFilters.upsert(uiState.value.savedFilters, SavedFilter.from(name, filters.value.copy(query = _queryInput.value)))
+    settings.setLedgerSavedFilters(SavedFilters.encode(list))
+    messages.show("'${name.trim()}' 필터를 저장했어요.")
+  }
+
+  fun deleteSaved(f: SavedFilter) = viewModelScope.launch {
+    settings.setLedgerSavedFilters(SavedFilters.encode(uiState.value.savedFilters.filter { it.name != f.name }))
+  }
 
   fun resetFilters() {
     _queryInput.value = ""
