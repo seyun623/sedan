@@ -179,7 +179,9 @@ fun MoneyFlowNavHost(
         )
       }
       composable(Routes.DRIVE) { com.moneyflow.ui.settings.DriveSettingsScreen(onBack = { navController.popBackStack() }) }
-      composable(Routes.FAMILY) { com.moneyflow.ui.family.FamilyScreen(onBack = { navController.popBackStack() }) }
+      composable(Routes.FAMILY) {
+        com.moneyflow.ui.family.FamilyScreen(onBack = { navController.popBackStack() }, onOpenDrive = { navController.navigate(Routes.DRIVE) })
+      }
       composable(Routes.RULES) { com.moneyflow.ui.settings.RulesScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.AUTO_CAPTURE) { AutoCaptureSettingsScreen(onBack = { navController.popBackStack() }) }

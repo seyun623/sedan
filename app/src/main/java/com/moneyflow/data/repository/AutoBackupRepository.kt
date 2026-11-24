@@ -61,7 +61,8 @@ class AutoBackupRepository @Inject constructor(
   private val backups: BackupRepository,
   private val settings: SettingsRepository,
   private val secrets: SecretStore,
-  private val clock: AppClock
+  private val clock: AppClock,
+  private val drive: DriveRepository
 ) {
   private val mutex = Mutex()
 
@@ -76,10 +77,16 @@ class AutoBackupRepository @Inject constructor(
     settings.setAutoBackup(folder, secrets.encrypt(password), intervalDays)
   }
 
+  /** Turns auto backup on into [fileName], a file the user just saved in the shared Drive folder (first backup already in it). */
+  suspend fun enableDrive(fileName: String, password: String, intervalDays: Int) {
+    settings.setAutoBackup(DRIVE_PREFIX + fileName, secrets.encrypt(password), intervalDays)
+    settings.setAutoBackupResult(clock.nowMillis(), null)
+  }
+
   suspend fun disable() {
     val folder = settings.current().autoBackupFolder
     settings.clearAutoBackup()
-    folder?.let { f ->
+    folder?.takeUnless(::isDrive)?.let { f ->
       runCatching {
         context.contentResolver.releasePersistableUriPermission(
           Uri.parse(f), android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -100,6 +107,14 @@ class AutoBackupRepository @Inject constructor(
       val password = runCatching { secrets.decrypt(s.autoBackupPasswordEncrypted!!) }.getOrNull()
         ?: throw IllegalStateException("저장된 백업 비밀번호를 읽을 수 없어요. 자동 백업을 다시 켜 주세요.")
       val bytes = backups.createBackup(password.toCharArray(), BuildConfig.VERSION_NAME)
+      val folder = s.autoBackupFolder!!
+      if (isDrive(folder)) {
+        // One file in the shared Drive folder, overwritten by the bot (Drive keeps older versions).
+        val name = folder.removePrefix(DRIVE_PREFIX)
+        drive.overwriteByName(name, bytes)
+        settings.setAutoBackupResult(now, null)
+        return name
+      }
       val name = fileName(now)
       withContext(Dispatchers.IO) {
         val dest = try { destinationFactory(s.autoBackupFolder!!) } catch (e: Exception) {
@@ -110,6 +125,11 @@ class AutoBackupRepository @Inject constructor(
       }
       settings.setAutoBackupResult(now, null)
       name
+    } catch (e: java.io.IOException) {
+      // No connection (Drive): try again on the next run without warning the user.
+      if (s.autoBackupFolder?.let(::isDrive) == true) throw e
+      settings.setAutoBackupResult(now, e.message ?: "자동 백업에 실패했어요.")
+      throw IllegalStateException(e.message ?: "자동 백업에 실패했어요.", e)
     } catch (e: Exception) {
       val msg = when (e) {
         is SecurityException -> "백업 폴더 권한이 없어요. 폴더를 다시 골라 주세요."
@@ -124,6 +144,13 @@ class AutoBackupRepository @Inject constructor(
     PREFIX + java.time.Instant.ofEpochMilli(now).atZone(clock.zone).format(STAMP) + "." + BackupRepository.FILE_EXTENSION
 
   companion object {
+    /** autoBackupFolder value for a file in the shared Drive folder: "drive:<file name>". */
+    const val DRIVE_PREFIX = "drive:"
+    fun isDrive(folder: String) = folder.startsWith(DRIVE_PREFIX)
+    /** e.g. "moneyflow-backup-세윤-3f2a.mfbackup": the install id part keeps family members' files apart. */
+    fun driveFileNameFor(name: String, installId: String): String =
+      "moneyflow-backup-" + name.trim().replace(Regex("[\\\\/:*?\"<>|]"), "").ifEmpty { "나" } + "-" + installId.filter { it.isLetterOrDigit() }.take(4) + "." + BackupRepository.FILE_EXTENSION
+
     const val PREFIX = "moneyflow-auto-"
     const val KEEP = 5
     private const val DAY_MS = 24L * 3_600_000

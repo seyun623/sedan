@@ -144,7 +144,8 @@ class ScreenshotTest {
     androidx.test.core.app.ApplicationProvider.getApplicationContext(),
     com.moneyflow.data.repository.BackupRepository(db, settings, clock), recurring, settings,
     com.moneyflow.data.repository.AutoBackupRepository(androidx.test.core.app.ApplicationProvider.getApplicationContext(),
-      com.moneyflow.data.repository.BackupRepository(db, settings, clock), settings, com.moneyflow.testing.PlainSecretStore, clock), bus)
+      com.moneyflow.data.repository.BackupRepository(db, settings, clock), settings, com.moneyflow.testing.PlainSecretStore, clock,
+      com.moneyflow.data.repository.DriveRepository(settings, com.moneyflow.testing.PlainSecretStore, clock)), bus)
   @Test fun backupLight() { val vm = backupVm(); shot("11_backup", false) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
   @Test fun backupDark() { val vm = backupVm(); shot("11_backup", true) { com.moneyflow.ui.settings.BackupScreen({}, viewModel = vm) } }
   @Test fun firstRunHome() {
@@ -216,7 +217,10 @@ class ScreenshotTest {
       val file = com.moneyflow.data.repository.BackupRepository(other, otherSettings, clock).createBackup("1234".toCharArray(), "2.0.0")
       repo.import(file, "1234".toCharArray(), "아내")
     }
-    val vm = com.moneyflow.ui.family.FamilyViewModel(androidx.test.core.app.ApplicationProvider.getApplicationContext(), repo, bus, clock)
+    val backups = com.moneyflow.data.repository.BackupRepository(db, settings, clock)
+    val sync = com.moneyflow.data.repository.FamilySyncRepository(
+      com.moneyflow.data.repository.DriveRepository(settings, com.moneyflow.testing.PlainSecretStore, clock), backups, repo, settings, com.moneyflow.testing.PlainSecretStore, clock)
+    val vm = com.moneyflow.ui.family.FamilyViewModel(androidx.test.core.app.ApplicationProvider.getApplicationContext(), repo, sync, settings, bus, clock)
     shot("20_family", false) { com.moneyflow.ui.family.FamilyScreen({}, viewModel = vm) }
     other.close()
   }

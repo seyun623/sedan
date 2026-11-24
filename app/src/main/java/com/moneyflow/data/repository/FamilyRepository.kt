@@ -75,7 +75,7 @@ class FamilyRepository @Inject constructor(
   val members: Flow<List<FamilyMemberEntity>> = dao.observeMembers()
 
   /** Opens a backup file (password-encrypted) and stores that person's income / expenses. */
-  suspend fun import(file: ByteArray, password: CharArray, name: String): FamilyImportResult {
+  suspend fun import(file: ByteArray, password: CharArray, name: String, keepExistingName: Boolean = false): FamilyImportResult {
     val content = withContext(Dispatchers.Default) { backups.readBackup(file, password) }
     val ownId = settings.installId()
     if (content.deviceId.isNotEmpty() && content.deviceId == ownId) {
@@ -87,8 +87,9 @@ class FamilyRepository @Inject constructor(
     val items = content.transactions.filter { it.type != TransactionType.TRANSFER }
     return db.withTransaction {
       val existing = dao.byDevice(deviceId)
+      val newName = if (keepExistingName && existing != null) existing.name else name.trim().ifEmpty { existing?.name ?: "가족" }
       val memberId = if (existing != null) {
-        dao.updateMember(existing.id, name.trim().ifEmpty { existing.name }, content.summary.createdAt, now)
+        dao.updateMember(existing.id, newName, content.summary.createdAt, now)
         dao.clearTransactions(existing.id)
         dao.clearGoals(existing.id)
         existing.id
@@ -107,7 +108,7 @@ class FamilyRepository @Inject constructor(
         )
       })
       FamilyImportResult(
-        FamilyMemberEntity(memberId, name.trim().ifEmpty { existing?.name ?: "가족" }, deviceId, content.summary.createdAt, now),
+        FamilyMemberEntity(memberId, newName, deviceId, content.summary.createdAt, now),
         items.size,
         updated = existing != null
       )

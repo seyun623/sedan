@@ -80,6 +80,8 @@ import javax.inject.Inject
 class FamilyViewModel @Inject constructor(
   @ApplicationContext private val context: Context,
   private val repo: FamilyRepository,
+  private val familySync: com.moneyflow.data.repository.FamilySyncRepository,
+  settingsRepo: com.moneyflow.data.repository.SettingsRepository,
   private val messages: UserMessageBus,
   clock: AppClock
 ) : ViewModel() {
@@ -92,6 +94,22 @@ class FamilyViewModel @Inject constructor(
   val members: StateFlow<List<FamilyMemberEntity>> = repo.members.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
   val sharedGoals: StateFlow<List<com.moneyflow.data.repository.SharedGoal>> =
     repo.sharedGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  val settings: StateFlow<com.moneyflow.data.repository.AppSettings?> =
+    settingsRepo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+  fun syncNow() = viewModelScope.launch {
+    if (_busy.value) return@launch
+    _busy.value = true
+    try {
+      val r = familySync.sync(forceUpload = true) ?: return@launch
+      messages.show(if (r.loaded.isEmpty()) "가족 기록이 최신이에요." else "${r.loaded.joinToString(", ")}님의 새 기록을 받았어요.")
+    } catch (e: Exception) {
+      _errors.send(e.message ?: "합산하지 못했어요. 인터넷 연결을 확인해 주세요.")
+    } finally {
+      _busy.value = false
+    }
+  }
 
   private val _busy = MutableStateFlow(false)
   val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -129,7 +147,8 @@ class FamilyViewModel @Inject constructor(
 
 /** 가족 합산: this phone + each family member's latest backup, month by month. */
 @Composable
-fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel()) {
+fun FamilyScreen(onBack: () -> Unit, onOpenDrive: () -> Unit = {}, viewModel: FamilyViewModel = hiltViewModel()) {
+  val appSettings by viewModel.settings.collectAsStateWithLifecycle()
   val month by viewModel.month.collectAsStateWithLifecycle()
   val summary by viewModel.summary.collectAsStateWithLifecycle()
   val members by viewModel.members.collectAsStateWithLifecycle()
@@ -167,6 +186,30 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
     }
 
     SettingsSection("가족 기록") {
+      val st = appSettings
+      if (st?.familySyncEnabled == true) {
+        SettingsItem(
+          title = "구글 드라이브로 자동 합산 중",
+          subtitle = (if (st.familySyncLastAt > 0) "마지막 합산 ${Formatters.formatDateTime(st.familySyncLastAt)}" else "곧 첫 합산을 해요") +
+            (st.familySyncError?.let { " · ⚠ 확인 필요" } ?: "") + " · 눌러서 지금 합산",
+          icon = Icons.Filled.FamilyRestroom,
+          enabled = !busy,
+          showChevron = false,
+          onClick = viewModel::syncNow,
+          modifier = Modifier.testTag("family_sync_status")
+        )
+        st.familySyncError?.let {
+          Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = AccentRed, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+      } else {
+        SettingsItem(
+          title = "구글 드라이브로 자동 합산",
+          subtitle = "가족 공유 폴더로 파일을 주고받지 않아도 자동으로 합쳐져요",
+          icon = Icons.Filled.FamilyRestroom,
+          onClick = onOpenDrive,
+          modifier = Modifier.testTag("family_sync_open")
+        )
+      }
       members.forEach { m ->
         SettingsItem(
           title = m.name,
@@ -189,7 +232,8 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
     SettingsSection("알아 두세요") {
       Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         listOf(
-          "서버 없이 백업 파일로 합쳐 봐요. 가족이 '백업 파일 보내기'로 보내 준 파일과 그 비밀번호가 필요해요.",
+          "구글 드라이브 자동 합산을 켜면 각자 기록이 바뀔 때마다 공유 폴더의 가족 파일이 새로 바뀌고, 몇 시간마다 서로의 기록을 받아 와요.",
+          "자동 합산 없이도 가족이 '백업 파일 보내기'로 보내 준 파일과 그 비밀번호로 직접 불러올 수 있어요.",
           "불러온 가족 기록은 보기 전용이에요. 이 휴대폰의 가계부·잔액에는 섞이지 않아요.",
           "가족 기록은 불러온 백업 시점까지예요. 같은 사람의 새 백업을 불러오면 바뀌어요.",
           "계좌 사이 이체는 빼고 수입·지출만 합쳐요."

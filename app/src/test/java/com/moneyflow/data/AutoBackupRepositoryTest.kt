@@ -45,7 +45,8 @@ class AutoBackupRepositoryTest {
     LedgerRepository(db, clock).addAccount(bank())
     settings = testSettingsRepository()
     backups = BackupRepository(db, settings, clock)
-    repo = AutoBackupRepository(androidx.test.core.app.ApplicationProvider.getApplicationContext(), backups, settings, PlainSecretStore, clock)
+    repo = AutoBackupRepository(androidx.test.core.app.ApplicationProvider.getApplicationContext(), backups, settings, PlainSecretStore, clock,
+      com.moneyflow.data.repository.DriveRepository(settings, PlainSecretStore, clock))
     repo.destinationFactory = { folder }
     Unit
   }

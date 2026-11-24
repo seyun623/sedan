@@ -29,6 +29,12 @@ import javax.inject.Inject
 
 data class AutoBackupUi(
   val enabled: Boolean = false,
+  /** Writing to one file in the shared Google Drive folder through the bot. */
+  val toDrive: Boolean = false,
+  /** Drive bot and folder are set up (Drive auto backup can be turned on). */
+  val driveReady: Boolean = false,
+  val driveFolderName: String? = null,
+  val driveFileName: String = "moneyflow-backup.mfbackup",
   val folderName: String? = null,
   val intervalDays: Int = 7,
   val lastAt: Long = 0L,
@@ -56,7 +62,14 @@ class BackupViewModel @Inject constructor(
   val autoState: StateFlow<AutoBackupUi> = settings.settings.map { s ->
     AutoBackupUi(
       enabled = s.autoBackupEnabled,
-      folderName = s.autoBackupFolder?.let { folderName(it) },
+      toDrive = s.autoBackupFolder?.let(com.moneyflow.data.repository.AutoBackupRepository::isDrive) == true,
+      driveReady = s.driveKeyEncrypted != null && s.driveFolderId != null,
+      driveFolderName = s.driveFolderName,
+      driveFileName = com.moneyflow.data.repository.AutoBackupRepository.driveFileNameFor(s.familySyncName ?: "나", settings.installId()),
+      folderName = s.autoBackupFolder?.let {
+        if (com.moneyflow.data.repository.AutoBackupRepository.isDrive(it)) "구글 드라이브 '${s.driveFolderName ?: "공유 폴더"}'의 ${it.removePrefix(com.moneyflow.data.repository.AutoBackupRepository.DRIVE_PREFIX)}"
+        else folderName(it)
+      },
       intervalDays = s.autoBackupIntervalDays,
       lastAt = s.autoBackupLastAt,
       error = s.autoBackupError
@@ -73,6 +86,18 @@ class BackupViewModel @Inject constructor(
     autoBackup.enable(tree.toString(), password, intervalDays)
     autoBackup.runIfDue(force = true)
     messages.show("자동 백업을 켰어요. 첫 백업을 저장했어요.")
+  }
+
+  /** Writes the first backup into the file the user just saved in the Drive folder, then lets the bot overwrite it. */
+  fun enableDriveAutoBackup(uri: Uri, password: String) = run {
+    val bytes = backups.createBackup(password.toCharArray(), BuildConfig.VERSION_NAME)
+    val name = withContext(Dispatchers.IO) {
+      context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } ?: error("파일을 저장할 수 없어요.")
+      context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    } ?: error("저장한 파일 이름을 알 수 없어요. 드라이브에 저장했는지 확인해 주세요.")
+    autoBackup.enableDrive(name, password, intervalDays = 1)
+    messages.show("드라이브 자동 백업을 켰어요. 첫 백업 '$name'을(를) 저장했어요.")
   }
 
   fun disableAutoBackup() = run {

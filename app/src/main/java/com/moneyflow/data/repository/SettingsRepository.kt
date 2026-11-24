@@ -79,6 +79,15 @@ data class AppSettings(
   val driveTestFileName: String? = null,
   /** Family monthly budget for the combined view (0 = not set). */
   val familyBudget: Long = 0L,
+  /** Family auto-sync through the Drive bot: my name, family password (Keystore-encrypted), my file in the folder. */
+  val familySyncName: String? = null,
+  val familySyncPasswordEncrypted: String? = null,
+  val familySyncFileName: String? = null,
+  val familySyncLastAt: Long = 0L,
+  val familySyncLastUploadAt: Long = 0L,
+  val familySyncError: String? = null,
+  /** Data changed since the last upload. */
+  val familySyncDirty: Boolean = true,
   /** Repeating-payment suggestions the user said are not 고정 거래. */
   val dismissedRecurringSuggestions: Set<String> = emptySet(),
   /** Card company pages to read automatically after login, by card site id. */
@@ -86,6 +95,9 @@ data class AppSettings(
   /** Show amounts on the home screen widget while app lock is on. */
   val widgetShowAmountsWhenLocked: Boolean = false
 ) {
+  val familySyncEnabled: Boolean get() =
+    familySyncPasswordEncrypted != null && familySyncFileName != null && driveKeyEncrypted != null && driveFolderId != null
+
   val autoBackupEnabled: Boolean get() = autoBackupFolder != null && autoBackupPasswordEncrypted != null
   val aiApiKeyEncrypted: String? get() = aiKeysEncrypted[aiProvider]
   val aiModel: String get() = aiModels[aiProvider]?.takeIf { it.isNotBlank() } ?: aiProvider.defaultModel
@@ -146,6 +158,14 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val DRIVE_FOLDER_ID = stringPreferencesKey("drive_folder_id")
     val DRIVE_FOLDER_NAME = stringPreferencesKey("drive_folder_name")
     val DRIVE_TEST_FILE = stringPreferencesKey("drive_test_file_name")
+    val FAMILY_SYNC_NAME = stringPreferencesKey("family_sync_name")
+    val FAMILY_SYNC_PW = stringPreferencesKey("family_sync_password_enc")
+    val FAMILY_SYNC_FILE = stringPreferencesKey("family_sync_file_name")
+    val FAMILY_SYNC_LAST = longPreferencesKey("family_sync_last_at")
+    val FAMILY_SYNC_LAST_UP = longPreferencesKey("family_sync_last_upload_at")
+    val FAMILY_SYNC_ERROR = stringPreferencesKey("family_sync_error")
+    val FAMILY_SYNC_DIRTY = booleanPreferencesKey("family_sync_dirty")
+    val FAMILY_SYNC_SEEN = stringPreferencesKey("family_sync_seen_json")
     val RECURRING_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("recurring_suggestions_dismissed")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
@@ -197,7 +217,14 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       driveBotEmail = p[Keys.DRIVE_BOT_EMAIL],
       driveFolderId = p[Keys.DRIVE_FOLDER_ID],
       driveFolderName = p[Keys.DRIVE_FOLDER_NAME],
-      driveTestFileName = p[Keys.DRIVE_TEST_FILE]
+      driveTestFileName = p[Keys.DRIVE_TEST_FILE],
+      familySyncName = p[Keys.FAMILY_SYNC_NAME],
+      familySyncPasswordEncrypted = p[Keys.FAMILY_SYNC_PW],
+      familySyncFileName = p[Keys.FAMILY_SYNC_FILE],
+      familySyncLastAt = p[Keys.FAMILY_SYNC_LAST] ?: 0L,
+      familySyncLastUploadAt = p[Keys.FAMILY_SYNC_LAST_UP] ?: 0L,
+      familySyncError = p[Keys.FAMILY_SYNC_ERROR],
+      familySyncDirty = p[Keys.FAMILY_SYNC_DIRTY] ?: true
     )
   }
 
@@ -333,6 +360,43 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   }
 
   suspend fun setDriveTestFile(name: String) = store.edit { it[Keys.DRIVE_TEST_FILE] = name }
+
+  suspend fun setFamilySync(name: String, passwordEncrypted: String) = store.edit {
+    it[Keys.FAMILY_SYNC_NAME] = name
+    it[Keys.FAMILY_SYNC_PW] = passwordEncrypted
+    it.remove(Keys.FAMILY_SYNC_ERROR)
+  }
+
+  suspend fun setFamilySyncFile(name: String, uploadedAt: Long) = store.edit {
+    it[Keys.FAMILY_SYNC_FILE] = name
+    it[Keys.FAMILY_SYNC_LAST_UP] = uploadedAt
+    it[Keys.FAMILY_SYNC_DIRTY] = false
+    it.remove(Keys.FAMILY_SYNC_ERROR)
+  }
+
+  suspend fun clearFamilySync() = store.edit {
+    listOf(Keys.FAMILY_SYNC_PW, Keys.FAMILY_SYNC_FILE, Keys.FAMILY_SYNC_ERROR, Keys.FAMILY_SYNC_SEEN).forEach { k -> it.remove(k) }
+    it.remove(Keys.FAMILY_SYNC_LAST); it.remove(Keys.FAMILY_SYNC_LAST_UP)
+  }
+
+  suspend fun setFamilySyncDirty(dirty: Boolean) = store.edit { it[Keys.FAMILY_SYNC_DIRTY] = dirty }
+
+  /** Result of a sync run; [uploadedAt] non-null when this phone's file was written. */
+  suspend fun setFamilySyncResult(at: Long, uploadedAt: Long?, error: String?) = store.edit {
+    it[Keys.FAMILY_SYNC_LAST] = at
+    if (uploadedAt != null) { it[Keys.FAMILY_SYNC_LAST_UP] = uploadedAt; it[Keys.FAMILY_SYNC_DIRTY] = false }
+    if (error == null) it.remove(Keys.FAMILY_SYNC_ERROR) else it[Keys.FAMILY_SYNC_ERROR] = error
+  }
+
+  /** Drive file id → modified time of family files already loaded. */
+  suspend fun familySyncSeen(): Map<String, String> = runCatching {
+    val o = org.json.JSONObject(store.data.first()[Keys.FAMILY_SYNC_SEEN] ?: "{}")
+    o.keys().asSequence().associateWith { o.getString(it) }
+  }.getOrDefault(emptyMap())
+
+  suspend fun setFamilySyncSeen(seen: Map<String, String>) = store.edit {
+    it[Keys.FAMILY_SYNC_SEEN] = org.json.JSONObject(seen as Map<*, *>).toString()
+  }
 
   suspend fun setFamilyBudget(amount: Long) = store.edit { it[Keys.FAMILY_BUDGET] = amount }
 

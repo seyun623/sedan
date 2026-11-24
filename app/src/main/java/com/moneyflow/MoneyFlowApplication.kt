@@ -49,13 +49,17 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     com.moneyflow.work.CardAlertWorker.schedule(this)
     ReminderWorker.schedule(this)
     AutoBackupWorker.schedule(this)
+    com.moneyflow.work.FamilySyncWorker.schedule(this)
 
     watchWidgetPrivacy()
     // When records change (typed in, auto-captured, imported), check budget alerts and the widget soon.
     appScope.launch {
       try {
-        db.get().transactionDao().observeAll()
-          .drop(1)
+        val d = db.get()
+        kotlinx.coroutines.flow.merge(
+          d.transactionDao().observeAll().drop(1).map { },
+          d.savingGoalDao().observeAll().drop(1).map { }
+        )
           .debounce(3_000)
           .collect { onDataChanged() }
       } catch (e: kotlinx.coroutines.CancellationException) {
@@ -81,6 +85,11 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
 
   private suspend fun onDataChanged() {
     runCatching { com.moneyflow.widget.SpendingWidget.updateAll(this) }
+    runCatching {
+      val s = settings.get()
+      s.setFamilySyncDirty(true)
+      if (s.current().familySyncEnabled) com.moneyflow.work.FamilySyncWorker.runSoon(this)
+    }
     WorkManager.getInstance(this).enqueueUniqueWork(
       "reminders-now", ExistingWorkPolicy.REPLACE,
       OneTimeWorkRequestBuilder<ReminderWorker>().setInitialDelay(5, TimeUnit.SECONDS).build()

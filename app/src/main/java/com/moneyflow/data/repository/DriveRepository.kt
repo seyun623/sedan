@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+class DriveFileMissingException(message: String) : Exception(message)
+
 /** One line of the connection test. */
 data class DriveCheck(val title: String, val ok: Boolean, val detail: String)
 
@@ -52,6 +54,23 @@ class DriveRepository @Inject constructor(
   suspend fun sharedFolders(): List<DriveFile> = withContext(Dispatchers.IO) { client().sharedFolders() }
 
   suspend fun chooseFolder(folder: DriveFile) = settings.setDriveFolder(folder.id, folder.name)
+
+  private suspend fun folderId(): String =
+    settings.current().driveFolderId ?: throw IllegalStateException("구글 드라이브 연결에서 공유된 폴더를 먼저 골라 주세요.")
+
+  /** Files in the chosen shared folder. */
+  suspend fun folderFiles(): List<DriveFile> = withContext(Dispatchers.IO) { client().filesIn(folderId()) }
+
+  suspend fun download(fileId: String): ByteArray = withContext(Dispatchers.IO) { client().download(fileId) }
+
+  suspend fun overwrite(fileId: String, bytes: ByteArray) = withContext(Dispatchers.IO) { client().update(fileId, bytes) }
+
+  /** Overwrites the file called [name] in the folder (made earlier on the phone; the bot can't create files). */
+  suspend fun overwriteByName(name: String, bytes: ByteArray) {
+    val file = folderFiles().firstOrNull { it.name == name }
+      ?: throw DriveFileMissingException("드라이브 '${settings.current().driveFolderName ?: "공유"}' 폴더에서 '$name' 파일을 찾지 못했어요. 파일을 지웠다면 다시 만들어 주세요. (방금 만들었다면 1~2분 뒤 다시 시도)")
+    overwrite(file.id, bytes)
+  }
 
   /**
    * The connection test: sign in as the bot, list the folder, read the test file the user made,

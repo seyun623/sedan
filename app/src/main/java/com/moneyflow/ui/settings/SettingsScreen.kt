@@ -171,14 +171,14 @@ fun SettingsScreen(
     SettingsSection("가족") {
       SettingsItem(
         title = "가족 합산 보기",
-        subtitle = "가족의 백업 파일을 불러와 함께 쓴 돈을 봐요 (서버 없음)",
+        subtitle = "가족이 함께 쓴 돈을 봐요 (드라이브 자동 합산 또는 백업 파일)",
         icon = Icons.Filled.FamilyRestroom,
         onClick = onOpenFamily,
         modifier = Modifier.testTag("settings_family")
       )
       SettingsItem(
-        title = "구글 드라이브 연결 (시험)",
-        subtitle = "가족 자동 합산·드라이브 자동 백업 준비: 봇 계정 연결을 시험해요",
+        title = "구글 드라이브 · 가족 합산",
+        subtitle = "봇 계정 연결, 가족 자동 합산 설정",
         icon = Icons.Filled.FamilyRestroom,
         onClick = onOpenDrive,
         modifier = Modifier.testTag("settings_drive")
