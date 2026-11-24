@@ -69,6 +69,8 @@ data class AppSettings(
   val monthlySummaryEnabled: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
+  /** Card company pages to read automatically after login, by card site id. */
+  val cardSavedPages: Map<String, List<com.moneyflow.domain.cardimport.SavedPage>> = emptyMap(),
   /** Show amounts on the home screen widget while app lock is on. */
   val widgetShowAmountsWhenLocked: Boolean = false
 ) {
@@ -125,6 +127,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     val INSTALL_ID = stringPreferencesKey("install_id")
+    val CARD_SAVED_PAGES = stringPreferencesKey("card_saved_pages_json")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
@@ -167,7 +170,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       budgetAlertsEnabled = p[Keys.BUDGET_ALERTS] ?: false,
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
-      splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false
+      splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
+      cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES])
     )
   }
 
@@ -279,6 +283,13 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     } else {
       it[Keys.AUTO_BACKUP_ERROR] = error
     }
+  }
+
+  /** Replaces the remembered pages of one card site. */
+  suspend fun setCardSavedPages(siteId: String, pages: List<com.moneyflow.domain.cardimport.SavedPage>) = store.edit {
+    val map = com.moneyflow.domain.cardimport.SavedPages.decode(it[Keys.CARD_SAVED_PAGES]).toMutableMap()
+    map[siteId] = pages
+    it[Keys.CARD_SAVED_PAGES] = com.moneyflow.domain.cardimport.SavedPages.encode(map)
   }
 
   suspend fun setSplitInstallments(enabled: Boolean) = store.edit { it[Keys.SPLIT_INSTALLMENTS] = enabled }

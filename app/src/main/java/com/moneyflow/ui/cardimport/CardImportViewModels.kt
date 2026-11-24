@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +37,7 @@ const val ARG_SITE_ID = "siteId"
 sealed interface BrowserEvent {
   data object OpenPreview : BrowserEvent
   data class Error(val message: String) : BrowserEvent
+  data class Info(val message: String) : BrowserEvent
 }
 
 @HiltViewModel
@@ -43,7 +46,8 @@ class CardBrowserViewModel @Inject constructor(
   private val ai: AiService,
   private val aiReader: AiStatementReader,
   private val session: CardImportSession,
-  private val clock: AppClock
+  private val clock: AppClock,
+  private val settings: com.moneyflow.data.repository.SettingsRepository
 ) : ViewModel() {
   val site: CardSite = CardSites.byId(checkNotNull(savedState.get<String>(ARG_SITE_ID))) ?: CardSites.all.first()
 
@@ -59,6 +63,53 @@ class CardBrowserViewModel @Inject constructor(
 
   init {
     viewModelScope.launch { _aiLabel.value = if (ai.isReady()) ai.providerLabel() else null }
+  }
+
+  /** Pages of this card company read automatically after login ("이 화면 기억하기"). */
+  val savedPages: StateFlow<List<com.moneyflow.domain.cardimport.SavedPage>> = settings.settings
+    .map { it.cardSavedPages[site.id].orEmpty() }
+    .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+  /** Remembers the page now shown; returns why it can't, or null when saved. */
+  fun savePage(url: String?, title: String) = viewModelScope.launch {
+    val current = settings.current().cardSavedPages[site.id].orEmpty()
+    val problem = com.moneyflow.domain.cardimport.SavedPages.problem(url, site.url, current)
+    if (problem != null) { _events.send(BrowserEvent.Error(problem)); return@launch }
+    val page = com.moneyflow.domain.cardimport.SavedPage(
+      com.moneyflow.domain.cardimport.SavedPages.sanitize(url!!), title.ifBlank { "화면 ${current.size + 1}" }.take(40), clock.nowMillis()
+    )
+    settings.setCardSavedPages(site.id, current + page)
+    _events.send(BrowserEvent.Info("'${page.title}' 화면을 기억했어요. 다음부터 로그인한 뒤 '기억한 화면 읽기'를 누르면 자동으로 읽어요."))
+  }
+
+  fun removePage(page: com.moneyflow.domain.cardimport.SavedPage) = viewModelScope.launch {
+    settings.setCardSavedPages(site.id, settings.current().cardSavedPages[site.id].orEmpty().filter { it.url != page.url })
+  }
+
+  /** Reads the texts of several remembered pages and opens one combined preview. */
+  fun readMany(pages: List<Pair<com.moneyflow.domain.cardimport.SavedPage, String>>, useAi: Boolean) = viewModelScope.launch {
+    if (_busy.value || pages.isEmpty()) return@launch
+    _busy.value = true
+    try {
+      val readings = pages.map { (_, text) ->
+        if (useAi) aiReader.read(text, clock.today())
+        else withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(text) }
+      }
+      val readBy = if (useAi) readings.first().readBy else StatementTextParser.READ_LOCAL
+      val merged = com.moneyflow.domain.cardimport.SavedPages.merge(readings, readBy)
+      val empty = pages.indices.filter { readings[it].isEmpty }.map { pages[it].first.title }
+      if (merged.isEmpty) {
+        _events.send(BrowserEvent.Error("기억한 화면에서 내역을 찾지 못했어요. 화면이 바뀌었거나 다시 열 수 없는 화면일 수 있어요. 화면을 직접 열고 '이 화면 가져오기'를 눌러 보세요."))
+      } else {
+        session.put(site, merged)
+        if (empty.isNotEmpty()) _events.send(BrowserEvent.Info("${empty.joinToString(", ")} 화면에서는 내역을 찾지 못했어요."))
+        _events.send(BrowserEvent.OpenPreview)
+      }
+    } catch (e: Exception) {
+      _events.send(BrowserEvent.Error(e.message ?: "화면을 읽지 못했어요."))
+    } finally {
+      _busy.value = false
+    }
   }
 
   fun read(screenText: String, useAi: Boolean) = viewModelScope.launch {

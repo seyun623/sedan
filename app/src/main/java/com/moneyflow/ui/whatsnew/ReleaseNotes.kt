@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.1.0", "2026.11",
+      listOf(
+        "카드사 화면 기억하기: 카드사에서 가져오기로 이용내역·실적·혜택 화면을 연 뒤 '이 화면 기억하기'를 눌러 두세요",
+        "다음부터는 로그인만 하고 '기억한 화면 읽기'를 누르면 기억한 화면을 차례로 열어 한 번에 읽어요 (같은 결제는 한 번만)",
+        "로그인이 풀렸으면 알려 드려요. 아이디·비밀번호는 저장하지 않아요. 기억한 화면은 위쪽 책갈피 버튼에서 지울 수 있어요"
+      )
+    ),
+    ReleaseNote(
       "2.0.1", "2026.11",
       listOf(
         "신한카드처럼 가맹점 이름이 날짜 위에 있는 화면도 '기기에서 읽기'로 가맹점을 제대로 읽어요 ('자동납부'로 나오던 문제)",

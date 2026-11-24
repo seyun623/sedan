@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Refresh
@@ -84,7 +85,12 @@ import com.moneyflow.ui.theme.Gray900
 import com.moneyflow.ui.theme.OnBrand
 import com.moneyflow.ui.theme.TossBlue
 import com.moneyflow.util.Formatters
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.json.JSONArray
+
+/** Wait after a remembered page has loaded so its script-filled lists appear. */
+private const val AUTO_SETTLE_MS = 2_500L
 
 // ---------------------------------------------------------------------------------------------
 // 1. Card company list
@@ -118,6 +124,7 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
           "앱 안에서 카드사 홈페이지가 열리면 직접 로그인하세요. 카드사 앱 승인·인증서도 평소처럼 쓰면 돼요.",
           "이용내역·명세서·실적 화면을 연 뒤 아래 '이 화면 가져오기'를 누르면 내용을 읽어 미리보기를 보여 줘요.",
           "카드 혜택 안내 화면을 'AI로 읽기'로 가져오면 혜택(할인율·한도·실적 조건)을 한 번에 등록할 수 있어요.",
+          "자주 보는 화면은 '이 화면 기억하기'를 눌러 두세요. 다음부터는 로그인만 하고 '기억한 화면 읽기'를 누르면 차례로 열어 한 번에 읽어요.",
           "미리보기에서 확인한 내역만 가계부에 추가돼요. 이미 있는 내역은 '중복'으로 표시하고 빼 둬요.",
           "아이디·비밀번호는 머니플로우에 저장되지 않아요. 화면을 닫으면 로그인 기록(쿠키 등)을 지워요.",
           "'기기에서 읽기'는 내용을 밖으로 보내지 않아요. 'AI로 읽기'는 화면 글자(카드 이용내역)가 AI 설정에서 고른 서비스로 전송돼요."
@@ -147,6 +154,30 @@ private const val READ_TEXT_JS = """
 })()
 """
 
+/** Page text plus whether a login form is showing (the session ended or the page needs login). */
+private const val READ_PAGE_JS = """
+(function(){
+  function t(d){ try{ var s = d.body ? d.body.innerText : '';
+    var f = d.querySelectorAll('iframe,frame');
+    for (var i=0;i<f.length;i++){ try{ s += '\n' + t(f[i].contentDocument); }catch(e){} }
+    return s; }catch(e){ return ''; } }
+  function pw(d){ try{ var p = d.querySelectorAll('input[type=password]');
+    for (var i=0;i<p.length;i++){ if (p[i].offsetParent !== null) return true; }
+    var f = d.querySelectorAll('iframe,frame');
+    for (var j=0;j<f.length;j++){ try{ if (pw(f[j].contentDocument)) return true; }catch(e){} }
+    return false; }catch(e){ return false; } }
+  return JSON.stringify({ t: t(document), login: pw(document) });
+})()
+"""
+
+/** Runs [js] and returns its string result. */
+private suspend fun WebView.evaluate(js: String): String = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+  evaluateJavascript(js) { raw ->
+    val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
+    if (cont.isActive) cont.resumeWith(Result.success(text))
+  }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -164,12 +195,53 @@ fun CardBrowserScreen(
   var pendingText by remember { mutableStateOf<String?>(null) }
   var error by rememberSaveable { mutableStateOf<String?>(null) }
   var aiConsent by remember { mutableStateOf<String?>(null) }
+  val savedPages by viewModel.savedPages.collectAsStateWithLifecycle()
+  /** Asking how to read the remembered pages (device / AI). */
+  var autoAsk by remember { mutableStateOf(false) }
+  var autoAiConsent by remember { mutableStateOf(false) }
+  /** "2/3" while touring the remembered pages; null when not running. */
+  var autoProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+  var autoJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+  var managePages by remember { mutableStateOf(false) }
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
 
   LaunchedEffect(viewModel) {
     viewModel.events.collect { e ->
       when (e) {
         BrowserEvent.OpenPreview -> onOpenPreview()
         is BrowserEvent.Error -> error = e.message
+        is BrowserEvent.Info -> error = e.message
+      }
+    }
+  }
+
+  /** Opens every remembered page in turn, reads it, then hands all texts to the view model. */
+  fun runSavedPages(useAi: Boolean) {
+    val wv = webView ?: return
+    val pages = savedPages
+    autoJob = scope.launch {
+      val texts = mutableListOf<Pair<com.moneyflow.domain.cardimport.SavedPage, String>>()
+      try {
+        for ((n, page) in pages.withIndex()) {
+          autoProgress = n + 1 to pages.size
+          loading = true
+          wv.loadUrl(page.url)
+          kotlinx.coroutines.withTimeoutOrNull(25_000) {
+            androidx.compose.runtime.snapshotFlow { loading }.first { !it }
+          }
+          // Card sites fill their lists with scripts after the page has loaded.
+          kotlinx.coroutines.delay(AUTO_SETTLE_MS)
+          val o = runCatching { org.json.JSONObject(wv.evaluate(READ_PAGE_JS)) }.getOrNull()
+          if (o?.optBoolean("login") == true) {
+            error = "로그인이 필요해요. 이 화면에서 로그인한 뒤 '기억한 화면 읽기'를 다시 눌러 주세요."
+            return@launch
+          }
+          o?.optString("t")?.takeIf { it.isNotBlank() }?.let { texts += page to it }
+        }
+        if (texts.isEmpty()) error = "기억한 화면을 열지 못했어요. 로그인 상태를 확인해 주세요."
+        else viewModel.readMany(texts, useAi)
+      } finally {
+        autoProgress = null
       }
     }
   }
@@ -211,6 +283,9 @@ fun CardBrowserScreen(
           }
         },
         actions = {
+          if (savedPages.isNotEmpty()) {
+            IconButton(onClick = { managePages = true }) { Icon(Icons.Filled.Bookmarks, contentDescription = "기억한 화면") }
+          }
           IconButton(onClick = { webView?.reload() }) { Icon(Icons.Filled.Refresh, contentDescription = "새로고침") }
           IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "로그아웃하고 닫기") }
         },
@@ -221,26 +296,64 @@ fun CardBrowserScreen(
     bottomBar = {
       Surface(color = CardSurface, shadowElevation = 6.dp) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-          if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp), color = TossBlue)
-          Button(
-            onClick = {
-              webView?.evaluateJavascript(READ_TEXT_JS) { raw ->
-                val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
-                if (text.isBlank()) error = "화면 내용을 읽지 못했어요. 페이지가 다 열린 뒤 다시 시도해 주세요."
-                else pendingText = text
-              }
-            },
-            enabled = !busy && !loading,
-            modifier = Modifier.fillMaxWidth().height(52.dp).testTag("card_read_button"),
-            colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
-            shape = RoundedCornerShape(14.dp)
-          ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
-          Text(
-            "이용내역·명세서·실적·혜택 화면에서 눌러 주세요",
-            style = MaterialTheme.typography.labelSmall,
-            color = Gray600,
-            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
-          )
+          if (busy || autoProgress != null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp), color = TossBlue)
+          val readThisPage: () -> Unit = {
+            webView?.evaluateJavascript(READ_TEXT_JS) { raw ->
+              val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
+              if (text.isBlank()) error = "화면 내용을 읽지 못했어요. 페이지가 다 열린 뒤 다시 시도해 주세요."
+              else pendingText = text
+            }
+          }
+          val progress = autoProgress
+          if (progress != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+              Text("기억한 화면 읽는 중 (${progress.first}/${progress.second})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+              TextButton(onClick = { autoJob?.cancel() }) { Text("멈추기") }
+            }
+          } else if (savedPages.isNotEmpty()) {
+            Button(
+              onClick = { autoAsk = true },
+              enabled = !busy && !loading,
+              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("card_auto_read_button"),
+              colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+              shape = RoundedCornerShape(14.dp)
+            ) { Text("기억한 화면 ${savedPages.size}개 읽기", fontWeight = FontWeight.Bold) }
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              OutlinedButton(onClick = readThisPage, enabled = !busy && !loading, modifier = Modifier.weight(1f).testTag("card_read_button")) { Text("이 화면 가져오기") }
+              OutlinedButton(
+                onClick = { viewModel.savePage(webView?.url, webView?.title.orEmpty()) },
+                enabled = !busy && !loading,
+                modifier = Modifier.weight(1f).testTag("card_save_page_button")
+              ) { Text("이 화면 기억하기") }
+            }
+            Text(
+              "로그인한 뒤 누르면 기억한 화면을 차례로 열어 읽어요",
+              style = MaterialTheme.typography.labelSmall,
+              color = Gray600,
+              modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
+            )
+          } else {
+            Button(
+              onClick = readThisPage,
+              enabled = !busy && !loading,
+              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("card_read_button"),
+              colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+              shape = RoundedCornerShape(14.dp)
+            ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+              Text(
+                "이용내역·명세서·실적·혜택 화면에서 눌러 주세요",
+                style = MaterialTheme.typography.labelSmall,
+                color = Gray600,
+                modifier = Modifier.weight(1f)
+              )
+              TextButton(
+                onClick = { viewModel.savePage(webView?.url, webView?.title.orEmpty()) },
+                enabled = !busy && !loading,
+                modifier = Modifier.testTag("card_save_page_button")
+              ) { Text("이 화면 기억하기") }
+            }
+          }
         }
       }
     }
@@ -318,6 +431,58 @@ fun CardBrowserScreen(
       text = { Text("지금 화면의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요.") },
       confirmButton = { TextButton(onClick = { aiConsent = null; viewModel.read(text, useAi = true) }) { Text("보내고 읽기", fontWeight = FontWeight.Bold) } },
       dismissButton = { TextButton(onClick = { aiConsent = null }) { Text("취소") } }
+    )
+  }
+
+  if (autoAsk) {
+    AlertDialog(
+      onDismissRequest = { autoAsk = false },
+      title = { Text("기억한 화면 ${savedPages.size}개를 읽을까요?", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("로그인한 상태에서 기억한 화면을 차례로 열어 읽고, 한 번에 미리보기로 보여 드려요.", style = MaterialTheme.typography.bodySmall)
+          Text(
+            if (aiLabel != null) "AI로 읽기: 각 화면의 글자를 ${aiLabel}(으)로 보내 정확하게 읽어요."
+            else "AI로 읽기는 설정 → AI 설정에서 AI를 켜면 쓸 수 있어요.",
+            style = MaterialTheme.typography.bodySmall, color = Gray600
+          )
+        }
+      },
+      confirmButton = { TextButton(onClick = { autoAsk = false; runSavedPages(useAi = false) }) { Text("기기에서 읽기", fontWeight = FontWeight.Bold) } },
+      dismissButton = { if (aiLabel != null) TextButton(onClick = { autoAsk = false; autoAiConsent = true }) { Text("AI로 읽기") } }
+    )
+  }
+
+  if (autoAiConsent) {
+    AlertDialog(
+      onDismissRequest = { autoAiConsent = false },
+      title = { Text("카드 이용내역을 AI로 보낼까요?", fontWeight = FontWeight.Bold) },
+      text = { Text("기억한 화면 ${savedPages.size}개의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요.") },
+      confirmButton = { TextButton(onClick = { autoAiConsent = false; runSavedPages(useAi = true) }) { Text("보내고 읽기", fontWeight = FontWeight.Bold) } },
+      dismissButton = { TextButton(onClick = { autoAiConsent = false }) { Text("취소") } }
+    )
+  }
+
+  if (managePages) {
+    AlertDialog(
+      onDismissRequest = { managePages = false },
+      title = { Text("기억한 화면", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          if (savedPages.isEmpty()) Text("기억한 화면이 없어요.", color = Gray600)
+          savedPages.forEach { p ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) {
+                Text(p.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(p.url.substringAfter("://").take(60), style = MaterialTheme.typography.labelSmall, color = Gray600, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
+              TextButton(onClick = { viewModel.removePage(p) }) { Text("지우기", color = AccentRed) }
+            }
+          }
+          Text("화면은 카드사마다 ${com.moneyflow.domain.cardimport.SavedPages.MAX_PER_SITE}개까지 기억해요. 아이디·비밀번호는 기억하지 않아요.", style = MaterialTheme.typography.labelSmall, color = Gray600)
+        }
+      },
+      confirmButton = { TextButton(onClick = { managePages = false }) { Text("닫기") } }
     )
   }
 
