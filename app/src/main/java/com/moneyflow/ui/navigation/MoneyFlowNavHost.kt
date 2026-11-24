@@ -174,9 +174,11 @@ fun MoneyFlowNavHost(
           onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) },
           onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) },
           onOpenRules = { navController.navigate(Routes.RULES) },
-          onOpenFamily = { navController.navigate(Routes.FAMILY) }
+          onOpenFamily = { navController.navigate(Routes.FAMILY) },
+          onOpenDrive = { navController.navigate(Routes.DRIVE) }
         )
       }
+      composable(Routes.DRIVE) { com.moneyflow.ui.settings.DriveSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.FAMILY) { com.moneyflow.ui.family.FamilyScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.RULES) { com.moneyflow.ui.settings.RulesScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.SECURITY) { SecuritySettingsScreen(onBack = { navController.popBackStack() }) }

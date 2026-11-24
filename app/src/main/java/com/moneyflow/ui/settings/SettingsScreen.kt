@@ -41,6 +41,7 @@ fun SettingsScreen(
   onOpenReleaseHistory: () -> Unit = {},
   onOpenRules: () -> Unit = {},
   onOpenFamily: () -> Unit = {},
+  onOpenDrive: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -174,6 +175,13 @@ fun SettingsScreen(
         icon = Icons.Filled.FamilyRestroom,
         onClick = onOpenFamily,
         modifier = Modifier.testTag("settings_family")
+      )
+      SettingsItem(
+        title = "구글 드라이브 연결 (시험)",
+        subtitle = "가족 자동 합산·드라이브 자동 백업 준비: 봇 계정 연결을 시험해요",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenDrive,
+        modifier = Modifier.testTag("settings_drive")
       )
     }
 

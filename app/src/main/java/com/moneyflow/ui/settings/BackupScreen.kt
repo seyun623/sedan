@@ -144,7 +144,7 @@ fun BackupScreen(
       SettingsSwitchItem(
         title = "자동 백업",
         subtitle = if (auto.enabled) "${auto.folderName ?: "선택한 폴더"}에 ${if (auto.intervalDays == 1) "매일" else "매주"} 저장해요 (최근 ${com.moneyflow.data.repository.AutoBackupRepository.KEEP}개 보관)"
-          else "고른 폴더(휴대폰 저장공간, 구글 드라이브 등)에 백업 파일을 자동으로 저장해요",
+          else "휴대폰 안의 고른 폴더에 백업 파일을 자동으로 저장해요",
         icon = Icons.Filled.Backup,
         checked = auto.enabled,
         enabled = !busy,
@@ -194,7 +194,7 @@ fun BackupScreen(
           "백업 파일은 비밀번호로 암호화돼요. 비밀번호를 잊으면 아무도 열 수 없어요.",
           "계좌, 거래, 예산, 저축 목표, 고정 거래가 모두 들어가요. 앱 잠금 PIN과 화면 설정은 들어가지 않아요.",
           "휴대폰을 바꾸거나 초기화하기 전에 꼭 백업해 두세요. 앱을 지우면 기록도 함께 지워져요.",
-          "자동 백업은 휴대폰 안 보안 영역에 백업 비밀번호를 암호화해 두고 정해진 주기에 저장해요. 폴더는 구글 드라이브를 고르면 휴대폰을 잃어도 안전해요.",
+          "자동 백업은 휴대폰 안 보안 영역에 백업 비밀번호를 암호화해 두고 정해진 주기에 저장해요. 구글 드라이브는 이 폴더 선택 화면을 지원하지 않아서, 드라이브 자동 백업은 '구글 드라이브 연결'로 준비 중이에요. 그전까지는 가끔 '백업 파일로 저장'에서 드라이브를 골라 저장해 두세요.",
           "2주 넘게 백업하지 않으면 알려 드려요. (설정 → 알림에서 끌 수 있어요)"
         ).forEach {
           Text("• $it", style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(vertical = 3.dp))
@@ -206,7 +206,7 @@ fun BackupScreen(
   passwordPurpose?.let { purpose ->
     BackupPasswordDialog(
       confirm = purpose != PasswordPurpose.OPEN,
-      note = if (purpose == PasswordPurpose.AUTO) "다음 화면에서 백업 파일을 저장할 폴더를 골라 주세요. 구글 드라이브를 고르면 휴대폰을 잃어도 복원할 수 있어요." else null,
+      note = if (purpose == PasswordPurpose.AUTO) "다음 화면에서 백업 파일을 저장할 휴대폰 안 폴더를 골라 주세요. (구글 드라이브는 이 화면에 나오지 않아요)" else null,
       onDismiss = { passwordPurpose = null; openedUri = null },
       onSubmit = { pw ->
         passwordPurpose = null

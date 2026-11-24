@@ -69,6 +69,14 @@ data class AppSettings(
   val monthlySummaryEnabled: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
+  /** Google Drive bot (service account) key, encrypted with the Keystore. */
+  val driveKeyEncrypted: String? = null,
+  val driveBotEmail: String? = null,
+  /** The family folder shared with the bot. */
+  val driveFolderId: String? = null,
+  val driveFolderName: String? = null,
+  /** Name of the file made for the connection test. */
+  val driveTestFileName: String? = null,
   /** Family monthly budget for the combined view (0 = not set). */
   val familyBudget: Long = 0L,
   /** Repeating-payment suggestions the user said are not 고정 거래. */
@@ -133,6 +141,11 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val INSTALL_ID = stringPreferencesKey("install_id")
     val CARD_SAVED_PAGES = stringPreferencesKey("card_saved_pages_json")
     val FAMILY_BUDGET = longPreferencesKey("family_budget")
+    val DRIVE_KEY = stringPreferencesKey("drive_bot_key_enc")
+    val DRIVE_BOT_EMAIL = stringPreferencesKey("drive_bot_email")
+    val DRIVE_FOLDER_ID = stringPreferencesKey("drive_folder_id")
+    val DRIVE_FOLDER_NAME = stringPreferencesKey("drive_folder_name")
+    val DRIVE_TEST_FILE = stringPreferencesKey("drive_test_file_name")
     val RECURRING_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("recurring_suggestions_dismissed")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
@@ -179,7 +192,12 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
       cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
       dismissedRecurringSuggestions = p[Keys.RECURRING_DISMISSED] ?: emptySet(),
-      familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L
+      familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L,
+      driveKeyEncrypted = p[Keys.DRIVE_KEY],
+      driveBotEmail = p[Keys.DRIVE_BOT_EMAIL],
+      driveFolderId = p[Keys.DRIVE_FOLDER_ID],
+      driveFolderName = p[Keys.DRIVE_FOLDER_NAME],
+      driveTestFileName = p[Keys.DRIVE_TEST_FILE]
     )
   }
 
@@ -299,6 +317,22 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     map[siteId] = pages
     it[Keys.CARD_SAVED_PAGES] = com.moneyflow.domain.cardimport.SavedPages.encode(map)
   }
+
+  suspend fun setDriveKey(encrypted: String?, botEmail: String?) = store.edit {
+    if (encrypted == null) {
+      it.remove(Keys.DRIVE_KEY); it.remove(Keys.DRIVE_BOT_EMAIL); it.remove(Keys.DRIVE_FOLDER_ID); it.remove(Keys.DRIVE_FOLDER_NAME)
+    } else {
+      it[Keys.DRIVE_KEY] = encrypted
+      if (botEmail != null) it[Keys.DRIVE_BOT_EMAIL] = botEmail
+    }
+  }
+
+  suspend fun setDriveFolder(id: String, name: String) = store.edit {
+    it[Keys.DRIVE_FOLDER_ID] = id
+    it[Keys.DRIVE_FOLDER_NAME] = name
+  }
+
+  suspend fun setDriveTestFile(name: String) = store.edit { it[Keys.DRIVE_TEST_FILE] = name }
 
   suspend fun setFamilyBudget(amount: Long) = store.edit { it[Keys.FAMILY_BUDGET] = amount }
 

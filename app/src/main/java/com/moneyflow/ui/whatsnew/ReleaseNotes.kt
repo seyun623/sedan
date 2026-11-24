@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.4.0", "2026.11",
+      listOf(
+        "설정 → 구글 드라이브 연결 (시험): 가족 자동 합산·드라이브 자동 백업을 위한 봇 계정 연결을 시험해요",
+        "자동 백업 안내를 바로잡았어요: 구글 드라이브는 폴더 선택 화면에 나오지 않아요 (드라이브 자동 백업은 다음 업데이트에서)"
+      )
+    ),
+    ReleaseNote(
       "2.3.0", "2026.11",
       listOf(
         "가족 합산 → 함께 모으는 목표: 가족이 각자 같은 이름의 저축 목표(예: 가족 여행)를 만들면 함께 모은 금액과 사람별 금액을 보여 줘요",

@@ -26,6 +26,7 @@ object Routes {
   const val RELEASE_HISTORY = "settings/release-history"
   const val RULES = "settings/rules"
   const val FAMILY = "family"
+  const val DRIVE = "settings/drive"
   const val CARD_IMPORT = "card-import"
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"
