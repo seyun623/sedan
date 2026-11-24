@@ -32,6 +32,7 @@ class FamilySyncWorker @AssistedInject constructor(
   } catch (e: IOException) {
     if (runAttemptCount < 3) Result.retry() else Result.success()
   } catch (e: Exception) {
+    com.moneyflow.util.ProblemLog.record("가족 자동 합산", e)
     // Recorded for the family / Drive screens; the periodic run tries again.
     Result.success()
   }

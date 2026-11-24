@@ -119,6 +119,13 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
   }
 }
 
+/** v7 -> v8: card payment day on accounts (payment reminders). */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `paymentDay` INTEGER NOT NULL DEFAULT 0")
+  }
+}
+
 /** v6 -> v7: family members' saving goals (shared goals in the combined view). */
 val MIGRATION_6_7 = object : Migration(6, 7) {
   override fun migrate(db: SupportSQLiteDatabase) {

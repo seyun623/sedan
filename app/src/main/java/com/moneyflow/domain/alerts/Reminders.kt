@@ -10,7 +10,8 @@ enum class ReminderChannel(val id: String, val label: String) {
   BUDGET("budget_alerts", "예산 알림"),
   BACKUP("backup_alerts", "백업 알림"),
   CARD("card_alerts", "카드 실적·혜택 알림"),
-  CAPTURE("capture_alerts", "결제 확인 알림")
+  CAPTURE("capture_alerts", "결제 확인 알림"),
+  BILL("bill_alerts", "결제일 미리 알림")
 }
 
 /** A notification to show. [key] makes sure each one is sent once. */
@@ -80,6 +81,52 @@ object BudgetReminders {
       topCategory?.let { add("가장 많이 쓴 곳: ${it.first} ${Formatters.formatCurrency(it.second)}") }
     }.joinToString("\n")
     return Reminder(key, ReminderChannel.BUDGET, "${last.monthValue}월 가계부 요약", text)
+  }
+}
+
+/** Card payment day (3 days before) and recurring payments (the day before), pure and testable. */
+object BillReminders {
+  const val CARD_DAYS_BEFORE = 3L
+  const val RECURRING_DAYS_BEFORE = 1L
+
+  /** The next date with day [day] (clamped to the month's length) on or after [from]. */
+  fun nextDate(from: LocalDate, day: Int): LocalDate {
+    fun inMonth(m: YearMonth) = m.atDay(day.coerceIn(1, m.lengthOfMonth()))
+    val thisMonth = inMonth(YearMonth.from(from))
+    return if (!thisMonth.isBefore(from)) thisMonth else inMonth(YearMonth.from(from).plusMonths(1))
+  }
+
+  fun due(
+    today: LocalDate,
+    accounts: List<com.moneyflow.data.model.AccountEntity>,
+    recurring: List<com.moneyflow.data.model.RecurringTransactionEntity>,
+    sent: Set<String>
+  ): List<Reminder> {
+    val out = mutableListOf<Reminder>()
+    accounts.filter { it.paymentDay in 1..31 }.forEach { a ->
+      val date = nextDate(today, a.paymentDay)
+      val days = ChronoUnit.DAYS.between(today, date)
+      val key = "bill|card|${a.id}|$date"
+      if (days in 0..CARD_DAYS_BEFORE && key !in sent) {
+        val label = if (a.accountType == com.moneyflow.data.model.AccountType.LOAN) "상환일" else "결제일"
+        val whenText = if (days == 0L) "오늘" else "${days}일 뒤(${date.monthValue}/${date.dayOfMonth})"
+        out += Reminder(key, ReminderChannel.BILL, "${a.name} $label${if (days == 0L) "이에요" else "이 다가와요"}",
+          "$whenText ${label}이에요." + (if (a.isDebt && a.balance > 0) " 현재 ${if (label == "상환일") "남은 금액" else "결제 예정 금액"} ${Formatters.formatCurrency(a.balance)}" else ""))
+      }
+    }
+    recurring.filter { it.isActive && it.type != com.moneyflow.data.model.TransactionType.INCOME }.forEach { r ->
+      val date = nextDate(today, r.dayOfMonth)
+      val dateMonth = YearMonth.from(date).toString()
+      if (r.lastExecutedMonth != null && r.lastExecutedMonth >= dateMonth) return@forEach
+      if (r.startMonth.isNotEmpty() && r.startMonth > dateMonth) return@forEach
+      val days = ChronoUnit.DAYS.between(today, date)
+      val key = "bill|rec|${r.id}|$dateMonth"
+      if (days in 1..RECURRING_DAYS_BEFORE && key !in sent) {
+        out += Reminder(key, ReminderChannel.BILL, "내일 '${r.title}' ${Formatters.formatCurrency(r.amount)}이 나가요",
+          "${r.accountName}에서 ${date.monthValue}/${date.dayOfMonth}에 빠져나가요. 잔액을 확인해 주세요.")
+      }
+    }
+    return out
   }
 }
 

@@ -42,6 +42,8 @@ fun SettingsScreen(
   onOpenRules: () -> Unit = {},
   onOpenFamily: () -> Unit = {},
   onOpenDrive: () -> Unit = {},
+  onOpenCleanup: () -> Unit = {},
+  onOpenReport: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -130,6 +132,19 @@ fun SettingsScreen(
         },
         modifier = Modifier.testTag("settings_monthly_summary")
       )
+      val billPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> if (granted) viewModel.setBillReminders(true) }
+      SettingsSwitchItem(
+        title = "결제일 미리 알림",
+        subtitle = "카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 드려요 (결제일은 계좌 수정에서 입력)",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.billRemindersEnabled,
+        onCheckedChange = { on ->
+          if (on && needsPermission()) billPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBillReminders(on)
+        },
+        modifier = Modifier.testTag("settings_bill_reminders")
+      )
       SettingsSwitchItem(
         title = "백업 알림",
         subtitle = "2주 넘게 백업하지 않았거나 자동 백업이 실패하면 알려 드려요",
@@ -200,6 +215,13 @@ fun SettingsScreen(
         onClick = onOpenRules,
         modifier = Modifier.testTag("settings_rules")
       )
+      SettingsItem(
+        title = "거래 정리",
+        subtitle = "중복 의심 거래 찾기, '기타' 거래 한꺼번에 분류",
+        icon = Icons.Filled.CreditCard,
+        onClick = onOpenCleanup,
+        modifier = Modifier.testTag("settings_cleanup")
+      )
       SettingsSwitchItem(
         title = "할부 결제 나눠 기록",
         subtitle = "자동 기록·카드사 가져오기에서 할부 결제를 개월 수만큼 매달 지출로 나눠요",
@@ -259,6 +281,12 @@ fun SettingsScreen(
         subtitle = "버전마다 바뀐 점을 볼 수 있어요",
         onClick = onOpenReleaseHistory,
         modifier = Modifier.testTag("settings_release_history")
+      )
+      SettingsItem(
+        title = "문제 보고",
+        subtitle = "앱 오류 기록을 보고 보낼 수 있어요",
+        onClick = onOpenReport,
+        modifier = Modifier.testTag("settings_report")
       )
       SettingsItem(
         title = "데이터 보관",

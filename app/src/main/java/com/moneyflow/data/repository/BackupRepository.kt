@@ -214,13 +214,14 @@ class BackupRepository @Inject constructor(
   private fun accountJson(a: AccountEntity) = JSONObject()
     .put("id", a.id).put("name", a.name).put("bankName", a.bankName).put("accountType", a.accountType.name)
     .put("accountNumber", a.accountNumber).put("balance", a.balance).put("colorHex", a.colorHex)
-    .put("isFavorite", a.isFavorite).put("isDebt", a.isDebt)
+    .put("isFavorite", a.isFavorite).put("isDebt", a.isDebt).put("paymentDay", a.paymentDay)
 
   private fun parseAccount(o: JSONObject) = AccountEntity(
     id = o.getLong("id"), name = o.getString("name"), bankName = o.getString("bankName"),
     accountType = enumOf(o.getString("accountType"), AccountType.BANK),
     accountNumber = o.optString("accountNumber"), balance = o.getLong("balance"),
-    colorHex = o.optLong("colorHex", 0xFF0064FF), isFavorite = o.optBoolean("isFavorite"), isDebt = o.optBoolean("isDebt")
+    colorHex = o.optLong("colorHex", 0xFF0064FF), isFavorite = o.optBoolean("isFavorite"), isDebt = o.optBoolean("isDebt"),
+    paymentDay = o.optInt("paymentDay", 0).coerceIn(0, 31)
   )
 
   private fun transactionJson(t: TransactionEntity) = JSONObject()

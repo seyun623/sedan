@@ -121,12 +121,12 @@ class HomeViewModel @Inject constructor(
 
   fun addAccount(
     name: String, bankName: String, type: AccountType, accountNumber: String,
-    balance: Long, colorHex: Long, isDebt: Boolean
+    balance: Long, colorHex: Long, isDebt: Boolean, paymentDay: Int = 0
   ) = viewModelScope.launch {
     ledger.addAccount(
       AccountEntity(
         name = name.trim(), bankName = bankName.trim(), accountType = type,
-        accountNumber = accountNumber.trim(), balance = balance, colorHex = colorHex, isDebt = isDebt
+        accountNumber = accountNumber.trim(), balance = balance, colorHex = colorHex, isDebt = isDebt, paymentDay = paymentDay
       )
     )
     messages.show("'${name.trim()}' 계좌를 추가했어요.")

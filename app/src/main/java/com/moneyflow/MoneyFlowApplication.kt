@@ -43,6 +43,7 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
   @OptIn(FlowPreview::class)
   override fun onCreate() {
     super.onCreate()
+    com.moneyflow.util.ProblemLog.install(this, BuildConfig.VERSION_NAME)
     appLockManager.initialize()
     ProcessLifecycleOwner.get().lifecycle.addObserver(appLockManager)
     RecurringWorker.schedule(this)

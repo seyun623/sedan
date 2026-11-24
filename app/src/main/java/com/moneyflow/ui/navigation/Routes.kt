@@ -27,6 +27,8 @@ object Routes {
   const val RULES = "settings/rules"
   const val FAMILY = "family"
   const val DRIVE = "settings/drive"
+  const val CLEANUP = "settings/cleanup"
+  const val REPORT = "settings/report"
   const val CARD_IMPORT = "card-import"
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"

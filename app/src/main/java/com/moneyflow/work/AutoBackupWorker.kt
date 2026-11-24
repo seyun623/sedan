@@ -25,6 +25,7 @@ class AutoBackupWorker @AssistedInject constructor(
     autoBackup.runIfDue()
     Result.success()
   } catch (e: Exception) {
+    com.moneyflow.util.ProblemLog.record("자동 백업", e)
     // Recorded in settings; the reminder worker tells the user. Try again on the next run.
     Result.success()
   }

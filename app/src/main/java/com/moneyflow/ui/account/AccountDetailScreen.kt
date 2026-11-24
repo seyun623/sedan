@@ -240,7 +240,7 @@ fun AccountDetailScreen(
         viewModel.update(
           account.copy(
             name = d.name, bankName = d.bankName, accountType = d.type, accountNumber = d.accountNumber,
-            balance = d.balance, colorHex = d.colorHex, isDebt = d.isDebt
+            balance = d.balance, colorHex = d.colorHex, isDebt = d.isDebt, paymentDay = d.paymentDay
           ),
           balanceShownWhenEditing = editBaselineBalance
         )

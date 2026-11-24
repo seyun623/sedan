@@ -209,7 +209,7 @@ fun HomeScreen(
       initial = null,
       onDismiss = { showAddAccount = false },
       onSubmit = { d ->
-        viewModel.addAccount(d.name, d.bankName, d.type, d.accountNumber, d.balance, d.colorHex, d.isDebt)
+        viewModel.addAccount(d.name, d.bankName, d.type, d.accountNumber, d.balance, d.colorHex, d.isDebt, d.paymentDay)
         showAddAccount = false
       }
     )

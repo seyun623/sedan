@@ -89,6 +89,15 @@ class MigrationTest {
     db.query("SELECT title FROM family_goals").use { c -> c.moveToNext(); assertEquals("가족 여행", c.getString(0)) }
   }
 
+  @Test fun migrate7To8_addsCardPaymentDay() {
+    helper.createDatabase(DB8, 7).apply {
+      execSQL("INSERT INTO accounts(id,name,bankName,accountType,accountNumber,balance,colorHex,isFavorite,isDebt) VALUES(1,'카드','현대카드','CREDIT_CARD','',0,0,0,1)")
+      close()
+    }
+    val db = helper.runMigrationsAndValidate(DB8, 8, true, com.moneyflow.data.local.MIGRATION_7_8)
+    db.query("SELECT paymentDay FROM accounts").use { c -> c.moveToNext(); assertEquals(0, c.getInt(0)) }
+  }
+
   private companion object {
     const val DB = "migration-test"
     const val DB4 = "migration-test-4"
@@ -96,5 +105,6 @@ class MigrationTest {
     const val DB5 = "migration-test-5"
     const val DB6 = "migration-test-6"
     const val DB7 = "migration-test-7"
+    const val DB8 = "migration-test-8"
   }
 }

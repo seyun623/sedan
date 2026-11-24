@@ -73,6 +73,10 @@ interface TransactionDao {
   @Query("SELECT * FROM transactions WHERE dedupKey = :group OR dedupKey LIKE :group || '#%' ORDER BY timestamp")
   suspend fun getInstallmentGroup(group: String): List<TransactionEntity>
 
+  /** Category change only (no balance effect). */
+  @Query("UPDATE transactions SET category = :category WHERE id IN (:ids)")
+  suspend fun setCategory(ids: List<Long>, category: String)
+
   @Query("SELECT MIN(timestamp) FROM transactions")
   suspend fun earliestTimestamp(): Long?
 

@@ -175,9 +175,13 @@ fun MoneyFlowNavHost(
           onOpenReleaseHistory = { navController.navigate(Routes.RELEASE_HISTORY) },
           onOpenRules = { navController.navigate(Routes.RULES) },
           onOpenFamily = { navController.navigate(Routes.FAMILY) },
-          onOpenDrive = { navController.navigate(Routes.DRIVE) }
+          onOpenDrive = { navController.navigate(Routes.DRIVE) },
+          onOpenCleanup = { navController.navigate(Routes.CLEANUP) },
+          onOpenReport = { navController.navigate(Routes.REPORT) }
         )
       }
+      composable(Routes.CLEANUP) { com.moneyflow.ui.settings.CleanupScreen(onBack = { navController.popBackStack() }) }
+      composable(Routes.REPORT) { com.moneyflow.ui.settings.ProblemReportScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.DRIVE) { com.moneyflow.ui.settings.DriveSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.FAMILY) {
         com.moneyflow.ui.family.FamilyScreen(onBack = { navController.popBackStack() }, onOpenDrive = { navController.navigate(Routes.DRIVE) })

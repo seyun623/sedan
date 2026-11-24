@@ -170,6 +170,11 @@ class LedgerRepository @Inject constructor(
     }
   }
 
+  /** Gives several transactions a new category (the balances don't change). */
+  suspend fun recategorize(ids: List<Long>, category: String) {
+    if (ids.isNotEmpty()) txDao.setCategory(ids, category)
+  }
+
   // ---- Accounts ----------------------------------------------------------------------------
 
   suspend fun addAccount(account: AccountEntity): Long = accountDao.insert(account.copy(id = 0))

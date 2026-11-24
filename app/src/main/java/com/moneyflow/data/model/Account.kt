@@ -23,5 +23,8 @@ data class AccountEntity(
   val balance: Long, // Balance in KRW (for debt/loans, positive number represents debt amount)
   val colorHex: Long = 0xFF0064FF,
   val isFavorite: Boolean = false,
-  val isDebt: Boolean = false // If true, counted as liability in net worth calculation
+  val isDebt: Boolean = false, // If true, counted as liability in net worth calculation
+  /** Card bill payment day (1..31) for payment reminders; 0 = not set. */
+  @androidx.room.ColumnInfo(defaultValue = "0")
+  val paymentDay: Int = 0
 )

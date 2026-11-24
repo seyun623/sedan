@@ -70,7 +70,9 @@ data class AccountDraft(
   val accountNumber: String,
   val balance: Long,
   val colorHex: Long,
-  val isDebt: Boolean
+  val isDebt: Boolean,
+  /** Card payment day 1..31, 0 = none. */
+  val paymentDay: Int = 0
 )
 
 val AccountColorPalette: List<Long> = listOf(
@@ -117,6 +119,7 @@ fun AccountFormDialog(
   }
   var negativeBalance by rememberSaveable { mutableStateOf((initial?.balance ?: 0L) < 0L) }
   var isDebt by rememberSaveable { mutableStateOf(initial?.isDebt ?: false) }
+  var paymentDayText by rememberSaveable { mutableStateOf(initial?.paymentDay?.takeIf { it > 0 }?.toString() ?: "") }
   var colorHex by rememberSaveable { mutableStateOf(initial?.colorHex ?: 0xFF0064FF) }
   var colorTouched by rememberSaveable { mutableStateOf(isEdit) }
   var submitted by rememberSaveable { mutableStateOf(false) }
@@ -235,6 +238,20 @@ fun AccountFormDialog(
           )
         }
 
+        if (type == AccountType.CREDIT_CARD || type == AccountType.LOAN) {
+          Spacer(Modifier.height(8.dp))
+          OutlinedTextField(
+            value = paymentDayText,
+            onValueChange = { paymentDayText = it.filter(Char::isDigit).take(2) },
+            label = { Text(if (type == AccountType.LOAN) "상환일 (선택, 1~31)" else "카드 결제일 (선택, 1~31)") },
+            supportingText = { Text("입력하면 3일 전에 알려 드려요") },
+            isError = paymentDayText.isNotEmpty() && paymentDayText.toInt() !in 1..31,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().testTag("account_payment_day")
+          )
+        }
+
         SwitchRow(
           title = "부채로 분류",
           subtitle = if (isEdit) "거래 내역이 있는 계좌는 바꿀 수 없어요" else "순자산 계산 시 차감돼요",
@@ -285,7 +302,8 @@ fun AccountFormDialog(
                 accountNumber = accountNumber.trim(),
                 balance = balance,
                 colorHex = colorHex,
-                isDebt = isDebt
+                isDebt = isDebt,
+                paymentDay = paymentDayText.toIntOrNull()?.takeIf { it in 1..31 && (type == AccountType.CREDIT_CARD || type == AccountType.LOAN) } ?: 0
               )
             )
           },

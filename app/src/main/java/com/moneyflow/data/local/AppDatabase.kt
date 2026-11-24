@@ -43,7 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun familyDao(): FamilyDao
 
   companion object {
-    const val VERSION = 7
+    const val VERSION = 8
     const val NAME = "moneyflow_finance.db"
   }
 }
