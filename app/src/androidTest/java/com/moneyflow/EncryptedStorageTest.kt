@@ -58,12 +58,17 @@ class EncryptedStorageTest {
   @Test fun plaintextDatabaseIsConvertedKeepingData() = runBlocking {
     val plain = Room.databaseBuilder(context, AppDatabase::class.java, "it-plain.db").build()
     plain.accountDao().insert(account("예전 통장"))
+    plain.ruleDao().upsert(com.moneyflow.data.model.CategoryRuleEntity(keyword = "스타벅스", category = "카페/간식"))
     plain.close()
     assertTrue(DatabaseFactory.isPlaintextSqlite(context.getDatabasePath("it-plain.db")))
 
     val key = DatabaseKeyManager(context).getOrCreatePassphraseHex()
     val db = DatabaseFactory.create(context, key, "it-plain.db")
     assertEquals("예전 통장", db.accountDao().getAll().single().name)
+    assertEquals("카페/간식", db.ruleDao().getAll().single().category)
+    // New rows keep working (AUTOINCREMENT ids continue, indices exist).
+    db.accountDao().insert(account("새 통장"))
+    assertEquals(2, db.accountDao().getAll().map { it.id }.distinct().size)
     db.close()
     assertFalse(DatabaseFactory.isPlaintextSqlite(context.getDatabasePath("it-plain.db")))
   }

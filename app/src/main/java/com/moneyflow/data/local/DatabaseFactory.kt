@@ -21,38 +21,77 @@ object DatabaseFactory {
   }
 
   /**
-   * Builds before encryption stored the database in plaintext. Converts such a file in place
-   * (sqlcipher_export into a new encrypted file, then swap) so existing data is kept.
+   * Builds before encryption stored the database in plaintext. Converts such a file in place:
+   * every table, row, index and the schema version are copied into a new encrypted file, which
+   * then replaces the old one, so existing data is kept.
    */
   private fun encryptPlaintextDatabaseIfNeeded(context: Context, passphrase: String, name: String) {
     val dbFile = context.getDatabasePath(name)
     if (!dbFile.exists() || !isPlaintextSqlite(dbFile)) return
 
     val tmp = File(dbFile.parentFile, "$name.encrypting")
-    tmp.delete()
-    val plain = SQLiteDatabase.openDatabase(dbFile.absolutePath, "", null, SQLiteDatabase.OPEN_READWRITE, null, null)
-    val version: Int
+    listOf("", "-wal", "-shm", "-journal").forEach { File(tmp.path + it).delete() }
+    val plain = android.database.sqlite.SQLiteDatabase.openDatabase(dbFile.absolutePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READWRITE)
     try {
-      // One connection only: ATTACH applies to a single connection, and with write-ahead logging the
-      // pool may run the next statements on another one ("unknown database encrypted").
-      plain.disableWriteAheadLogging()
-      version = plain.version
-      plain.rawExecSQL("ATTACH DATABASE '${tmp.absolutePath}' AS encrypted KEY '$passphrase'")
-      plain.rawExecSQL("SELECT sqlcipher_export('encrypted')")
-      plain.rawExecSQL("DETACH DATABASE encrypted")
+      val encrypted = SQLiteDatabase.openDatabase(
+        tmp.absolutePath, passphrase, null, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.CREATE_IF_NECESSARY, null, null
+      )
+      try {
+        copyAll(plain, encrypted)
+      } finally {
+        encrypted.close()
+      }
     } finally {
       plain.close()
-    }
-    // Keep the schema version so Room runs the right migrations on the converted file.
-    val encrypted = SQLiteDatabase.openDatabase(tmp.absolutePath, passphrase, null, SQLiteDatabase.OPEN_READWRITE, null, null)
-    try {
-      encrypted.version = version
-    } finally {
-      encrypted.close()
     }
     listOf("-wal", "-shm", "-journal").forEach { File(dbFile.path + it).delete() }
     if (!dbFile.delete() || !tmp.renameTo(dbFile)) {
       throw IllegalStateException("Could not replace plaintext database")
+    }
+  }
+
+  private fun copyAll(from: android.database.sqlite.SQLiteDatabase, to: SQLiteDatabase) {
+    data class Obj(val type: String, val name: String, val sql: String)
+    val objects = mutableListOf<Obj>()
+    from.rawQuery(
+      "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name != 'android_metadata'",
+      null
+    ).use { c -> while (c.moveToNext()) objects += Obj(c.getString(0), c.getString(1), c.getString(2)) }
+    val tables = objects.filter { it.type == "table" }
+    to.beginTransaction()
+    try {
+      tables.forEach { to.execSQL(it.sql) }
+      tables.forEach { t -> copyRows(from, to, t.name) }
+      // AUTOINCREMENT counters, so new ids never reuse old ones.
+      val hasSequence = from.rawQuery("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'", null).use { it.moveToFirst() }
+      if (hasSequence) {
+        to.execSQL("DELETE FROM sqlite_sequence")
+        copyRows(from, to, "sqlite_sequence")
+      }
+      objects.filter { it.type != "table" }.forEach { to.execSQL(it.sql) }
+      to.version = from.version
+      to.setTransactionSuccessful()
+    } finally {
+      to.endTransaction()
+    }
+  }
+
+  private fun copyRows(from: android.database.sqlite.SQLiteDatabase, to: SQLiteDatabase, table: String) {
+    from.rawQuery("SELECT * FROM `$table`", null).use { c ->
+      while (c.moveToNext()) {
+        val values = android.content.ContentValues()
+        for (i in 0 until c.columnCount) {
+          val col = "`" + c.getColumnName(i) + "`"
+          when (c.getType(i)) {
+            android.database.Cursor.FIELD_TYPE_NULL -> values.putNull(col)
+            android.database.Cursor.FIELD_TYPE_INTEGER -> values.put(col, c.getLong(i))
+            android.database.Cursor.FIELD_TYPE_FLOAT -> values.put(col, c.getDouble(i))
+            android.database.Cursor.FIELD_TYPE_BLOB -> values.put(col, c.getBlob(i))
+            else -> values.put(col, c.getString(i))
+          }
+        }
+        to.insertOrThrow("`$table`", null, values)
+      }
     }
   }
 
