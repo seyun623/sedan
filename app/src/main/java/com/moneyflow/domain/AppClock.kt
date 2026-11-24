@@ -1,5 +1,6 @@
 package com.moneyflow.domain
 
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -10,6 +11,9 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+/** Dates follow Korean time even when the phone is abroad (statements, budgets and cards do). */
+val APP_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
+
 /** Injectable clock so date-dependent logic (recurring, stats, parser) is testable. */
 interface AppClock {
   fun now(): Instant
@@ -18,6 +22,8 @@ interface AppClock {
   fun nowMillis(): Long = now().toEpochMilli()
   /** Monotonic time since boot; unaffected by the user changing the device clock. */
   fun elapsedRealtime(): Long = android.os.SystemClock.elapsedRealtime()
+  /** Changes on every reboot (tells whether [elapsedRealtime] values are comparable). */
+  fun bootId(): String = runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
   fun today(): LocalDate = now().atZone(zone).toLocalDate()
   fun currentMonth(): YearMonth = YearMonth.from(today())
   fun nowZoned(): ZonedDateTime = now().atZone(zone)
@@ -25,7 +31,7 @@ interface AppClock {
 
 object SystemAppClock : AppClock {
   override fun now(): Instant = Instant.now()
-  override val zone: ZoneId get() = ZoneId.systemDefault()
+  override val zone: ZoneId get() = com.moneyflow.domain.APP_ZONE
 }
 
 /**

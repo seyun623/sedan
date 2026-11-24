@@ -37,7 +37,10 @@ object UrlConnectionDriveTransport : DriveTransport {
   }
 }
 
-class DriveException(message: String, val code: Int = 0) : Exception(message)
+class DriveException(message: String, val code: Int = 0) : Exception(message) {
+  /** Busy / server error: worth trying again later. */
+  val transient: Boolean get() = code == 429 || code >= 500
+}
 
 data class DriveFile(val id: String, val name: String, val modifiedTime: String, val ownerName: String?, val isFolder: Boolean)
 
@@ -45,14 +48,18 @@ data class DriveFile(val id: String, val name: String, val modifiedTime: String,
 class DriveClient(
   private val key: ServiceAccountKey,
   private val transport: DriveTransport = UrlConnectionDriveTransport,
-  private val nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 }
+  private val nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
+  private val elapsedSeconds: () -> Long = { android.os.SystemClock.elapsedRealtime() / 1000 },
+  private val retryDelayMs: Long = 2_000
 ) {
   private var token: String? = null
-  private var tokenExpires = 0L
+  /** Monotonic time the token expires (immune to the user changing the phone clock). */
+  private var tokenExpiresElapsed = 0L
 
   /** An access token (cached for its lifetime). */
+  @Synchronized
   fun accessToken(): String {
-    token?.let { if (nowSeconds() < tokenExpires - 60) return it }
+    token?.let { if (elapsedSeconds() < tokenExpiresElapsed - 60) return it }
     val body = "grant_type=" + enc("urn:ietf:params:oauth:grant-type:jwt-bearer") + "&assertion=" + enc(key.assertion(nowSeconds()))
     val (code, bytes) = transport.execute("POST", key.tokenUri, mapOf("Content-Type" to "application/x-www-form-urlencoded"), body.toByteArray())
     val text = bytes.toString(Charsets.UTF_8)
@@ -70,7 +77,7 @@ class DriveClient(
     }
     val o = JSONObject(text)
     token = o.getString("access_token")
-    tokenExpires = nowSeconds() + o.optLong("expires_in", 3600)
+    tokenExpiresElapsed = elapsedSeconds() + o.optLong("expires_in", 3600)
     return token!!
   }
 
@@ -112,14 +119,27 @@ class DriveClient(
     return out
   }
 
-  private fun call(method: String, url: String, body: ByteArray?, contentType: String?): ByteArray {
+  /** Checks that the folder is still shared with the bot (an unshared folder just lists as empty). */
+  fun checkFolder(folderId: String) {
+    try {
+      call("GET", "$API/files/${enc(folderId)}?fields=id,trashed&supportsAllDrives=true", null, null)
+    } catch (e: DriveException) {
+      if (e.code == 404 || e.code == 403) throw DriveException("'머니플로우 가족' 폴더에 접근할 수 없어요. 폴더 공유에서 봇 이메일이 '편집자'로 남아 있는지 확인해 주세요.", e.code)
+      throw e
+    }
+  }
+
+  private fun call(method: String, url: String, body: ByteArray?, contentType: String?, attempt: Int = 0): ByteArray {
     val headers = buildMap {
       put("Authorization", "Bearer ${accessToken()}")
       contentType?.let { put("Content-Type", it) }
     }
     val (code, bytes) = transport.execute(method, url, headers, body)
-    if (code !in 200..299) throw DriveException(errorMessage(code, bytes.toString(Charsets.UTF_8)), code)
-    return bytes
+    if (code in 200..299) return bytes
+    // Expired / revoked token: get a fresh one once. Busy: wait a moment and try once more.
+    if (attempt == 0 && code == 401) { synchronized(this) { token = null }; return call(method, url, body, contentType, 1) }
+    if (attempt == 0 && (code == 429 || code >= 500)) { Thread.sleep(retryDelayMs); return call(method, url, body, contentType, 1) }
+    throw DriveException(errorMessage(code, bytes.toString(Charsets.UTF_8)), code)
   }
 
   companion object {

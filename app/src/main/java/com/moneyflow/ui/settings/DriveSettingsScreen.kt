@@ -136,13 +136,14 @@ class DriveSettingsViewModel @Inject constructor(
 
   /** Writes my family file into the document the user just created in the Drive folder. */
   fun writeFamilyFile(uri: Uri) = run {
+    val generation = familySync.dataGeneration()
     val bytes = familySync.familyFileBytes()
     val name = withContext(Dispatchers.IO) {
       context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } ?: error("파일을 저장할 수 없어요.")
       context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     } ?: error("저장한 파일 이름을 알 수 없어요. 드라이브에 저장했는지 확인해 주세요.")
-    familySync.fileCreated(name)
+    familySync.fileCreated(name, generation)
     com.moneyflow.work.FamilySyncWorker.runSoon(context, delaySeconds = 120)
     messages.show("가족 파일 '$name'을(를) 만들었어요. 이제 자동으로 합산돼요.")
   }

@@ -81,7 +81,8 @@ class TableStatementReader(private val today: LocalDate) {
   internal fun parseDate(raw: String): Pair<LocalDate, LocalTime?>? {
     val s = raw.trim()
     if (s.isEmpty()) return null
-    s.toDoubleOrNull()?.let { serial ->
+    // "11.21" is also a number: only digit-only text can be an Excel serial / yyyyMMdd.
+    s.toDoubleOrNull()?.takeIf { !s.contains('.') || s.substringBefore('.').length >= 5 }?.let { serial ->
       if (s.length == 8 && s.all(Char::isDigit)) {
         return runCatching { LocalDate.of(s.take(4).toInt(), s.substring(4, 6).toInt(), s.takeLast(2).toInt()) to null }.getOrNull()
       }
@@ -131,8 +132,8 @@ class TableStatementReader(private val today: LocalDate) {
   }
 
   companion object {
-    private val FULL_DATE = Regex("(\\d{2,4})[./-]\\s*(\\d{1,2})[./-]\\s*(\\d{1,2})")
-    private val SHORT_DATE = Regex("^(\\d{1,2})[./-](\\d{1,2})(?![./-]\\d)")
+    private val FULL_DATE = Regex("(\\d{2,4})\\s*[./년-]\\s*(\\d{1,2})\\s*[./월-]\\s*(\\d{1,2})")
+    private val SHORT_DATE = Regex("^(\\d{1,2})\\s*[./월-]\\s*(\\d{1,2})(?![./-]\\d)")
     private val TIME = Regex("(\\d{1,2}):(\\d{2})")
     private val CANCEL = Regex("취소|환불|반품")
     private val SUMMARY = Regex("^(합\\s*계|소\\s*계|총\\s*계|총\\s*합계|합계금액)")

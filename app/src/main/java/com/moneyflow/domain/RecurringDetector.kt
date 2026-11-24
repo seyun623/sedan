@@ -94,7 +94,8 @@ class RecurringDetector(private val zone: ZoneId) {
     )
   }
 
-  private fun name(tx: TransactionEntity) = norm(tx.memo.substringBefore(" (").replace(Regex("#\\S+"), ""))
+  private val TAG = Regex("#\\S+")
+  private fun name(tx: TransactionEntity) = norm(tx.memo.substringBefore(" (").replace(TAG, ""))
   private fun norm(s: String) = s.replace(" ", "").lowercase()
 
   companion object {

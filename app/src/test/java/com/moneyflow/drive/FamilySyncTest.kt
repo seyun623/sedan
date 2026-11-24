@@ -48,6 +48,7 @@ class FamilySyncTest {
     class F(val name: String, var bytes: ByteArray, var version: Int = 1)
     val files = linkedMapOf<String, F>()
     var offline = false
+    var unshared = false
     fun add(name: String, bytes: ByteArray): String = "id${files.size + 1}".also { files[it] = F(name, bytes) }
     fun byName(name: String) = files.values.single { it.name == name }
 
@@ -60,6 +61,7 @@ class FamilySyncTest {
           JSONObject().put("id", id).put("name", f.name).put("mimeType", "application/octet-stream").put("modifiedTime", "v${f.version}")
         })).toString())
         url.contains("/drive/v3/files?") -> json("""{"files":[{"id":"folder1","name":"머니플로우 가족","mimeType":"application/vnd.google-apps.folder"}]}""")
+        url.contains("/files/folder1?") -> if (unshared) 404 to "{}".toByteArray() else json("""{"id":"folder1"}""")
         method == "GET" && url.contains("alt=media") -> 200 to files.getValue(url.substringAfter("/files/").substringBefore("?")).bytes
         method == "PATCH" -> {
           val f = files.getValue(url.substringAfter("/files/").substringBefore("?"))
@@ -87,7 +89,7 @@ class FamilySyncTest {
         account = ledger.addAccount(bank("$name 통장"))
         drive.importKey(keyJson)
         drive.chooseFolder(drive.sharedFolders().single())
-        sync.setup(name, "family1")
+        sync.setup(name, "family12")
       }
     }
 
@@ -95,7 +97,7 @@ class FamilySyncTest {
     suspend fun createFile(): String {
       val name = FamilySyncRepository.fileNameFor(settings.current().familySyncName!!)
       folder.add(name, sync.familyFileBytes())
-      sync.fileCreated(name)
+      sync.fileCreated(name, sync.dataGeneration())
       return name
     }
 
@@ -163,6 +165,57 @@ class FamilySyncTest {
     val before = me.settings.current().familySyncError
     try { me.sync.sync(); throw AssertionError("expected IOException") } catch (e: java.io.IOException) { }
     assertEquals(before, me.settings.current().familySyncError)
+  }
+
+  @Test fun aChangeDuringUploadIsNotLost() = runBlocking {
+    me.createFile(); wife.createFile()
+    me.spend(1_000, "a")
+    // The data version is read before the snapshot; a change after it stays "to upload".
+    val (genBefore, _) = me.settings.familySyncGenerations()
+    me.settings.setFamilySyncResult(clock.nowMillis(), clock.nowMillis(), genBefore - 1, null)
+    me.sync.markDirty()
+    val (gen, up) = me.settings.familySyncGenerations()
+    assertTrue(gen != up)
+    assertTrue(me.sync.sync()!!.uploaded)
+    assertFalse(me.sync.sync()!!.uploaded)
+  }
+
+  @Test fun oneBadFileDoesNotStopTheOthers() = runBlocking {
+    me.createFile(); wife.createFile()
+    // A file from a newer app version (database version 99) comes first in the listing.
+    val future = org.json.JSONObject().put("format", "moneyflow-backup").put("formatVersion", 1).put("dbVersion", 99)
+      .put("appVersion", "9.0.0").put("createdAt", 1L).put("accounts", org.json.JSONArray()).put("transactions", org.json.JSONArray())
+    folder.add(FamilySyncRepository.fileNameFor("미래"), com.moneyflow.domain.backup.BackupCrypto.encrypt(future.toString().toByteArray(), "family12".toCharArray()))
+    wife.spend(70_000, "장보기")
+    wife.sync.sync()
+    val r = me.sync.sync()!!
+    assertEquals(listOf("아내"), r.loaded)
+    assertTrue(r.problems.toString(), r.problems.any { it.contains("미래") })
+  }
+
+  @Test fun unsharedFolderIsReportedWithoutForgettingFiles() = runBlocking {
+    me.createFile(); wife.createFile()
+    me.sync.sync()
+    folder.unshared = true
+    try { me.sync.sync(); throw AssertionError("expected an error") } catch (e: DriveException) { assertTrue(e.message!!.contains("편집자")) }
+    folder.unshared = false
+    // Nothing is loaded again: the seen list was kept.
+    assertTrue(me.sync.sync()!!.loaded.isEmpty())
+  }
+
+  @Test fun anOlderCopyDoesNotReplaceNewerRecords() = runBlocking {
+    me.createFile()
+    wife.spend(10_000, "old")
+    val old = wife.sync.familyFileBytes()
+    clock.set(java.time.LocalDateTime.of(2026, 11, 24, 13, 0))
+    wife.spend(20_000, "new")
+    wife.createFile()
+    me.sync.sync()
+    assertEquals(30_000L, me.familyExpense())
+    clock.set(java.time.LocalDateTime.of(2026, 11, 24, 14, 0))
+    folder.add(FamilySyncRepository.fileNameFor("아내 사본"), old)
+    me.sync.sync()
+    assertEquals(30_000L, me.familyExpense())
   }
 
   @Test fun memberNamesComeFromFileNames() {

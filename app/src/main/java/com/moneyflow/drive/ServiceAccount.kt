@@ -14,6 +14,7 @@ data class ServiceAccountKey(val clientEmail: String, val privateKeyPem: String,
   companion object {
     const val DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
     const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
+    const val CLOCK_SKEW_SECONDS = 60L
 
     /** Reads a key JSON downloaded from Google Cloud ("서비스 계정 → 키 → JSON"). */
     fun parse(json: String): ServiceAccountKey {
@@ -51,8 +52,9 @@ data class ServiceAccountKey(val clientEmail: String, val privateKeyPem: String,
       .put("iss", clientEmail)
       .put("scope", scope)
       .put("aud", tokenUri)
-      .put("iat", nowSeconds)
-      .put("exp", nowSeconds + 3600)
+      // A little in the past: Google rejects tokens "issued in the future" when the phone clock runs fast.
+      .put("iat", nowSeconds - CLOCK_SKEW_SECONDS)
+      .put("exp", nowSeconds - CLOCK_SKEW_SECONDS + 3600)
       .toString()
     val signingInput = base64Url(header.toByteArray()) + "." + base64Url(claims.toByteArray())
     val signature = Signature.getInstance("SHA256withRSA").run {

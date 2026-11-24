@@ -84,7 +84,7 @@ fun LedgerScreen(
 
   // Group by day, keeping the newest-first order of the list.
   val groupedByDay = remember(state.transactions) {
-    val zone = ZoneId.systemDefault()
+    val zone = com.moneyflow.domain.APP_ZONE
     state.transactions.groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
   }
   val today = state.today

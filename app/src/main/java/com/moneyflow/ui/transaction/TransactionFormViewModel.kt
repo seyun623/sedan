@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -79,11 +80,12 @@ class TransactionFormViewModel @Inject constructor(
 
   /** Recently used #tags (quick chips under the memo). */
   val recentTags: StateFlow<List<String>> = ledger.transactions.map { com.moneyflow.util.Tags.recent(it) }
+    .flowOn(kotlinx.coroutines.Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
   /** Card statuses used for "이 결제는 ○○카드가 유리해요". */
   val cardStatuses: StateFlow<List<com.moneyflow.domain.card.CardStatus>> =
-    cards.statuses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    cards.statuses.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
   fun recommendCard(
     statuses: List<com.moneyflow.domain.card.CardStatus>, category: String, memo: String, amount: Long

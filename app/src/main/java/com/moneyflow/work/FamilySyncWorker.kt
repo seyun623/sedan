@@ -29,8 +29,13 @@ class FamilySyncWorker @AssistedInject constructor(
   override suspend fun doWork(): Result = try {
     sync.sync()
     Result.success()
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
   } catch (e: IOException) {
     if (runAttemptCount < 3) Result.retry() else Result.success()
+  } catch (e: com.moneyflow.drive.DriveException) {
+    // Drive busy (429 / 5xx): try again shortly; other Drive errors are shown on screen.
+    if (e.transient && runAttemptCount < 3) Result.retry() else Result.success()
   } catch (e: Exception) {
     com.moneyflow.util.ProblemLog.record("가족 자동 합산", e)
     // Recorded for the family / Drive screens; the periodic run tries again.
@@ -50,7 +55,8 @@ class FamilySyncWorker @AssistedInject constructor(
     /** Soon after the records change (several changes in a row become one upload). */
     fun runSoon(context: Context, delaySeconds: Long = 60) {
       WorkManager.getInstance(context).enqueueUniqueWork(
-        "family-sync-now", ExistingWorkPolicy.REPLACE,
+        // APPEND_OR_REPLACE: a sync already running finishes; the data version makes sure later changes upload next.
+        "family-sync-now", ExistingWorkPolicy.APPEND_OR_REPLACE,
         OneTimeWorkRequestBuilder<FamilySyncWorker>()
           .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
           .setConstraints(network)

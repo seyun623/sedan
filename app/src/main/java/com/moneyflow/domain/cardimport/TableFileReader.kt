@@ -15,6 +15,8 @@ class UnsupportedFileException(message: String) : Exception(message)
  * Old binary .xls files are not supported (the user is asked to save as xlsx / CSV).
  */
 object TableFileReader {
+  /** Limit for one unpacked part of an .xlsx file. */
+  private const val MAX_UNZIPPED = 40 * 1024 * 1024
   private const val MAX_BYTES = 10 * 1024 * 1024
 
   fun read(bytes: ByteArray, fileName: String): List<List<String>> {
@@ -102,6 +104,19 @@ object TableFileReader {
 
   // ---- XLSX (first sheet) ------------------------------------------------------------------
 
+  /** Reads one zip entry, refusing "zip bombs" that unpack to more than [MAX_UNZIPPED] bytes. */
+  private fun ZipInputStream.readLimited(): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(64 * 1024)
+    while (true) {
+      val n = read(buf)
+      if (n < 0) break
+      out.write(buf, 0, n)
+      if (out.size() > MAX_UNZIPPED) throw UnsupportedFileException("엑셀 파일이 너무 커요. 기간을 나눠서 받아 주세요.")
+    }
+    return out.toByteArray()
+  }
+
   internal fun readXlsx(bytes: ByteArray): List<List<String>> {
     var shared: List<String> = emptyList()
     var sheet: String? = null
@@ -112,8 +127,8 @@ object TableFileReader {
         val e = zip.nextEntry ?: break
         val name = e.name
         when {
-          name == "xl/sharedStrings.xml" -> shared = parseShared(zip.readBytes().toString(Charsets.UTF_8))
-          name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml") -> sheets[name] = zip.readBytes().toString(Charsets.UTF_8)
+          name == "xl/sharedStrings.xml" -> shared = parseShared(zip.readLimited().toString(Charsets.UTF_8))
+          name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml") -> sheets[name] = zip.readLimited().toString(Charsets.UTF_8)
         }
       }
     }

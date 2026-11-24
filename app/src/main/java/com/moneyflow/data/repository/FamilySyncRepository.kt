@@ -3,6 +3,7 @@ package com.moneyflow.data.repository
 import com.moneyflow.BuildConfig
 import com.moneyflow.domain.AppClock
 import com.moneyflow.domain.backup.NotABackupFileException
+import com.moneyflow.data.repository.BackupFormatException
 import com.moneyflow.domain.backup.WrongPasswordException
 import com.moneyflow.security.SecretStore
 import kotlinx.coroutines.sync.Mutex
@@ -53,11 +54,14 @@ class FamilySyncRepository @Inject constructor(
   suspend fun familyFileBytes(): ByteArray = backups.createBackup(password(), BuildConfig.VERSION_NAME)
 
   /** Records the file the user just saved into the Drive folder. */
-  suspend fun fileCreated(displayName: String) = settings.setFamilySyncFile(displayName, clock.nowMillis())
+  suspend fun fileCreated(displayName: String, generation: Long) = settings.setFamilySyncFile(displayName, clock.nowMillis(), generation)
+
+  /** Current data version (read before making the file contents). */
+  suspend fun dataGeneration(): Long = settings.familySyncGenerations().first
 
   suspend fun turnOff() = settings.clearFamilySync()
 
-  suspend fun markDirty() = settings.setFamilySyncDirty(true)
+  suspend fun markDirty() = settings.markFamilyDataChanged()
 
   /**
    * Uploads my file (when the data changed, a day passed, or [forceUpload]) and loads family
@@ -69,54 +73,78 @@ class FamilySyncRepository @Inject constructor(
     if (!s.familySyncEnabled) return null
     val now = clock.nowMillis()
     val problems = mutableListOf<String>()
-    var uploaded = false
+    var uploadedGen: Long? = null
     val loaded = mutableListOf<String>()
     try {
       val pw = password()
+      // An unshared folder lists as empty: check it first so the user isn't told to remake files.
+      drive.checkFolderAccess()
       val files = drive.folderFiles()
       val myName = s.familySyncFileName!!
-      val mine = files.firstOrNull { it.name == myName }
+      val mineAll = files.filter { it.name == myName }
+      if (mineAll.size > 1) problems += "드라이브 폴더에 '$myName' 파일이 ${mineAll.size}개 있어요. 오래된 것을 지워 주세요."
+      val mine = mineAll.maxByOrNull { it.modifiedTime }
+      val (generation, uploadedGeneration) = settings.familySyncGenerations()
       if (mine == null) {
         problems += "드라이브 폴더에서 내 가족 파일 '$myName'을(를) 찾지 못했어요. 지웠다면 '내 가족 파일 만들기'를 다시 해 주세요. (방금 만들었다면 1~2분 뒤 다시 시도)"
-      } else if (forceUpload || s.familySyncDirty || now - s.familySyncLastUploadAt >= DAY_MS) {
+      } else if (forceUpload || generation != uploadedGeneration || now - s.familySyncLastUploadAt >= DAY_MS) {
+        // The version is read before the snapshot: a change made meanwhile stays "to upload".
         drive.overwrite(mine.id, backups.createBackup(pw, BuildConfig.VERSION_NAME))
-        uploaded = true
+        uploadedGen = generation
       }
 
       val seen = settings.familySyncSeen().toMutableMap()
-      val others = files.filter { it.id != mine?.id && isFamilyFile(it.name) }
+      val failed = settings.familySyncFailed().toMutableMap()
+      val myIds = mineAll.map { it.id }.toSet()
+      // Newest first, so a stale duplicate of someone's file can't replace newer records.
+      val others = files.filter { it.id !in myIds && isFamilyFile(it.name) }.sortedByDescending { it.modifiedTime }
       for (f in others) {
         if (seen[f.id] == f.modifiedTime) continue
-        val name = memberName(f.name)
+        // A file that couldn't be opened is retried only when it changes (or on "지금 합산").
+        if (!forceUpload && failed[f.id] == f.modifiedTime) continue
         try {
-          val r = family.import(drive.download(f.id), pw, name, keepExistingName = true)
-          loaded += r.member.name
+          val r = family.import(drive.download(f.id), pw, memberName(f.name), keepExistingName = true, allowOlder = false)
+          if (!r.skippedAsOlder) loaded += r.member.name
           seen[f.id] = f.modifiedTime
+          failed.remove(f.id)
         } catch (e: FamilyImportException) {
           // A copy of this phone's own file (e.g. made before reinstalling): skip it from now on.
           seen[f.id] = f.modifiedTime
         } catch (e: WrongPasswordException) {
+          failed[f.id] = f.modifiedTime
           problems += "'${f.name}' 파일을 열 수 없어요. 그 사람과 가족 비밀번호가 같은지 확인해 주세요."
         } catch (e: NotABackupFileException) {
           seen[f.id] = f.modifiedTime
           problems += "'${f.name}'은(는) 머니플로우 파일이 아니에요."
+        } catch (e: kotlinx.coroutines.CancellationException) {
+          throw e
+        } catch (e: IOException) {
+          throw e
+        } catch (e: Exception) {
+          // One bad file (newer app version, deleted meanwhile …) must not stop the others.
+          failed[f.id] = f.modifiedTime
+          problems += "'${f.name}': " + (if (e is BackupFormatException) "더 새 버전의 앱에서 만든 파일이에요. 앱을 업데이트해 주세요." else e.message ?: "읽지 못했어요.")
         }
       }
-      // Forget files that were removed from the folder.
+      // Forget files that were removed from the folder (the listing worked, so this is real).
       settings.setFamilySyncSeen(seen.filterKeys { id -> files.any { it.id == id } })
-      settings.setFamilySyncResult(now, if (uploaded) now else null, problems.joinToString("\n").ifEmpty { null })
-      return FamilySyncResult(uploaded, loaded, problems)
+      settings.setFamilySyncFailed(failed.filterKeys { id -> files.any { it.id == id } })
+      settings.setFamilySyncResult(now, uploadedGen?.let { now }, uploadedGen, problems.joinToString("\n").ifEmpty { null })
+      return FamilySyncResult(uploadedGen != null, loaded, problems)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
     } catch (e: IOException) {
       throw e
     } catch (e: Exception) {
-      settings.setFamilySyncResult(now, if (uploaded) now else null, e.message ?: "가족 합산에 실패했어요.")
+      if (e is com.moneyflow.drive.DriveException && e.transient) throw e
+      settings.setFamilySyncResult(now, uploadedGen?.let { now }, uploadedGen, e.message ?: "가족 합산에 실패했어요.")
       throw e
     }
   }
 
   companion object {
     const val PREFIX = "moneyflow-family-"
-    const val MIN_PASSWORD = 6
+    const val MIN_PASSWORD = 8
     private const val DAY_MS = 24L * 3_600_000
 
     fun fileNameFor(name: String): String =

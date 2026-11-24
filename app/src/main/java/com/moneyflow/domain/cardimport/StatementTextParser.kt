@@ -105,7 +105,7 @@ class StatementTextParser(private val today: LocalDate) {
       val year = if (y.length == 2) 2000 + y.toInt() else y.toInt()
       return runCatching { LocalDate.of(year, mo.toInt(), d.toInt()) }.getOrNull()?.let { it to m.value }
     }
-    SHORT_DATE.find(line)?.let { m ->
+    SHORT_DATE.find(line)?.takeIf { m -> NOT_A_DATE_AFTER.find(line.substring(m.range.last + 1))?.range?.first != 0 && !CURRENCY_BEFORE.containsMatchIn(line.substring(0, m.range.first)) }?.let { m ->
       val (mo, d) = m.destructured
       val date = runCatching { LocalDate.of(today.year, mo.toInt(), d.toInt()) }.getOrNull() ?: return null
       return (if (date.isAfter(today.plusDays(1))) date.minusYears(1) else date) to m.value
@@ -135,6 +135,10 @@ class StatementTextParser(private val today: LocalDate) {
     private val FULL_DATE = Regex("(?<![0-9])(20\\d{2}|\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})(?![0-9])")
     private val SHORT_DATE = Regex("(?<![0-9./\\-])(\\d{1,2})\\s*[./월]\\s*(\\d{1,2})일?(?![0-9]|\\s*[.:/]\\s*\\d)")
     private val TIME = Regex("(?<![0-9])([01]?\\d|2[0-3]):([0-5]\\d)(?::[0-5]\\d)?")
+    /** "1.5% 적립", "3.25배": a decimal number, not a date. */
+    private val NOT_A_DATE_AFTER = Regex("\\s*[%배]")
+    /** "USD 3.25", "$3.25": a foreign amount, not a date. */
+    private val CURRENCY_BEFORE = Regex("(USD|EUR|JPY|GBP|CNY|US\\$|\\$|€|¥)\\s*$")
     private val AMOUNT = Regex("-?\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*원")
     private val BARE_NUMBER = Regex("(?<![가-힣A-Za-z0-9])[-+]?[0-9][0-9,.*\\-]*(?![가-힣A-Za-z0-9])")
     private val MASKED = Regex("[0-9*]{2,}[-*][0-9*\\-]+")

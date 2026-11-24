@@ -112,7 +112,7 @@ fun TransactionFormScreen(
   val cardStatuses by viewModel.cardStatuses.collectAsStateWithLifecycle()
   val recentTags by viewModel.recentTags.collectAsStateWithLifecycle()
   val isEditMode = viewModel.isEditMode
-  val zone = remember { ZoneId.systemDefault() }
+  val zone = remember { com.moneyflow.domain.APP_ZONE }
 
   // ---- Form state (survives rotation / process death) ----
   var type by rememberSaveable { mutableStateOf(TransactionType.EXPENSE) }

@@ -21,19 +21,31 @@ data class NetWorthPoint(val month: YearMonth, val assets: Long, val debts: Long
  * transactions, so older months are an estimate.
  */
 object NetWorthHistory {
-  fun monthly(accounts: List<AccountEntity>, txs: List<TransactionEntity>, endMonth: YearMonth, count: Int, zone: ZoneId): List<NetWorthPoint> {
+  /**
+   * [nowMillis]: future-dated records (later installment parts) already changed today's balances
+   * when they were saved, so they are treated as happening now.
+   */
+  fun monthly(
+    accounts: List<AccountEntity>,
+    txs: List<TransactionEntity>,
+    endMonth: YearMonth,
+    count: Int,
+    zone: ZoneId,
+    nowMillis: Long = Long.MAX_VALUE
+  ): List<NetWorthPoint> {
     if (accounts.isEmpty()) return emptyList()
     val balance = accounts.associate { it.id to it.balance }.toMutableMap()
     val debt = accounts.associate { it.id to it.isDebt }
     val first = txs.minOfOrNull { it.timestamp }?.let { YearMonth.from(MonthKeys.toLocalDate(it, zone)) } ?: endMonth
-    val sorted = txs.sortedByDescending { it.timestamp }
+    fun at(tx: TransactionEntity) = minOf(tx.timestamp, nowMillis)
+    val sorted = txs.sortedByDescending { at(it) }
     var i = 0
     val out = mutableListOf<NetWorthPoint>()
     for (n in 0 until count) {
       val m = endMonth.minusMonths(n.toLong())
       if (m.isBefore(first) && n > 0) break
       val end = MonthKeys.endMillis(m, zone)
-      while (i < sorted.size && sorted[i].timestamp > end) { undo(sorted[i], balance, debt); i++ }
+      while (i < sorted.size && at(sorted[i]) > end) { undo(sorted[i], balance, debt); i++ }
       out += NetWorthPoint(
         m,
         assets = balance.filterKeys { debt[it] == false }.values.sum(),

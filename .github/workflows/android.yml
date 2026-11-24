@@ -5,6 +5,9 @@ on:
     branches: [ main, "ccr-**" ]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,9 +24,11 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Unit tests
-        run: ./gradlew :app:testFullDebugUnitTest --stacktrace
+        run: ./gradlew :app:testBasicDebugUnitTest :app:testFullDebugUnitTest --stacktrace
       - name: Lint
-        run: ./gradlew :app:lintFullDebug
+        run: ./gradlew :app:lintBasicDebug :app:lintFullDebug
+      - name: Room schemas committed
+        run: git diff --exit-code app/schemas
       - name: Build debug APK
         run: ./gradlew :app:assembleBasicDebug :app:assembleFullDebug
       - name: Build release APK (unsigned)

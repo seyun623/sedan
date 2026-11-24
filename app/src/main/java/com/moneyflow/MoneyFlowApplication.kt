@@ -56,11 +56,8 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     // When records change (typed in, auto-captured, imported), check budget alerts and the widget soon.
     appScope.launch {
       try {
-        val d = db.get()
-        kotlinx.coroutines.flow.merge(
-          d.transactionDao().observeAll().drop(1).map { },
-          d.savingGoalDao().observeAll().drop(1).map { }
-        )
+        // Only "something changed" is needed: watch the tables without loading their rows.
+        db.get().invalidationTracker.createFlow("transactions", "saving_goals", emitInitialState = false)
           .debounce(3_000)
           .collect { onDataChanged() }
       } catch (e: kotlinx.coroutines.CancellationException) {
@@ -88,7 +85,7 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     runCatching { com.moneyflow.widget.SpendingWidget.updateAll(this) }
     runCatching {
       val s = settings.get()
-      s.setFamilySyncDirty(true)
+      s.markFamilyDataChanged()
       if (s.current().familySyncEnabled) com.moneyflow.work.FamilySyncWorker.runSoon(this)
     }
     WorkManager.getInstance(this).enqueueUniqueWork(

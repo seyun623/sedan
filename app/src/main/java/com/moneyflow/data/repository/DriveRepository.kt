@@ -61,6 +61,8 @@ class DriveRepository @Inject constructor(
   /** Files in the chosen shared folder. */
   suspend fun folderFiles(): List<DriveFile> = withContext(Dispatchers.IO) { client().filesIn(folderId()) }
 
+  suspend fun checkFolderAccess() = withContext(Dispatchers.IO) { client().checkFolder(folderId()) }
+
   suspend fun download(fileId: String): ByteArray = withContext(Dispatchers.IO) { client().download(fileId) }
 
   suspend fun overwrite(fileId: String, bytes: ByteArray) = withContext(Dispatchers.IO) { client().update(fileId, bytes) }

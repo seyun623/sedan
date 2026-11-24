@@ -80,7 +80,7 @@ class AnalyticsViewModel @Inject constructor(
       topExpenses = monthTxs.filter { it.type == TransactionType.EXPENSE }.sortedByDescending { it.amount },
       monthTransactions = monthTxs,
       tags = com.moneyflow.util.Tags.summarize(monthTxs),
-      netWorth = com.moneyflow.domain.report.NetWorthHistory.monthly(accounts, all, clock.currentMonth(), 12, clock.zone),
+      netWorth = com.moneyflow.domain.report.NetWorthHistory.monthly(accounts, all, clock.currentMonth(), 12, clock.zone, clock.nowMillis()),
       isLoading = false
     )
   }.flowOn(Dispatchers.Default)

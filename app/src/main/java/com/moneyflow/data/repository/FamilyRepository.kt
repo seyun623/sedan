@@ -36,7 +36,9 @@ data class FamilyMonth(
   /** Combined expense by category, largest first. */
   val categories: List<FamilyCategory>,
   /** Family monthly budget (0 = not set). */
-  val budget: Long = 0
+  val budget: Long = 0,
+  /** Everyone's spending that counts toward the budget ("예산 제외" left out). */
+  val budgetExpense: Long = 0
 ) {
   val totalIncome: Long get() = people.sumOf { it.income }
   val totalExpense: Long get() = people.sumOf { it.expense }
@@ -55,7 +57,13 @@ data class SharedGoal(
 }
 
 /** Result of loading a family member's backup. */
-data class FamilyImportResult(val member: FamilyMemberEntity, val transactionCount: Int, val updated: Boolean)
+data class FamilyImportResult(
+  val member: FamilyMemberEntity,
+  val transactionCount: Int,
+  val updated: Boolean,
+  /** The file was older than the copy already loaded, so nothing changed. */
+  val skippedAsOlder: Boolean = false
+)
 
 /**
  * Family combined view without a server: each person's backup file is loaded as a read-only
@@ -75,7 +83,14 @@ class FamilyRepository @Inject constructor(
   val members: Flow<List<FamilyMemberEntity>> = dao.observeMembers()
 
   /** Opens a backup file (password-encrypted) and stores that person's income / expenses. */
-  suspend fun import(file: ByteArray, password: CharArray, name: String, keepExistingName: Boolean = false): FamilyImportResult {
+  suspend fun import(
+    file: ByteArray,
+    password: CharArray,
+    name: String,
+    keepExistingName: Boolean = false,
+    /** false: a file older than the loaded copy is ignored (automatic sync). */
+    allowOlder: Boolean = true
+  ): FamilyImportResult {
     val content = withContext(Dispatchers.Default) { backups.readBackup(file, password) }
     val ownId = settings.installId()
     if (content.deviceId.isNotEmpty() && content.deviceId == ownId) {
@@ -87,6 +102,9 @@ class FamilyRepository @Inject constructor(
     val items = content.transactions.filter { it.type != TransactionType.TRANSFER }
     return db.withTransaction {
       val existing = dao.byDevice(deviceId)
+      if (!allowOlder && existing != null && content.summary.createdAt < existing.backupCreatedAt) {
+        return@withTransaction FamilyImportResult(existing, 0, updated = false, skippedAsOlder = true)
+      }
       val newName = if (keepExistingName && existing != null) existing.name else name.trim().ifEmpty { existing?.name ?: "가족" }
       val memberId = if (existing != null) {
         dao.updateMember(existing.id, newName, content.summary.createdAt, now)
@@ -180,7 +198,9 @@ class FamilyRepository @Inject constructor(
           list.groupBy { it.second }.map { (p, l) -> p to l.sumOf { it.third } }.sortedByDescending { it.second }
         )
       }.sortedByDescending { it.total }
-      FamilyMonth(month, listOf(me) + others, categories, s.familyBudget)
+      val budgetExpense = mine.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }.sumOf { it.amount } +
+        family.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }.sumOf { it.amount }
+      FamilyMonth(month, listOf(me) + others, categories, s.familyBudget, budgetExpense)
     }
   }
 }

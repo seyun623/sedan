@@ -10,7 +10,7 @@ import java.util.Locale
 
 /** Thread-safe formatting helpers (java.time formatters are immutable). */
 object Formatters {
-  private val zone: ZoneId get() = ZoneId.systemDefault()
+  private val zone: ZoneId get() = com.moneyflow.domain.APP_ZONE
   private val monthYearFormat = DateTimeFormatter.ofPattern("yyyy년 M월", Locale.KOREA)
   private val monthKeyFormat = DateTimeFormatter.ofPattern("yyyy-MM", Locale.KOREA)
   private val dayHeaderFormat = DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREA)

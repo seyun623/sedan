@@ -18,7 +18,8 @@ import javax.inject.Singleton
 class AiStatementReader @Inject constructor(private val ai: AiService) {
 
   suspend fun read(screenText: String, today: LocalDate): StatementExtraction {
-    val text = screenText.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MAX_CHARS)
+    // Personal details the AI doesn't need (card / account / phone numbers, e-mail) are masked first.
+    val text = redact(screenText.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")).take(MAX_CHARS)
     val prompt = buildString {
       appendLine("다음은 한국 카드사 홈페이지의 카드 이용내역/명세서/실적/혜택 화면에서 읽은 글자입니다.")
       appendLine("카드 결제 내역, 실적 금액, 카드 혜택만 정확히 뽑아 주세요. 화면에 없는 내용은 만들지 마세요.")
@@ -35,18 +36,43 @@ class AiStatementReader @Inject constructor(private val ai: AiService) {
     }
     val shape = """{"transactions":[{"date":"YYYY-MM-DD","time":"HH:mm 또는 빈 문자열","merchant":"가맹점","amount":0,"cancel":false,"installmentMonths":0}],"performance":[{"label":"설명","amount":0}],"benefits":[${BenefitReader.ITEM_SHAPE}]}"""
     val json = JSONObject(ai.completeJson(prompt, schema(), shape))
-    return parseResult(json, ai.providerLabel())
+    return parseResult(json, ai.providerLabel(), today, text)
   }
 
   companion object {
     private const val MAX_CHARS = 15_000
 
-    internal fun parseResult(json: JSONObject, readBy: String): StatementExtraction {
-      val items = json.optJSONArray("transactions").objects().mapNotNull { o ->
+    private val CARD_NUMBER = Regex("(?<![0-9])[0-9]{4}[- ]?[0-9*]{4}[- ]?[0-9*]{4}[- ]?[0-9*]{3,4}(?![0-9])")
+    private val RESIDENT_NUMBER = Regex("(?<![0-9])[0-9]{6}\\s?-\\s?[1-4*][0-9*]{6}(?![0-9])")
+    private val PHONE = Regex("(?<![0-9])01[016789][- ]?[0-9*]{3,4}[- ]?[0-9]{4}(?![0-9])")
+    private val EMAIL = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+    /** Account-number style "110-123-456789" (10+ digits; dates like 2026-11-21 have 8). */
+    private val ACCOUNT = Regex("(?<![0-9])[0-9*]{2,6}-[0-9*]{2,6}-[0-9*]{2,8}(?:-[0-9*]{1,4})?(?![0-9])")
+
+    /** Masks card / resident / phone / account numbers and e-mail addresses. */
+    fun redact(text: String): String = text
+      .replace(RESIDENT_NUMBER, "[주민번호]")
+      .replace(CARD_NUMBER, "[카드번호]")
+      .replace(PHONE, "[전화번호]")
+      .replace(EMAIL, "[이메일]")
+      .replace(ACCOUNT) { m -> if (m.value.count { it.isDigit() || it == '*' } >= 10) "[계좌번호]" else m.value }
+
+    private const val MAX_ROWS = 500
+    private const val MAX_AMOUNT = 100_000_000L
+
+    /**
+     * Checks the AI's answer against the screen: dates within the last ~13 months, sane amounts
+     * that actually appear in [sourceText] (with or without commas), and a row limit.
+     */
+    internal fun parseResult(json: JSONObject, readBy: String, today: LocalDate? = null, sourceText: String? = null): StatementExtraction {
+      val digitsOnly = sourceText?.replace(",", "")
+      val items = json.optJSONArray("transactions").objects().take(MAX_ROWS).mapNotNull { o ->
         val date = runCatching { LocalDate.parse(o.optString("date")) }.getOrNull() ?: return@mapNotNull null
+        if (today != null && (date.isAfter(today.plusDays(1)) || date.isBefore(today.minusDays(400)))) return@mapNotNull null
         val amount = o.optLong("amount", 0L).let { kotlin.math.abs(it) }
         val merchant = o.optString("merchant").trim().take(40)
-        if (amount <= 0 || merchant.isEmpty()) return@mapNotNull null
+        if (amount <= 0 || amount > MAX_AMOUNT || merchant.isEmpty()) return@mapNotNull null
+        if (digitsOnly != null && !digitsOnly.contains(amount.toString())) return@mapNotNull null
         StatementItem(
           date = date,
           time = o.optString("time").takeIf { it.isNotBlank() }?.let { runCatching { LocalTime.parse(it) }.getOrNull() },

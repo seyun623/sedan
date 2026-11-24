@@ -173,4 +173,39 @@ class AutoCaptureProcessorTest {
     assertTrue(p.memo.contains("12.50"))
     assertTrue(txs().isEmpty())
   }
+
+  // ---- 2.9 review fixes ----
+
+  @Test fun aCancellationArrivingTwiceRemovesOnlyOnePurchase() = runBlocking {
+    processor.process(CaptureChannel.SMS, "15447200", null, "", approval, clock.nowMillis())
+    clock.advanceMillis(24 * 3_600_000L)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", approval.replace("11/21 14:32", "11/22 14:32"), clock.nowMillis())
+    assertEquals(2, txs().size)
+    val cancel = "[Web발신] 신한카드(1234)승인취소 홍*동 12,500원 11/22 15:00 스타벅스"
+    processor.process(CaptureChannel.SMS, "15447200", null, "", cancel, clock.nowMillis())
+    processor.process(CaptureChannel.NOTIFICATION, shinhanApp, "신한카드", "", cancel, clock.nowMillis() + 30_000)
+    assertEquals(1, txs().size)
+  }
+
+  @Test fun declinedAndAdMessagesAreNotRecorded() = runBlocking {
+    listOf(
+      "[KB국민카드]홍*동님 승인거절 12,000원 한도초과 11/25 14:30 스타벅스",
+      "[KB국민카드] 11월 결제예정금액 523,400원 (11/25 결제)",
+      "(광고)[삼성카드] 삼성페이로 결제 시 최대 30,000원 캐시백",
+      "[신한카드] 승인 12,000원 확인 https://bit.ly/abc"
+    ).forEach { processor.process(CaptureChannel.SMS, "15447200", null, "", it, clock.nowMillis()) }
+    assertTrue(txs().isEmpty())
+  }
+
+  @Test fun bankAutopayOfACardBillLowersTheCardDebt() = runBlocking {
+    ledger.addAccount(card(name = "삼성카드 taptap", number = "").copy(bankName = "삼성카드", balance = 640_000))
+    val samsung = ledger.getAccounts().first { it.name.startsWith("삼성카드") }
+    val bank = ledger.getAccounts().first { it.id == bankId }
+    ledger.updateAccount(bank.copy(bankName = "KB국민", name = "KB 생활비"))
+    processor.process(CaptureChannel.SMS, "15881688", null, "", "[KB]11/25 09:00 123-***-456 출금 640,000원 삼성카드", clock.nowMillis())
+    val t = txs().single()
+    assertEquals(com.moneyflow.data.model.TransactionType.TRANSFER, t.type)
+    assertEquals(samsung.id, t.toAccountId)
+    assertEquals(0L, db.accountDao().getById(samsung.id)!!.balance)
+  }
 }

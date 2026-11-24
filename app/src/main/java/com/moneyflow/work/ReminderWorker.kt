@@ -57,7 +57,8 @@ class ReminderChecker @Inject constructor(
       val top = stats.categoryBreakdown(txs).firstOrNull()?.let { it.category to it.amount }
       BudgetReminders.monthlySummary(
         today, stats.totalIncome(txs), stats.totalExpense(txs), budgets.observeBudget(last).first().total, top,
-        stats.totalExpense(before).takeIf { before.isNotEmpty() }, sent
+        stats.totalExpense(before).takeIf { before.isNotEmpty() }, sent,
+        budgetExpense = stats.budgetExpense(txs)
       )?.let { out += it }
     }
     if (s.billRemindersEnabled) {

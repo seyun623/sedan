@@ -46,6 +46,7 @@ import com.moneyflow.ui.theme.Gray600
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -56,7 +57,7 @@ class RulesViewModel @Inject constructor(
   private val messages: UserMessageBus
 ) : ViewModel() {
   val rules: StateFlow<List<CategoryRuleEntity>> = repo.rules.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-  val learned: StateFlow<List<LearnedCategory>> = repo.learned.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+  val learned: StateFlow<List<LearnedCategory>> = repo.learned.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
   fun save(rule: CategoryRuleEntity) = viewModelScope.launch {
     runCatching { repo.save(rule) }

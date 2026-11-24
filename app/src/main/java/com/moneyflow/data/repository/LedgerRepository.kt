@@ -175,6 +175,11 @@ class LedgerRepository @Inject constructor(
     if (ids.isNotEmpty()) txDao.setCategory(ids, category)
   }
 
+  /** Deletes several transactions in one database transaction (all or nothing). */
+  suspend fun deleteTransactions(txs: List<TransactionEntity>) = db.withTransaction {
+    txs.forEach { deleteWithEffects(it) }
+  }
+
   // ---- Accounts ----------------------------------------------------------------------------
 
   suspend fun addAccount(account: AccountEntity): Long = accountDao.insert(account.copy(id = 0))

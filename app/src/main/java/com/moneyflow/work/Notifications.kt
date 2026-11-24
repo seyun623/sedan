@@ -46,6 +46,15 @@ object Notifications {
       .setStyle(NotificationCompat.BigTextStyle().bigText(reminder.text))
       .setContentIntent(open)
       .setAutoCancel(true)
+      // On the lock screen only "a notification" shows; amounts appear after unlocking the phone.
+      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+      .setPublicVersion(
+        NotificationCompat.Builder(context, reminder.channel.id)
+          .setSmallIcon(R.mipmap.ic_launcher)
+          .setContentTitle("머니플로우")
+          .setContentText(reminder.channel.label)
+          .build()
+      )
       .build()
     return try {
       NotificationManagerCompat.from(context).notify(reminder.key.hashCode(), n)

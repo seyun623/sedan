@@ -11,6 +11,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.moneyflow.ai.AiProvider
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -29,6 +31,9 @@ data class AppSettings(
   val pinLockedUntil: Long = 0L,
   /** Wall-clock time of the last wrong PIN (detects the device clock being set back). */
   val pinLastFailureAt: Long = 0L,
+  /** Lockout end on the monotonic clock, valid only within boot [pinLockBoot]. */
+  val pinLockedUntilElapsed: Long = 0L,
+  val pinLockBoot: String = "",
   val secureScreen: Boolean = true,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   val notificationCaptureEnabled: Boolean = false,
@@ -92,8 +97,6 @@ data class AppSettings(
   val familySyncLastAt: Long = 0L,
   val familySyncLastUploadAt: Long = 0L,
   val familySyncError: String? = null,
-  /** Data changed since the last upload. */
-  val familySyncDirty: Boolean = true,
   /** Repeating-payment suggestions the user said are not 고정 거래. */
   val dismissedRecurringSuggestions: Set<String> = emptySet(),
   /** Card company pages to read automatically after login, by card site id. */
@@ -129,6 +132,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val FAILED = intPreferencesKey("failed_pin_attempts")
     val LOCKED_UNTIL = longPreferencesKey("pin_locked_until")
     val LAST_FAILURE = longPreferencesKey("pin_last_failure_at")
+    val LOCKED_UNTIL_ELAPSED = longPreferencesKey("pin_locked_until_elapsed")
+    val LOCK_BOOT = stringPreferencesKey("pin_lock_boot_id")
     val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
     val THEME = stringPreferencesKey("theme_mode")
     val NOTI_CAPTURE = booleanPreferencesKey("notification_capture")
@@ -174,14 +179,20 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val FAMILY_SYNC_LAST = longPreferencesKey("family_sync_last_at")
     val FAMILY_SYNC_LAST_UP = longPreferencesKey("family_sync_last_upload_at")
     val FAMILY_SYNC_ERROR = stringPreferencesKey("family_sync_error")
-    val FAMILY_SYNC_DIRTY = booleanPreferencesKey("family_sync_dirty")
+    /** Data version: raised on every change; [FAMILY_SYNC_UP_GEN] is the version last uploaded. */
+    val FAMILY_SYNC_GEN = longPreferencesKey("family_sync_generation")
+    val FAMILY_SYNC_UP_GEN = longPreferencesKey("family_sync_uploaded_generation")
+    val FAMILY_SYNC_FAILED = stringPreferencesKey("family_sync_failed_json")
     val FAMILY_SYNC_SEEN = stringPreferencesKey("family_sync_seen_json")
     val RECURRING_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("recurring_suggestions_dismissed")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
 
-  val settings: Flow<AppSettings> = store.data.map { p ->
+  val settings: Flow<AppSettings> = store.data.catch { e ->
+    // A damaged settings file must not crash every screen: start from defaults.
+    if (e is java.io.IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e
+  }.map { p ->
     AppSettings(
       pinHash = p[Keys.PIN_HASH],
       pinSalt = p[Keys.PIN_SALT],
@@ -190,6 +201,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       failedPinAttempts = p[Keys.FAILED] ?: 0,
       pinLockedUntil = p[Keys.LOCKED_UNTIL] ?: 0L,
       pinLastFailureAt = p[Keys.LAST_FAILURE] ?: 0L,
+      pinLockedUntilElapsed = p[Keys.LOCKED_UNTIL_ELAPSED] ?: 0L,
+      pinLockBoot = p[Keys.LOCK_BOOT] ?: "",
       secureScreen = p[Keys.SECURE_SCREEN] ?: true,
       themeMode = p[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
       notificationCaptureEnabled = p[Keys.NOTI_CAPTURE] ?: false,
@@ -237,10 +250,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       familySyncFileName = p[Keys.FAMILY_SYNC_FILE],
       familySyncLastAt = p[Keys.FAMILY_SYNC_LAST] ?: 0L,
       familySyncLastUploadAt = p[Keys.FAMILY_SYNC_LAST_UP] ?: 0L,
-      familySyncError = p[Keys.FAMILY_SYNC_ERROR],
-      familySyncDirty = p[Keys.FAMILY_SYNC_DIRTY] ?: true
+      familySyncError = p[Keys.FAMILY_SYNC_ERROR]
     )
-  }
+  }.distinctUntilChanged()
 
   suspend fun current(): AppSettings = settings.first()
 
@@ -259,15 +271,18 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     it[Keys.LOCKED_UNTIL] = 0L
   }
 
-  suspend fun recordPinFailure(attempts: Int, lockedUntil: Long, failedAt: Long) = store.edit {
+  suspend fun recordPinFailure(attempts: Int, lockedUntil: Long, failedAt: Long, lockedUntilElapsed: Long = 0L, bootId: String = "") = store.edit {
     it[Keys.FAILED] = attempts
     it[Keys.LOCKED_UNTIL] = lockedUntil
     it[Keys.LAST_FAILURE] = failedAt
+    it[Keys.LOCKED_UNTIL_ELAPSED] = lockedUntilElapsed
+    it[Keys.LOCK_BOOT] = bootId
   }
 
   suspend fun resetPinFailures() = store.edit {
     it[Keys.FAILED] = 0
     it[Keys.LOCKED_UNTIL] = 0L
+    it[Keys.LOCKED_UNTIL_ELAPSED] = 0L
   }
 
   suspend fun setBiometricEnabled(enabled: Boolean) = store.edit { it[Keys.BIOMETRIC] = enabled }
@@ -379,28 +394,54 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     it[Keys.FAMILY_SYNC_NAME] = name
     it[Keys.FAMILY_SYNC_PW] = passwordEncrypted
     it.remove(Keys.FAMILY_SYNC_ERROR)
+    // A new password may open files that failed before.
+    it.remove(Keys.FAMILY_SYNC_FAILED)
   }
 
-  suspend fun setFamilySyncFile(name: String, uploadedAt: Long) = store.edit {
+  /** My family file was just written with the data of version [generation]. */
+  suspend fun setFamilySyncFile(name: String, uploadedAt: Long, generation: Long) = store.edit {
     it[Keys.FAMILY_SYNC_FILE] = name
     it[Keys.FAMILY_SYNC_LAST_UP] = uploadedAt
-    it[Keys.FAMILY_SYNC_DIRTY] = false
+    it[Keys.FAMILY_SYNC_UP_GEN] = generation
     it.remove(Keys.FAMILY_SYNC_ERROR)
   }
 
   suspend fun clearFamilySync() = store.edit {
-    listOf(Keys.FAMILY_SYNC_PW, Keys.FAMILY_SYNC_FILE, Keys.FAMILY_SYNC_ERROR, Keys.FAMILY_SYNC_SEEN).forEach { k -> it.remove(k) }
+    listOf(Keys.FAMILY_SYNC_PW, Keys.FAMILY_SYNC_FILE, Keys.FAMILY_SYNC_ERROR, Keys.FAMILY_SYNC_SEEN, Keys.FAMILY_SYNC_FAILED).forEach { k -> it.remove(k) }
     it.remove(Keys.FAMILY_SYNC_LAST); it.remove(Keys.FAMILY_SYNC_LAST_UP)
   }
 
-  suspend fun setFamilySyncDirty(dirty: Boolean) = store.edit { it[Keys.FAMILY_SYNC_DIRTY] = dirty }
+  /** The records changed: the family file needs uploading. (Not part of [AppSettings], so screens don't redraw.) */
+  suspend fun markFamilyDataChanged() = store.edit { it[Keys.FAMILY_SYNC_GEN] = (it[Keys.FAMILY_SYNC_GEN] ?: 1L) + 1 }
 
-  /** Result of a sync run; [uploadedAt] non-null when this phone's file was written. */
-  suspend fun setFamilySyncResult(at: Long, uploadedAt: Long?, error: String?) = store.edit {
+  /** (current data version, version last uploaded). Different = there are changes to upload. */
+  suspend fun familySyncGenerations(): Pair<Long, Long> =
+    store.data.first().let { (it[Keys.FAMILY_SYNC_GEN] ?: 1L) to (it[Keys.FAMILY_SYNC_UP_GEN] ?: 0L) }
+
+  /**
+   * Result of a sync run. [uploadedGeneration] is the data version that was uploaded (null = no
+   * upload); a change made while uploading keeps a newer version, so it is uploaded next time.
+   */
+  suspend fun setFamilySyncResult(at: Long, uploadedAt: Long?, uploadedGeneration: Long?, error: String?) = store.edit {
     it[Keys.FAMILY_SYNC_LAST] = at
-    if (uploadedAt != null) { it[Keys.FAMILY_SYNC_LAST_UP] = uploadedAt; it[Keys.FAMILY_SYNC_DIRTY] = false }
+    if (uploadedAt != null && uploadedGeneration != null) {
+      it[Keys.FAMILY_SYNC_LAST_UP] = uploadedAt
+      it[Keys.FAMILY_SYNC_UP_GEN] = maxOf(it[Keys.FAMILY_SYNC_UP_GEN] ?: 0L, uploadedGeneration)
+    }
     if (error == null) it.remove(Keys.FAMILY_SYNC_ERROR) else it[Keys.FAMILY_SYNC_ERROR] = error
   }
+
+  /** Drive file id → modified time of family files that couldn't be opened (wrong password …). */
+  suspend fun familySyncFailed(): Map<String, String> = jsonMap(store.data.first()[Keys.FAMILY_SYNC_FAILED])
+
+  suspend fun setFamilySyncFailed(failed: Map<String, String>) = store.edit {
+    it[Keys.FAMILY_SYNC_FAILED] = org.json.JSONObject(failed as Map<*, *>).toString()
+  }
+
+  private fun jsonMap(json: String?): Map<String, String> = runCatching {
+    val o = org.json.JSONObject(json ?: "{}")
+    o.keys().asSequence().associateWith { o.getString(it) }
+  }.getOrDefault(emptyMap())
 
   /** Drive file id → modified time of family files already loaded. */
   suspend fun familySyncSeen(): Map<String, String> = runCatching {

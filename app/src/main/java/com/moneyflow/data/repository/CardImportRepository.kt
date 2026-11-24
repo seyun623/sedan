@@ -94,7 +94,9 @@ class CardImportRepository @Inject constructor(
     var cancelled = 0
     var skipped = 0
     val zone = clock.zone
-    for ((index, row) in rows.withIndex()) {
+    // Identical rows (same day, time, amount, place) are told apart by how many came before.
+    val seenRows = HashMap<String, Int>()
+    for (row in rows) {
       val item = row.item
       val millis = item.date.atTime(item.time ?: LocalTime.NOON).atZone(zone).toInstant().toEpochMilli()
       if (item.isCancel) {
@@ -102,14 +104,22 @@ class CardImportRepository @Inject constructor(
           val candidates = db.transactionDao().getForAccountBetween(
             account.id, millis - CANCEL_LOOKBACK_MS, millis + 24 * 3_600_000L
           ).filter { it.type == TransactionType.EXPENSE && it.amount == item.amount }
-          val original = candidates.firstOrNull { sameMerchant(it.memo, item.merchant) } ?: candidates.maxByOrNull { it.timestamp }
+          // Same place only; otherwise just when a single purchase of that amount was made that day.
+          val original = candidates.firstOrNull { sameMerchant(it.memo, item.merchant) }
+            ?: candidates.filter { kotlin.math.abs(it.timestamp - millis) <= 24 * 3_600_000L }.singleOrNull()
           original?.let { ledger.deleteWithEffects(it) } != null
         }
         if (removed) cancelled++ else skipped++
         continue
       }
-      val key = dedupKey(account.id, item, index)
+      val content = "${item.date}|${item.time}|${item.amount}|${item.merchant.replace(" ", "")}|${item.isIncome}"
+      val occurrence = seenRows.merge(content, 1, Int::plus)!! - 1
+      val key = dedupKey(account.id, item, occurrence)
       if (db.transactionDao().countByDedupKey(key) > 0) { skipped++; continue }
+      // Also skip a row already imported before (older versions keyed rows by list position).
+      val sameMoment = db.transactionDao().getForAccountBetween(account.id, millis, millis)
+        .count { it.amount == item.amount && it.source == TransactionSource.CARD_IMPORT && sameMerchant(it.memo, item.merchant) }
+      if (sameMoment > occurrence) { skipped++; continue }
       val tx = TransactionEntity(
         type = if (item.isIncome) TransactionType.INCOME else TransactionType.EXPENSE,
         amount = item.amount,
@@ -142,7 +152,7 @@ class CardImportRepository @Inject constructor(
   }
 
   private fun dedupKey(accountId: Long, item: StatementItem, index: Int): String {
-    // The index keeps two identical purchases on the same day apart within one import.
+    // The occurrence number keeps identical purchases on the same day apart.
     val raw = "card|$accountId|${item.date}|${item.time}|${item.amount}|${item.merchant.replace(" ", "")}|${if (item.isIncome) "in" else ""}$index"
     return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
   }

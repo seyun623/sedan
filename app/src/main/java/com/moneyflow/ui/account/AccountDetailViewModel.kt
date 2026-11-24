@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -75,7 +76,7 @@ class AccountDetailViewModel @Inject constructor(
       account, txs, all.filter { it.id != accountId }, s.cardPerformance[accountId],
       cardProfile = card.first, cardBenefits = card.second, cardStatus = card.third, isLoading = false
     )
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())
+  }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())
 
   /** AI provider name when AI is set up (enables "AI로 혜택 등록"), else null. */
   val aiLabel: StateFlow<String?> = settings.settings

@@ -16,7 +16,7 @@ android {
     targetSdk = 36
     // Overridable from CI: ./gradlew bundleRelease -PversionCode=12 -PversionName=1.2.0
     versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
-    versionName = (project.findProperty("versionName") as String?) ?: "2.4.0"
+    versionName = (project.findProperty("versionName") as String?) ?: "2.9.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -25,6 +25,9 @@ android {
   // (KEYSTORE_PATH, STORE_PASSWORD, KEY_PASSWORD; optional KEY_ALIAS).
   // Debug builds use the default Android debug keystore.
   val releaseKeystore = System.getenv("KEYSTORE_PATH")?.let { file(it) }
+  if (releaseKeystore != null && !releaseKeystore.exists()) {
+    throw GradleException("KEYSTORE_PATH points to a missing file: $releaseKeystore")
+  }
   signingConfigs {
     if (releaseKeystore != null && releaseKeystore.exists()) {
       create("release") {

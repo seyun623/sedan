@@ -81,7 +81,17 @@ fun MoneyFlowNavHost(
         actionLabel = msg.actionLabel,
         duration = if (msg.actionLabel != null) SnackbarDuration.Long else SnackbarDuration.Short
       )
-      if (result == SnackbarResult.ActionPerformed) msg.onAction?.invoke()
+      if (result == SnackbarResult.ActionPerformed) {
+        // e.g. undo after the account was deleted: tell the user instead of crashing.
+        try {
+          msg.onAction?.invoke()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          com.moneyflow.util.ProblemLog.record("실행 취소", e)
+          snackbarHostState.showSnackbar("되돌리지 못했어요. 계좌가 지워졌다면 직접 다시 입력해 주세요.")
+        }
+      }
     }
   }
 

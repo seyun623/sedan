@@ -82,7 +82,15 @@ class AutoCaptureProcessor @Inject constructor(
 
     return db.withTransaction {
       if (payment.kind == PaymentKind.CANCELLATION) {
-        return@withTransaction cancelOriginal(payment, timestamp)
+        // The same cancellation can arrive by SMS and by app push: handle it once (±3 minutes).
+        fun cancelKey(minute: Long) = "cancel|" + sha("${payment.amount}|${payment.merchant.replace(" ", "")}|$minute")
+        val minute = timestamp / 60_000
+        if ((minute - 3..minute + 3).any { cancelKey(it) in s.sentCardAlerts }) {
+          return@withTransaction CaptureOutcome.Skipped("이미 처리한 취소")
+        }
+        val outcome = cancelOriginal(payment, timestamp)
+        if (outcome is CaptureOutcome.CancelledOriginal) settings.markAlertsSent(listOf(cancelKey(minute)))
+        return@withTransaction outcome
       }
 
       val key = dedupKey(payment, timestamp)
@@ -93,9 +101,27 @@ class AutoCaptureProcessor @Inject constructor(
         payment.type, payment.amount, timestamp - DUPLICATE_WINDOW_MS, timestamp + DUPLICATE_WINDOW_MS
       )
       if (near.isNotEmpty()) return@withTransaction CaptureOutcome.Skipped("같은 결제가 다른 경로로 이미 등록됨")
+      // An installment purchase already split into monthly parts by the other channel.
+      if (payment.installmentMonths != null && splitPurchaseNear(payment.amount, timestamp) != null) {
+        return@withTransaction CaptureOutcome.Skipped("같은 할부 결제가 다른 경로로 이미 등록됨")
+      }
 
-      val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+      var account = pickAccount(payment, s.autoCaptureDefaultAccountId)
         ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
+      // A card bill moves money from a bank account to the card (lowers what the card owes).
+      var billTarget: AccountEntity? = null
+      if (payment.type == TransactionType.TRANSFER) {
+        val accounts = db.accountDao().getAll()
+        val card = findCard(accounts, payment.billCard ?: payment.provider?.takeIf { it.endsWith("카드") })
+        if (account.isDebt) {
+          // Pushed by the card app: the paying bank account is unknown; use the default one.
+          billTarget = account
+          account = accounts.firstOrNull { it.id == s.autoCaptureDefaultAccountId && !it.isDebt }
+            ?: return@withTransaction CaptureOutcome.Skipped("카드 대금을 낸 통장을 알 수 없음")
+        } else {
+          billTarget = card
+        }
+      }
 
       // A user rule wins; otherwise reuse the category last used for this merchant/sender.
       val category = CategoryRules.categoryFor(rules, payment.type, payment.merchant)
@@ -120,7 +146,9 @@ class AutoCaptureProcessor @Inject constructor(
             else -> "계좌이체"
           },
           source = if (channel == CaptureChannel.SMS) TransactionSource.SMS else TransactionSource.NOTIFICATION,
-          dedupKey = key
+          dedupKey = key,
+          toAccountId = billTarget?.id,
+          toAccountName = billTarget?.name
         )
       val months = payment.installmentMonths
       val id = if (s.splitInstallments && months != null && months > 1 && payment.type == TransactionType.EXPENSE) {
@@ -137,8 +165,10 @@ class AutoCaptureProcessor @Inject constructor(
     val candidates = db.transactionDao().findExpensesForCancel(
       payment.amount, timestamp - CANCEL_LOOKBACK_MS, timestamp + DUPLICATE_WINDOW_MS
     )
+    // Only the same place; without a readable place, only when exactly one purchase of that amount was made that day.
     val original = candidates.firstOrNull { it.source.isAutoCaptured && sameMerchant(it.memo, payment.merchant) }
-      ?: candidates.firstOrNull { it.source.isAutoCaptured }
+      ?: candidates.filter { it.source.isAutoCaptured && kotlin.math.abs(it.timestamp - timestamp) <= DAY_MS }
+        .singleOrNull()?.takeIf { payment.merchant == UNKNOWN_MERCHANT }
     if (original != null) {
       ledger.deleteWithEffects(original)
       return CaptureOutcome.CancelledOriginal(original)
@@ -183,6 +213,19 @@ class AutoCaptureProcessor @Inject constructor(
     return CaptureOutcome.NeedsKrwAmount(prompt)
   }
 
+  /** First part of an auto-captured installment purchase of [total] recorded around [timestamp]. */
+  private suspend fun splitPurchaseNear(total: Long, timestamp: Long): TransactionEntity? =
+    db.transactionDao().getBetween(timestamp - DUPLICATE_WINDOW_MS, timestamp + DUPLICATE_WINDOW_MS)
+      .filter { it.source.isAutoCaptured && InstallmentSplitter.partOf(it.memo)?.first == 1 }
+      .firstOrNull { ledger.installmentGroup(it).sumOf { p -> p.amount } == total }
+
+  /** The card account of [cardCompany] ("삼성카드"), if the user has one. */
+  private fun findCard(accounts: List<AccountEntity>, cardCompany: String?): AccountEntity? {
+    val core = cardCompany?.removeSuffix("카드")?.removePrefix("KB")?.takeIf { it.length >= 2 } ?: return null
+    return accounts.filter { it.accountType == AccountType.CREDIT_CARD || it.isDebt }
+      .firstOrNull { it.name.contains(core) || it.bankName.contains(core) }
+  }
+
   private fun sameMerchant(memo: String, merchant: String): Boolean {
     val a = memo.replace(" ", "")
     val b = merchant.replace(" ", "")
@@ -220,6 +263,8 @@ class AutoCaptureProcessor @Inject constructor(
   companion object {
     const val DUPLICATE_WINDOW_MS = 3 * 60_000L
     const val CANCEL_LOOKBACK_MS = 60L * 24 * 60 * 60_000
+    private const val DAY_MS = 24 * 60 * 60_000L
+    private const val UNKNOWN_MERCHANT = "알 수 없는 가맹점"
   }
 }
 

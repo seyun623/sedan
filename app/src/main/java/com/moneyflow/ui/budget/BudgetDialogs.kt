@@ -525,7 +525,7 @@ private val dateLabelFormat = DateTimeFormatter.ofPattern("yyyy년 M월 d일", L
 
 /** Formats a goal's target date ("2027년 5월 1일"). */
 internal fun formatGoalDate(millis: Long): String =
-  Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate().format(dateLabelFormat)
+  Instant.ofEpochMilli(millis).atZone(com.moneyflow.domain.APP_ZONE).toLocalDate().format(dateLabelFormat)
 
 private object FutureOrTodayDates : SelectableDates {
   override fun isSelectableDate(utcTimeMillis: Long): Boolean =
@@ -552,7 +552,7 @@ internal fun GoalDialog(
   // Selected target date as epoch day (local date), null until chosen.
   var targetEpochDay by rememberSaveable {
     mutableStateOf(
-      initial?.targetDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() }
+      initial?.targetDate?.let { Instant.ofEpochMilli(it).atZone(com.moneyflow.domain.APP_ZONE).toLocalDate().toEpochDay() }
     )
   }
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -568,7 +568,7 @@ internal fun GoalDialog(
     confirmEnabled = canSave,
     onConfirm = {
       val epochDay = targetEpochDay ?: return@FormDialog
-      val millis = LocalDate.ofEpochDay(epochDay).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+      val millis = LocalDate.ofEpochDay(epochDay).atStartOfDay(com.moneyflow.domain.APP_ZONE).toInstant().toEpochMilli()
       onSave(title.trim(), target, initialText.toAmount(), millis, emoji)
       onDismiss()
     },

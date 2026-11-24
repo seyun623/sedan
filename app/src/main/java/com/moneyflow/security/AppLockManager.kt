@@ -123,7 +123,8 @@ class AppLockManager @Inject constructor(
     return if (attempts >= FREE_ATTEMPTS) {
       val penaltyMs = (30L shl (attempts - FREE_ATTEMPTS).coerceAtMost(8)) * 1000 // 30s .. ~2h
       lockedUntilElapsed = elapsed + penaltyMs
-      settings.recordPinFailure(attempts, now + penaltyMs, now)
+      // Also kept on the monotonic clock: restarting the app and moving the clock forward doesn't skip it.
+      settings.recordPinFailure(attempts, now + penaltyMs, now, elapsed + penaltyMs, clock.bootId())
       PinCheckResult.LockedOut(now + penaltyMs)
     } else {
       settings.recordPinFailure(attempts, 0L, now)
@@ -134,6 +135,9 @@ class AppLockManager @Inject constructor(
   /** Wall-clock end of the current lockout, or null if the PIN may be tried. */
   private fun lockoutUntil(s: AppSettings, now: Long, elapsed: Long): Long? {
     if (elapsed < lockedUntilElapsed) return now + (lockedUntilElapsed - elapsed)
+    if (s.pinLockBoot.isNotEmpty() && s.pinLockBoot == clock.bootId() && elapsed < s.pinLockedUntilElapsed) {
+      return now + (s.pinLockedUntilElapsed - elapsed)
+    }
     if (s.pinLockedUntil > now) return s.pinLockedUntil
     // The device clock was set back past the last failure while a penalty applied: keep it locked
     // for the full penalty measured from now.

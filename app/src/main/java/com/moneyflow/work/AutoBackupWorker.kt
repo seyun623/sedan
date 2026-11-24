@@ -24,6 +24,8 @@ class AutoBackupWorker @AssistedInject constructor(
   override suspend fun doWork(): Result = try {
     autoBackup.runIfDue()
     Result.success()
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
   } catch (e: Exception) {
     com.moneyflow.util.ProblemLog.record("자동 백업", e)
     // Recorded in settings; the reminder worker tells the user. Try again on the next run.

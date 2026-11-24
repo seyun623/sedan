@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import com.moneyflow.domain.todayFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -80,6 +81,7 @@ class HomeViewModel @Inject constructor(
     .map { java.time.YearMonth.from(it) }
     .distinctUntilChanged()
     .flatMapLatest { month -> state(month) }
+    .flowOn(kotlinx.coroutines.Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
   private fun state(month: java.time.YearMonth) = combine(
@@ -111,7 +113,8 @@ class HomeViewModel @Inject constructor(
       categoryBreakdown = stats.categoryBreakdown(monthTxs),
       monthlyTrends = trends,
       expenseChangeVsLastMonthPct = trends.lastOrNull()?.changeVsPrevPct,
-      recentTransactions = txs.take(RECENT_COUNT),
+      // Future installment parts / scheduled items are not "recent".
+      recentTransactions = clock.nowMillis().let { now -> txs.filter { it.timestamp <= now }.take(RECENT_COUNT) },
       goals = goals,
       isLockEnabled = s.isLockEnabled,
       cardStatuses = cardStatuses.filter { it.target > 0 },

@@ -43,13 +43,29 @@ class RecurringRepository @Inject constructor(
 
   suspend fun update(item: RecurringTransactionEntity) {
     val account = db.accountDao().getById(item.accountId)
-    dao.update(item.copy(accountName = account?.name ?: item.accountName))
+    // Only the editable fields: the worker may have recorded this month while the dialog was open.
+    val current = dao.getById(item.id)
+    dao.update(
+      item.copy(
+        accountName = account?.name ?: item.accountName,
+        lastExecutedMonth = current?.lastExecutedMonth ?: item.lastExecutedMonth,
+        isActive = current?.isActive ?: item.isActive
+      )
+    )
     applyDue()
   }
 
   suspend fun delete(item: RecurringTransactionEntity) = dao.delete(item)
 
   suspend fun setActive(id: Long, active: Boolean) {
+    if (active) {
+      // Resuming must not record the paused months: continue from this month.
+      val item = dao.getById(id)
+      val lastMonth = MonthKeys.of(clock.currentMonth().minusMonths(1))
+      if (item != null && item.startMonth <= MonthKeys.of(clock.currentMonth()) && (item.lastExecutedMonth ?: "") < lastMonth) {
+        dao.markExecutedIfNewer(id, lastMonth)
+      }
+    }
     dao.setActive(id, active)
     if (active) applyDue()
   }

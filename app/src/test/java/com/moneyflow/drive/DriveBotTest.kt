@@ -42,6 +42,7 @@ class DriveBotTest {
           json(if (shared) """{"files":[{"id":"folder1","name":"머니플로우 가족","mimeType":"application/vnd.google-apps.folder","owners":[{"displayName":"황세윤"}]}]}""" else """{"files":[]}""")
         url.contains("/drive/v3/files?") ->
           json("""{"files":[{"id":"f1","name":"moneyflow-drive-test.txt","mimeType":"text/plain","modifiedTime":"2026-11-24T10:00:00Z","owners":[{"displayName":"황세윤"}]}]}""")
+        url.contains("/files/folder1?") -> json("""{"id":"folder1"}""")
         method == "GET" && url.contains("/files/f1?alt=media") -> 200 to files.getValue("f1")
         method == "PATCH" && url.contains("/upload/drive/v3/files/f1") ->
           if (editor) { files["f1"] = body!!; json("{}") }
@@ -59,7 +60,7 @@ class DriveBotTest {
     val claims = JSONObject(String(android.util.Base64.decode(c, android.util.Base64.URL_SAFE)))
     assertEquals(key.clientEmail, claims.getString("iss"))
     assertEquals(ServiceAccountKey.DRIVE_SCOPE, claims.getString("scope"))
-    assertEquals(1_700_003_600L, claims.getLong("exp"))
+    assertEquals(1_700_003_540L, claims.getLong("exp"))
     assertTrue(String(android.util.Base64.decode(h, android.util.Base64.URL_SAFE)).contains("RS256"))
     val ok = Signature.getInstance("SHA256withRSA").run {
       initVerify(keyPair.public); update("$h.$c".toByteArray()); verify(android.util.Base64.decode(sig, android.util.Base64.URL_SAFE))

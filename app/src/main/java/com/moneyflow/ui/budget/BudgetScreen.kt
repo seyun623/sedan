@@ -782,7 +782,7 @@ private fun GoalCard(
   val achieved = goal.targetAmount > 0 && goal.currentAmount >= goal.targetAmount
   val goalColor = Color(goal.colorHex)
   val today = LocalDate.now()
-  val targetDay = Instant.ofEpochMilli(goal.targetDate).atZone(ZoneId.systemDefault()).toLocalDate()
+  val targetDay = Instant.ofEpochMilli(goal.targetDate).atZone(com.moneyflow.domain.APP_ZONE).toLocalDate()
   val dDays = ChronoUnit.DAYS.between(today, targetDay)
   val dLabel = when {
     dDays > 0 -> "D-$dDays"

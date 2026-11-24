@@ -304,9 +304,9 @@ private fun FamilySummary(s: FamilyMonth, onEditBudget: () -> Unit) {
       Text("수입 ${Formatters.formatCurrency(s.totalIncome)}", color = AccentGreen, style = MaterialTheme.typography.bodyMedium)
       Spacer(Modifier.height(8.dp))
       if (s.budget > 0) {
-        val left = s.budget - s.totalExpense
+        val left = s.budget - s.budgetExpense
         LinearProgressIndicator(
-          progress = { (s.totalExpense.toFloat() / s.budget).coerceIn(0f, 1f) },
+          progress = { (s.budgetExpense.toFloat() / s.budget).coerceIn(0f, 1f) },
           color = if (left < 0) AccentRed else TossBlue,
           trackColor = Gray200,
           modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)

@@ -27,9 +27,14 @@ object DatabaseFactory {
    */
   private fun encryptPlaintextDatabaseIfNeeded(context: Context, passphrase: String, name: String) {
     val dbFile = context.getDatabasePath(name)
+    val tmp = File(dbFile.parentFile, "$name.encrypting")
+    // A conversion by an older version stopped between deleting the old file and renaming the new one.
+    if (!dbFile.exists() && tmp.exists() && tmp.length() > 0 && !isPlaintextSqlite(tmp)) {
+      if (!tmp.renameTo(dbFile)) throw IllegalStateException("Could not recover the converted database")
+      return
+    }
     if (!dbFile.exists() || !isPlaintextSqlite(dbFile)) return
 
-    val tmp = File(dbFile.parentFile, "$name.encrypting")
     listOf("", "-wal", "-shm", "-journal").forEach { File(tmp.path + it).delete() }
     val plain = android.database.sqlite.SQLiteDatabase.openDatabase(dbFile.absolutePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READWRITE)
     try {
@@ -45,7 +50,8 @@ object DatabaseFactory {
       plain.close()
     }
     listOf("-wal", "-shm", "-journal").forEach { File(dbFile.path + it).delete() }
-    if (!dbFile.delete() || !tmp.renameTo(dbFile)) {
+    // rename() replaces the old file in one step: there is never a moment without a database.
+    if (!tmp.renameTo(dbFile)) {
       throw IllegalStateException("Could not replace plaintext database")
     }
   }

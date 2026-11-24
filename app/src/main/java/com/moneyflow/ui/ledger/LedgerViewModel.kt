@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -113,9 +115,15 @@ class LedgerViewModel @Inject constructor(
     }
   }
 
+  /** Tags and saved filters change rarely: worked out apart from every filter tap / keystroke. */
+  private val extras = combine(
+    ledger.transactions.map { all -> com.moneyflow.util.Tags.summarize(all).sortedByDescending { it.transactions.size }.map { it.tag } },
+    settings.settings.map { it.ledgerSavedFilters }.distinctUntilChanged().map { SavedFilters.decode(it) }
+  ) { tags, saved -> tags to saved }
+
   val uiState: StateFlow<LedgerUiState> = combine(
-    ledger.transactions, ledger.accounts, monthStore.month, filters, settings.settings
-  ) { all, accounts, month, f, s -> build(all, accounts, month, f).copy(savedFilters = SavedFilters.decode(s.ledgerSavedFilters)) }
+    ledger.transactions, ledger.accounts, monthStore.month, filters, extras
+  ) { all, accounts, month, f, (tags, saved) -> build(all, accounts, month, f).copy(allTags = tags, savedFilters = saved) }
     .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LedgerUiState())
 
@@ -152,7 +160,6 @@ class LedgerViewModel @Inject constructor(
         .groupBy { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth }
         .mapValues { (_, l) -> l.sumOf { it.amount } },
       accounts = accounts,
-      allTags = com.moneyflow.util.Tags.summarize(all).sortedByDescending { it.transactions.size }.map { it.tag },
       today = today,
       isLoading = false
     )

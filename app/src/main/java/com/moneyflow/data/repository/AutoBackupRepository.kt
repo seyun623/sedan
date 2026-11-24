@@ -46,7 +46,13 @@ class SafBackupDestination(private val context: Context, private val tree: Uri) 
   override fun write(name: String, bytes: ByteArray) {
     val doc = DocumentsContract.createDocument(resolver, folderDoc, "application/octet-stream", name)
       ?: throw IllegalStateException("백업 폴더에 파일을 만들 수 없어요.")
-    resolver.openOutputStream(doc, "wt")?.use { it.write(bytes) } ?: throw IllegalStateException("백업 파일을 저장할 수 없어요.")
+    try {
+      resolver.openOutputStream(doc, "wt")?.use { it.write(bytes) } ?: throw IllegalStateException("백업 파일을 저장할 수 없어요.")
+    } catch (e: Exception) {
+      // Don't leave an empty file behind: it would push a good backup out of the "newest 5".
+      runCatching { DocumentsContract.deleteDocument(resolver, doc) }
+      throw if (e is java.io.IOException) IllegalStateException("백업 파일을 저장하지 못했어요. 저장 공간을 확인해 주세요.", e) else e
+    }
   }
 
   override fun delete(name: String) {

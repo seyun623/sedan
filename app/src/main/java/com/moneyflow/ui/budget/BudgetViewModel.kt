@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -100,7 +101,7 @@ class BudgetViewModel @Inject constructor(
       recurringSuggestions = detector.detect(all, recurring, dismissed, today).filter { s -> accounts.any { it.id == s.accountId } },
       isLoading = false
     )
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetUiState())
+  }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetUiState())
 
   fun previousMonth() = monthStore.previous()
   fun nextMonth() = monthStore.next()

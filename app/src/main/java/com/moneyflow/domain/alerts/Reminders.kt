@@ -65,7 +65,9 @@ object BudgetReminders {
     budgetTotal: Long,
     topCategory: Pair<String, Long>?,
     previousExpense: Long?,
-    sent: Set<String>
+    sent: Set<String>,
+    /** Spending that counts toward the budget (items marked "예산 제외" left out). */
+    budgetExpense: Long = expense
   ): Reminder? {
     if (today.dayOfMonth > 3) return null
     val last = YearMonth.from(today).minusMonths(1)
@@ -73,7 +75,7 @@ object BudgetReminders {
     if (key in sent || (income == 0L && expense == 0L)) return null
     val text = buildList {
       add("지출 ${Formatters.formatCurrency(expense)} · 수입 ${Formatters.formatCurrency(income)}")
-      if (budgetTotal > 0) add("예산 대비 ${expense * 100 / budgetTotal}%")
+      if (budgetTotal > 0) add("예산 대비 ${budgetExpense * 100 / budgetTotal}%")
       previousExpense?.takeIf { it > 0 }?.let { prev ->
         val diff = expense - prev
         add(if (diff >= 0) "전달보다 ${Formatters.formatCurrency(diff)} 더 씀" else "전달보다 ${Formatters.formatCurrency(-diff)} 덜 씀")
@@ -111,7 +113,7 @@ object BillReminders {
         val label = if (a.accountType == com.moneyflow.data.model.AccountType.LOAN) "상환일" else "결제일"
         val whenText = if (days == 0L) "오늘" else "${days}일 뒤(${date.monthValue}/${date.dayOfMonth})"
         out += Reminder(key, ReminderChannel.BILL, "${a.name} $label${if (days == 0L) "이에요" else "이 다가와요"}",
-          "$whenText ${label}이에요." + (if (a.isDebt && a.balance > 0) " 현재 ${if (label == "상환일") "남은 금액" else "결제 예정 금액"} ${Formatters.formatCurrency(a.balance)}" else ""))
+          "$whenText ${label}이에요." + (if (a.isDebt && a.balance > 0) " 지금까지 ${if (label == "상환일") "남은 금액" else "카드 사용 잔액(할부 포함)"} ${Formatters.formatCurrency(a.balance)}" else ""))
       }
     }
     recurring.filter { it.isActive && it.type != com.moneyflow.data.model.TransactionType.INCOME }.forEach { r ->

@@ -32,7 +32,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.moneyflow.data.local.AppDatabase
 import com.moneyflow.data.model.CategoryRuleEntity
 import com.moneyflow.data.model.FinanceCategories
 import com.moneyflow.data.repository.LedgerRepository
@@ -52,6 +51,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -61,19 +62,18 @@ data class CleanupUi(val duplicates: List<DuplicateGroup> = emptyList(), val oth
 
 @HiltViewModel
 class CleanupViewModel @Inject constructor(
-  db: AppDatabase,
   private val ledger: LedgerRepository,
   private val rules: RuleRepository,
   private val settings: SettingsRepository,
   private val messages: UserMessageBus
 ) : ViewModel() {
-  val ui: StateFlow<CleanupUi> = combine(db.transactionDao().observeAll(), settings.settings) { txs, s ->
-    CleanupUi(TransactionCleanup.duplicates(txs, s.cleanupDismissed), TransactionCleanup.others(txs), loaded = true)
+  val ui: StateFlow<CleanupUi> = combine(ledger.transactions, settings.settings.map { it.cleanupDismissed }.distinctUntilChanged()) { txs, dismissed ->
+    CleanupUi(TransactionCleanup.duplicates(txs, dismissed), TransactionCleanup.others(txs), loaded = true)
   }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CleanupUi())
 
   /** Keeps the first (oldest) record and deletes the rest; balances are corrected. */
   fun keepOne(group: DuplicateGroup) = viewModelScope.launch {
-    group.items.drop(1).forEach { ledger.deleteTransaction(it) }
+    ledger.deleteTransactions(group.items.drop(1))
     messages.show("중복 ${group.items.size - 1}건을 지웠어요.")
   }
 

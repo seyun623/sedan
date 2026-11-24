@@ -302,7 +302,8 @@ private fun BackupPasswordDialog(
 ) {
   var pw by remember { mutableStateOf("") }
   var pw2 by remember { mutableStateOf("") }
-  val tooShort = pw.length < MIN_PASSWORD
+  // New passwords need 8+ characters (files may sit in Drive); older backups open with whatever they used.
+  val tooShort = if (confirm) pw.length < MIN_PASSWORD else pw.isEmpty()
   val mismatch = confirm && pw2.isNotEmpty() && pw != pw2
   val canSubmit = !tooShort && (!confirm || pw == pw2)
 
@@ -319,7 +320,7 @@ private fun BackupPasswordDialog(
         OutlinedTextField(
           value = pw,
           onValueChange = { pw = it },
-          label = { Text("비밀번호 (${MIN_PASSWORD}자 이상)") },
+          label = { Text(if (confirm) "비밀번호 (${MIN_PASSWORD}자 이상)" else "비밀번호") },
           singleLine = true,
           visualTransformation = PasswordVisualTransformation(),
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -348,4 +349,4 @@ private fun BackupPasswordDialog(
   )
 }
 
-private const val MIN_PASSWORD = 4
+private const val MIN_PASSWORD = 8

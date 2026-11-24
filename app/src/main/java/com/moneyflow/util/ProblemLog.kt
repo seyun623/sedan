@@ -3,8 +3,6 @@ package com.moneyflow.util
 import android.content.Context
 import android.os.Build
 import java.io.File
-import java.io.PrintWriter
-import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,13 +48,27 @@ object ProblemLog {
   }
 
   internal fun format(where: String, e: Throwable, time: String, appVersion: String): String {
-    val sw = StringWriter()
-    e.printStackTrace(PrintWriter(sw))
-    // Keep it short: the first lines of each cause are enough to find the place.
-    val trace = sw.toString().lines().filter { it.isNotBlank() }
-      .filterIndexed { i, line -> i < 25 || line.startsWith("Caused by") }
-      .joinToString("\n")
-    return "[$time] v$appVersion $where\n$trace\n\n"
+    // Error names and code locations only. Messages can contain file names, amounts or server
+    // replies, so only the app's own Korean messages (already shown on screen) are kept.
+    val out = StringBuilder("[$time] v$appVersion $where\n")
+    var cause: Throwable? = e
+    var depth = 0
+    while (cause != null && depth < 4) {
+      if (depth > 0) out.append("Caused by: ")
+      out.append(cause.javaClass.name)
+      if (isAppMessage(cause)) out.append(": ").append(cause.message!!.take(200))
+      out.append('\n')
+      cause.stackTrace.take(if (depth == 0) 20 else 6).forEach { out.append("\tat ").append(it).append('\n') }
+      cause = cause.cause.takeIf { it !== cause }
+      depth++
+    }
+    return out.append('\n').toString()
+  }
+
+  /** The app's own messages (written in Korean for the user), not system / server text. */
+  private fun isAppMessage(e: Throwable): Boolean {
+    val m = e.message ?: return false
+    return e.javaClass.name.startsWith("com.moneyflow") || m.any { it in '\uAC00'..'\uD7A3' }
   }
 
   @Synchronized private fun write(where: String, e: Throwable) {
