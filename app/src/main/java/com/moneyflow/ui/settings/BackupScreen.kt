@@ -229,7 +229,7 @@ fun BackupScreen(
       confirm = purpose != PasswordPurpose.OPEN,
       note = when (purpose) {
         PasswordPurpose.AUTO -> "다음 화면에서 백업 파일을 저장할 휴대폰 안 폴더를 골라 주세요. (구글 드라이브는 '구글 드라이브에 자동 백업'으로 켜 주세요)"
-        PasswordPurpose.AUTO_DRIVE -> "다음 저장 화면에서 왼쪽 메뉴(☰) → 드라이브 → '${auto.driveFolderName ?: "머니플로우 가족"}' 폴더를 골라 저장해 주세요. 이 파일을 봇이 계속 덮어써요."
+        PasswordPurpose.AUTO_DRIVE -> "다음 저장 화면에서 왼쪽 메뉴(☰) → 드라이브 → '${auto.driveFolderName ?: "머니플로우 가족"}' 폴더를 골라 저장해 주세요. 이 파일을 봇이 계속 덮어써요. 백업 비밀번호는 가족 비밀번호와 따로예요. 꼭 적어 두세요."
         else -> null
       },
       onDismiss = { passwordPurpose = null; openedUri = null },
@@ -286,7 +286,7 @@ fun BackupScreen(
   errorMessage?.let { msg ->
     AlertDialog(
       onDismissRequest = { errorMessage = null },
-      title = { Text("알림", fontWeight = FontWeight.Bold) },
+      title = { Text("확인이 필요해요", fontWeight = FontWeight.Bold) },
       text = { Text(msg) },
       confirmButton = { TextButton(onClick = { errorMessage = null }) { Text("확인") } }
     )

@@ -141,7 +141,7 @@ fun MoneyFlowNavHost(
           contentColor = OnBrand,
           shape = CircleShape,
           modifier = Modifier.testTag("fab_add_transaction")
-        ) { Icon(Icons.Default.Add, contentDescription = "거래 추가") }
+        ) { Icon(Icons.Default.Add, contentDescription = "내역 추가") }
       }
     }
   ) { padding ->
@@ -173,7 +173,11 @@ fun MoneyFlowNavHost(
         )
       }
       composable(Routes.LEDGER) {
-        LedgerScreen(onAddTransaction = { openTransaction(null) }, onOpenTransaction = { openTransaction(it) })
+        LedgerScreen(
+          onAddTransaction = { openTransaction(null) },
+          onOpenTransaction = { openTransaction(it) },
+          onBack = if (simpleMode) ({ navController.popBackStack() }) else null
+        )
       }
       composable(Routes.ANALYTICS) { AnalyticsScreen(onOpenTransaction = { openTransaction(it) }, onOpenYearly = { navController.navigate(Routes.YEARLY) }) }
       composable(Routes.YEARLY) { com.moneyflow.ui.analytics.YearlyReportScreen(onBack = { navController.popBackStack() }) }

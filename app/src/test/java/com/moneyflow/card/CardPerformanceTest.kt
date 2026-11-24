@@ -88,7 +88,7 @@ class CardPerformanceTest {
     val s = calc.status(profile, listOf(cafe), listOf(tx(LocalDate.of(2026, 11, 2), 9_000, "카페/간식")), LocalDate.of(2026, 11, 28))
     val due = CardAlerts.due(listOf(s), mapOf(card to "현대카드"), emptySet())
     assertEquals(2, due.size)
-    assertTrue(due[0].title.contains("현대카드") && due[0].title.contains("부족"))
+    assertTrue(due[0].title.contains("현대카드") && due[0].title.contains("모자라요"))
     assertTrue(due[1].title.contains("한도"))
     assertTrue(CardAlerts.due(listOf(s), mapOf(card to "현대카드"), due.map { it.key }.toSet()).isEmpty())
     // Not near the end of the period -> no shortage alert

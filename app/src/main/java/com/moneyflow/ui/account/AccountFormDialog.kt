@@ -3,6 +3,7 @@ package com.moneyflow.ui.account
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -307,7 +309,7 @@ fun AccountFormDialog(
               )
             )
           },
-          modifier = Modifier.fillMaxWidth().height(52.dp).testTag("submit_account_button"),
+          modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("submit_account_button"),
           shape = RoundedCornerShape(14.dp),
           colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand)
         ) { Text(if (isEdit) "저장하기" else "계좌 등록하기", fontWeight = FontWeight.Bold) }
@@ -326,7 +328,7 @@ internal fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChe
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .clickable(role = Role.Switch) { onCheckedChange(!checked) }
+      .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
       .padding(vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {

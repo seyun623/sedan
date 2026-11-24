@@ -137,7 +137,7 @@ fun SettingsScreen(
       ) { granted -> if (granted) viewModel.setBillReminders(true) }
       SettingsSwitchItem(
         title = "결제일 미리 알림",
-        subtitle = "카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 드려요 (결제일은 계좌 수정에서 입력)",
+        subtitle = "카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 드려요 (결제일은 자산 탭 → 카드를 눌러 수정에서 넣어 주세요)",
         icon = Icons.Filled.NotificationsActive,
         checked = settings.billRemindersEnabled,
         onCheckedChange = { on ->
@@ -145,12 +145,17 @@ fun SettingsScreen(
         },
         modifier = Modifier.testTag("settings_bill_reminders")
       )
+      val backupPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> if (granted) viewModel.setBackupReminder(true) }
       SettingsSwitchItem(
         title = "백업 알림",
         subtitle = "2주 넘게 백업하지 않았거나 자동 백업이 실패하면 알려 드려요",
         icon = Icons.Filled.NotificationsActive,
         checked = settings.backupReminderEnabled,
-        onCheckedChange = viewModel::setBackupReminder,
+        onCheckedChange = { on ->
+          if (on && needsPermission()) backupPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBackupReminder(on)
+        },
         modifier = Modifier.testTag("settings_backup_reminder")
       )
     }
@@ -193,15 +198,15 @@ fun SettingsScreen(
 
     SettingsSection("가족") {
       SettingsItem(
-        title = "가족 합산 보기",
-        subtitle = "가족이 함께 쓴 돈을 봐요 (드라이브 자동 합산 또는 백업 파일)",
+        title = "가족 가계부 보기",
+        subtitle = "가족이 함께 쓴 돈과 예산, 함께 모으는 목표를 봐요",
         icon = Icons.Filled.FamilyRestroom,
         onClick = onOpenFamily,
         modifier = Modifier.testTag("settings_family")
       )
       SettingsItem(
-        title = "구글 드라이브 · 가족 합산",
-        subtitle = "봇 계정 연결, 가족 자동 합산 설정",
+        title = "가족 자동 합산 설정 (구글 드라이브)",
+        subtitle = "처음 한 번만: 연결 파일 불러오기, 내 이름·가족 비밀번호 정하기",
         icon = Icons.Filled.FamilyRestroom,
         onClick = onOpenDrive,
         modifier = Modifier.testTag("settings_drive")

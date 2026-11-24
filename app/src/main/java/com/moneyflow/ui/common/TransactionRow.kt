@@ -66,8 +66,8 @@ fun TransactionRow(
     TransactionType.TRANSFER -> Formatters.formatCurrency(transaction.amount)
   }
   val amountColor = when (transaction.type) {
-    TransactionType.EXPENSE -> AccentRed
-    TransactionType.INCOME -> AccentGreen
+    TransactionType.EXPENSE -> com.moneyflow.ui.theme.AccentRedText
+    TransactionType.INCOME -> com.moneyflow.ui.theme.AccentGreenText
     TransactionType.TRANSFER -> TossBlue
   }
 
@@ -121,7 +121,7 @@ fun TransactionRow(
       Text(
         text = if (showDate) Formatters.formatFullDate(transaction.timestamp) else Formatters.formatTime(transaction.timestamp),
         style = MaterialTheme.typography.labelSmall,
-        color = Gray400,
+        color = com.moneyflow.ui.theme.Gray600,
         maxLines = 1
       )
     }

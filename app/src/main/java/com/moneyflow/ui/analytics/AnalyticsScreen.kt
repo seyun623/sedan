@@ -42,6 +42,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -294,7 +297,7 @@ private fun AnalyticsContent(
       item(key = "net_worth") { NetWorthCard(state.netWorth) }
     }
     item(key = "yearly") {
-      SectionCard(modifier = Modifier.clickable(onClick = onOpenYearly).testTag("open_yearly_report")) {
+      SectionCard(modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(role = Role.Button, onClick = onOpenYearly).testTag("open_yearly_report")) {
         SectionTitle("${state.month.year}년 결산 보기 →", "1년 동안 번 돈·쓴 돈, 가장 많이 쓴 곳을 한눈에 보고 이미지로 공유해요")
       }
     }
@@ -309,14 +312,16 @@ private fun NetWorthCard(points: List<com.moneyflow.domain.report.NetWorthPoint>
     SectionTitle("순자산 추이", "자산에서 부채(카드 대금·대출)를 뺀 금액이에요. 지난달까지는 기록으로 거꾸로 계산한 추정치예요")
     Text(
       Formatters.formatCurrency(last.netWorth),
-      style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Gray900,
+      style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black,
+      color = if (last.netWorth < 0) com.moneyflow.ui.theme.AccentRedText else Gray900,
+      maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
       modifier = Modifier.padding(top = 8.dp)
     )
     prev?.let { p ->
       val diff = last.netWorth - p.netWorth
       Text(
         (if (diff >= 0) "지난달보다 +" else "지난달보다 -") + Formatters.formatCurrency(kotlin.math.abs(diff)),
-        style = MaterialTheme.typography.bodySmall, color = if (diff >= 0) AccentGreen else AccentRed
+        style = MaterialTheme.typography.bodySmall, color = if (diff >= 0) com.moneyflow.ui.theme.AccentGreenText else com.moneyflow.ui.theme.AccentRedText
       )
     }
     if (points.size >= 2) {
@@ -325,7 +330,11 @@ private fun NetWorthCard(points: List<com.moneyflow.domain.report.NetWorthPoint>
       val min = points.minOf { it.netWorth }
       val max = points.maxOf { it.netWorth }
       val span = (max - min).coerceAtLeast(1)
-      androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(120.dp).padding(top = 12.dp)) {
+      val chartDescription = "월말 순자산: " + points.joinToString(", ") { "${it.month.monthValue}월 ${Formatters.formatCurrency(it.netWorth)}" }
+      androidx.compose.foundation.Canvas(
+        Modifier.fillMaxWidth().height(120.dp).padding(top = 12.dp)
+          .semantics { contentDescription = chartDescription }
+      ) {
         val stepX = size.width / (points.size - 1)
         fun y(v: Long) = size.height - (v - min).toFloat() / span * size.height
         drawLine(grid, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 2f)
@@ -342,9 +351,9 @@ private fun NetWorthCard(points: List<com.moneyflow.domain.report.NetWorthPoint>
         Text("${last.month.monthValue}월", style = MaterialTheme.typography.labelSmall, color = Gray600)
       }
     }
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-      Text("자산 ${Formatters.formatCurrency(last.assets)}", style = MaterialTheme.typography.bodySmall, color = Gray600)
-      Text("부채 ${Formatters.formatCurrency(last.debts)}", style = MaterialTheme.typography.bodySmall, color = Gray600)
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text("자산 ${Formatters.formatCurrency(last.assets)}", style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.weight(1f))
+      Text("부채 ${Formatters.formatCurrency(last.debts)}", style = MaterialTheme.typography.bodySmall, color = com.moneyflow.ui.theme.AccentRedText)
     }
   }
 }

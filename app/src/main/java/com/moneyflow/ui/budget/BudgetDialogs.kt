@@ -156,13 +156,13 @@ private fun FormDialog(
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           OutlinedButton(
             onClick = onDismiss,
-            modifier = Modifier.weight(1f).height(52.dp),
+            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
             shape = RoundedCornerShape(14.dp)
           ) { Text("취소", color = Gray900) }
           Button(
             onClick = onConfirm,
             enabled = confirmEnabled,
-            modifier = Modifier.weight(2f).height(52.dp).testTag("${testTag}_confirm"),
+            modifier = Modifier.weight(2f).heightIn(min = 52.dp).testTag("${testTag}_confirm"),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand)
           ) { Text(confirmLabel, fontWeight = FontWeight.Bold) }

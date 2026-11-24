@@ -26,6 +26,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -138,7 +141,12 @@ fun YearlyReportScreen(onBack: () -> Unit, viewModel: YearlyReportViewModel = hi
     }
     SettingsSection("월별 지출") {
       val max = report.months.maxOf { it.expense }.coerceAtLeast(1)
-      Row(Modifier.fillMaxWidth().height(140.dp).padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+      val barsDescription = "월별 지출: " + report.months.joinToString(", ") { "${it.month}월 ${Formatters.formatCurrency(it.expense)}" }
+      Row(
+        Modifier.fillMaxWidth().height(140.dp).padding(16.dp)
+          .clearAndSetSemantics { contentDescription = barsDescription },
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom
+      ) {
         report.months.forEach { m ->
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
@@ -188,7 +196,7 @@ fun YearlyReportScreen(onBack: () -> Unit, viewModel: YearlyReportViewModel = hi
 /** Draws the yearly report as one shareable picture (no transaction details). */
 object YearlyReportImage {
   fun draw(r: YearlyReport): Bitmap {
-    val w = 1080; val h = 1500
+    val w = 1080; val h = 1660
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     c.drawColor(0xFFF2F4F6.toInt())
@@ -222,7 +230,7 @@ object YearlyReportImage {
     r.categories.take(4).forEach { cat ->
       val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FinanceCategories.getColorForCategory(cat.category).toInt() }
       c.drawCircle(116f, y - 12, 12f, dot)
-      c.drawText(cat.category, 146f, y, text(36f, dark))
+      c.drawText(cat.category.take(10), 146f, y, text(36f, dark))
       val amount = "${Formatters.formatCurrency(cat.amount)} (${(cat.percentage * 100).toInt()}%)"
       val tp = text(36f, gray)
       c.drawText(amount, w - 100f - tp.measureText(amount), y, tp)

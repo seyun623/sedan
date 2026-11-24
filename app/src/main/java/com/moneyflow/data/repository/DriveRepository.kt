@@ -45,9 +45,9 @@ class DriveRepository @Inject constructor(
   }
 
   private suspend fun client(): DriveClient {
-    val enc = settings.current().driveKeyEncrypted ?: throw IllegalStateException("먼저 열쇠 파일을 불러와 주세요.")
+    val enc = settings.current().driveKeyEncrypted ?: throw IllegalStateException("먼저 ① 연결 파일을 불러와 주세요.")
     cached?.let { (e, c) -> if (e == enc) return c }
-    val json = secrets.decrypt(enc) ?: throw IllegalStateException("저장된 열쇠를 읽을 수 없어요. 열쇠 파일을 다시 불러와 주세요.")
+    val json = secrets.decrypt(enc) ?: throw IllegalStateException("저장된 연결 파일을 읽을 수 없어요. ① 연결 파일을 다시 불러와 주세요.")
     return clientFactory(ServiceAccountKey.parse(json)).also { cached = enc to it }
   }
 

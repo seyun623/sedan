@@ -28,6 +28,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -88,7 +92,7 @@ class DriveSettingsViewModel @Inject constructor(
   private fun run(block: suspend () -> Unit) = viewModelScope.launch {
     if (_busy.value) return@launch
     _busy.value = true
-    try { block() } catch (e: Exception) { _errors.send(e.message ?: "처리하지 못했어요.") } finally { _busy.value = false }
+    try { block() } catch (e: Exception) { _errors.send(com.moneyflow.util.UserErrors.message(e)) } finally { _busy.value = false }
   }
 
   fun importKey(uri: Uri) = run {
@@ -98,7 +102,7 @@ class DriveSettingsViewModel @Inject constructor(
     }
     val email = drive.importKey(json)
     _checks.value = emptyList()
-    messages.show("봇 열쇠를 불러왔어요: $email")
+    messages.show("연결 파일을 불러왔어요.")
   }
 
   fun findFolders() = run {
@@ -176,12 +180,12 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
   val folders by viewModel.folders.collectAsStateWithLifecycle()
   val checks by viewModel.checks.collectAsStateWithLifecycle()
   val context = LocalContext.current
-  var error by remember { mutableStateOf<String?>(null) }
-  var confirmDisconnect by remember { mutableStateOf(false) }
+  var error by rememberSaveable { mutableStateOf<String?>(null) }
+  var confirmDisconnect by rememberSaveable { mutableStateOf(false) }
 
   val openKey = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(viewModel::importKey) }
-  var familyDialog by remember { mutableStateOf(false) }
-  var confirmFamilyOff by remember { mutableStateOf(false) }
+  var familyDialog by rememberSaveable { mutableStateOf(false) }
+  var confirmFamilyOff by rememberSaveable { mutableStateOf(false) }
   val createFamily = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri -> uri?.let(viewModel::writeFamilyFile) }
   val createTest = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let(viewModel::writeTestFile) }
   LaunchedEffect(viewModel) { viewModel.errors.collect { error = it } }
@@ -191,13 +195,13 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
   SettingsScaffold(title = "구글 드라이브 · 가족 합산", onBack = onBack) {
     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue)
     Text(
-      "안내서(구글 드라이브 봇 계정 만들기)대로 봇과 '머니플로우 가족' 폴더를 만든 뒤 ①, ②를 하고, 아래 '가족 자동 합산'을 설정하세요. 드라이브 자동 백업은 설정 → 백업 및 복원에서 켤 수 있어요.",
+      "①~④를 차례로 한 번만 하면, 그다음부터 가족 기록이 자동으로 모여요. 연결 파일은 세윤님이 카카오톡으로 보내 준 .json 파일이에요. 드라이브 자동 백업은 설정 → 백업 및 복원에서 켤 수 있어요.",
       style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 8.dp)
     )
     SettingsSection("연결") {
       SettingsItem(
-        title = "① 열쇠 파일 불러오기",
-        subtitle = settings.driveBotEmail?.let { "봇: $it" } ?: "구글 클라우드에서 받은 JSON 파일",
+        title = "① 연결 파일 불러오기",
+        subtitle = if (settings.driveBotEmail != null) "불러왔어요" else "카카오톡 등으로 받은 연결 파일(.json) 고르기",
         icon = Icons.Filled.Key,
         enabled = !busy,
         showChevron = false,
@@ -206,8 +210,8 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
       )
       settings.driveBotEmail?.let { email ->
         SettingsItem(
-          title = "봇 이메일 복사",
-          subtitle = "드라이브 폴더를 이 이메일에 '편집자'로 공유하세요",
+          title = "봇 이메일 복사 (관리자용)",
+          subtitle = "폴더를 처음 만드는 사람만: 이 이메일에 폴더를 '편집자'로 공유해요",
           icon = Icons.Filled.ContentCopy,
           showChevron = false,
           onClick = {
@@ -217,8 +221,8 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         )
       }
       SettingsItem(
-        title = "② 공유된 폴더 찾기",
-        subtitle = settings.driveFolderName?.let { "폴더: $it" } ?: "봇에게 공유한 '머니플로우 가족' 폴더 고르기",
+        title = "② 가족 폴더 고르기",
+        subtitle = settings.driveFolderName?.let { "폴더: $it" } ?: "목록에서 '머니플로우 가족' 고르기",
         icon = Icons.Filled.Folder,
         enabled = !busy && hasKey,
         showChevron = false,
@@ -229,7 +233,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
     SettingsSection("가족 자동 합산") {
       val ready = hasKey && settings.driveFolderId != null
       SettingsItem(
-        title = "내 이름 · 가족 비밀번호",
+        title = "③ 내 이름 · 가족 비밀번호",
         subtitle = if (settings.familySyncPasswordEncrypted != null) "${settings.familySyncName ?: "나"} · 비밀번호 저장됨"
           else "가족 모두 같은 비밀번호를 정해 주세요",
         icon = Icons.Filled.Key,
@@ -239,7 +243,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         modifier = Modifier.testTag("family_sync_setup")
       )
       SettingsItem(
-        title = "내 가족 파일 만들기",
+        title = "④ 내 가족 파일 만들기",
         subtitle = settings.familySyncFileName?.let { "내 파일: $it" } ?: "저장 화면에서 드라이브 → '${settings.driveFolderName ?: "머니플로우 가족"}' 폴더를 골라 저장 (한 번만)",
         icon = Icons.Filled.NoteAdd,
         enabled = !busy && ready && settings.familySyncPasswordEncrypted != null,
@@ -278,9 +282,9 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         )
       }
     }
-    SettingsSection("연결 시험") {
+    SettingsSection("문제가 있을 때 (연결 시험)") {
       SettingsItem(
-        title = "③ 시험 파일 만들기",
+        title = "시험 파일 만들기",
         subtitle = settings.driveTestFileName?.let { "시험 파일: $it" } ?: "저장 화면에서 드라이브 → 같은 폴더를 골라 저장",
         icon = Icons.Filled.NoteAdd,
         enabled = !busy && settings.driveFolderId != null,
@@ -289,8 +293,8 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         modifier = Modifier.testTag("drive_create_test")
       )
       SettingsItem(
-        title = "④ 연결 시험",
-        subtitle = "봇 로그인 → 폴더 보기 → 시험 파일 읽기 → 봇으로 덮어쓰기",
+        title = "연결 시험",
+        subtitle = "로그인 → 폴더 보기 → 시험 파일 읽기 → 덮어쓰기를 차례로 확인해요",
         icon = Icons.Filled.PlayArrow,
         enabled = !busy && hasKey,
         showChevron = false,
@@ -311,7 +315,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
             }
           }
           if (checks.size == 4 && checks.all { it.ok }) {
-            Text("연결 성공! 이제 아래쪽 '가족 자동 합산'을 설정할 수 있어요.", color = AccentGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+            Text("연결 성공! 위쪽 ③, ④를 해 주세요.", color = AccentGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
           }
         }
       }
@@ -320,7 +324,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
       SettingsSection(null) {
         SettingsItem(
           title = "연결 지우기",
-          subtitle = "이 휴대폰에 저장된 봇 열쇠와 폴더 선택을 지워요",
+          subtitle = "이 휴대폰에 저장된 연결 파일과 폴더 선택을 지워요",
           icon = Icons.Filled.CloudDone,
           iconTint = AccentRed,
           showChevron = false,
@@ -335,7 +339,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
       onDismissRequest = viewModel::dismissFolders,
       title = { Text("공유된 폴더", fontWeight = FontWeight.Bold) },
       text = {
-        Column {
+        Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
           list.forEach { f ->
             TextButton(onClick = { viewModel.chooseFolder(f) }, modifier = Modifier.fillMaxWidth()) {
               Text(f.name + (f.ownerName?.let { " · $it" } ?: ""), modifier = Modifier.fillMaxWidth())
@@ -365,7 +369,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
   if (confirmDisconnect) {
     ConfirmDialog(
       title = "드라이브 연결을 지울까요?",
-      message = "이 휴대폰의 봇 열쇠와 폴더 선택만 지워져요. 드라이브의 파일은 그대로예요.",
+      message = "이 휴대폰의 연결 파일과 폴더 선택만 지워져요. 드라이브의 파일은 그대로예요.",
       confirmLabel = "지우기",
       onConfirm = { confirmDisconnect = false; viewModel.disconnect() },
       onDismiss = { confirmDisconnect = false }
@@ -374,7 +378,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
   error?.let { msg ->
     AlertDialog(
       onDismissRequest = { error = null },
-      title = { Text("알림", fontWeight = FontWeight.Bold) },
+      title = { Text("확인이 필요해요", fontWeight = FontWeight.Bold) },
       text = { Text(msg) },
       confirmButton = { TextButton(onClick = { error = null }) { Text("확인") } }
     )
@@ -383,7 +387,7 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
 
 @Composable
 private fun FamilySyncDialog(initialName: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
-  var name by remember { mutableStateOf(initialName) }
+  var name by rememberSaveable { mutableStateOf(initialName) }
   var pw by remember { mutableStateOf("") }
   var pw2 by remember { mutableStateOf("") }
   val min = com.moneyflow.data.repository.FamilySyncRepository.MIN_PASSWORD
@@ -392,7 +396,7 @@ private fun FamilySyncDialog(initialName: String, onDismiss: () -> Unit, onSave:
     onDismissRequest = onDismiss,
     title = { Text("가족 자동 합산", fontWeight = FontWeight.Bold) },
     text = {
-      Column {
+      Column(Modifier.verticalScroll(rememberScrollState())) {
         Text(
           "가족 화면에 보일 내 이름과, 가족 모두가 같이 쓸 비밀번호예요. 드라이브의 가족 파일은 이 비밀번호로 암호화돼요. (메모 포함, 앱 잠금 PIN은 들어가지 않아요)",
           style = MaterialTheme.typography.bodySmall, color = Gray600
@@ -404,12 +408,14 @@ private fun FamilySyncDialog(initialName: String, onDismiss: () -> Unit, onSave:
         androidx.compose.material3.OutlinedTextField(
           value = pw, onValueChange = { pw = it }, label = { Text("가족 비밀번호 (${min}자 이상)") }, singleLine = true,
           visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+          keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
           modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("family_sync_pw")
         )
         androidx.compose.material3.OutlinedTextField(
           value = pw2, onValueChange = { pw2 = it }, label = { Text("한 번 더") }, singleLine = true,
           visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
           isError = pw2.isNotEmpty() && pw != pw2,
+          keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
           modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("family_sync_pw2")
         )
       }

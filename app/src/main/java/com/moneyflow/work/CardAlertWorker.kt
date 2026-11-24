@@ -27,13 +27,13 @@ object CardAlerts {
       buildList {
         if (s.needsAttention) add(CardAlert(
           "short|${s.accountId}|${s.period.key}",
-          "$name 실적 ${Formatters.formatCurrency(s.shortage)} 부족",
+          "$name 실적이 ${Formatters.formatCurrency(s.shortage)} 모자라요",
           "실적 기간이 ${s.daysLeft}일 남았어요. (${Formatters.formatCurrency(s.performance)} / ${Formatters.formatCurrency(s.target)})"
         ))
         s.benefits.filter { it.capReached }.forEach { b ->
           add(CardAlert(
             "cap|${b.benefit.id}|${s.period.key}",
-            "$name '${b.benefit.title}' 혜택 한도 도달",
+            "$name '${b.benefit.title}' 혜택 한도를 다 채웠어요",
             "이번 기간 혜택 ${Formatters.formatCurrency(b.earned)}을 모두 받았어요. 같은 곳은 다른 카드를 써 보세요."
           ))
         }

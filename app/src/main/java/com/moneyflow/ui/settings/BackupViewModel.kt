@@ -183,7 +183,7 @@ class BackupViewModel @Inject constructor(
     try {
       block()
     } catch (e: Exception) {
-      _events.send(BackupEvent.Error(e.message ?: "처리하지 못했어요."))
+      _events.send(BackupEvent.Error(com.moneyflow.util.UserErrors.message(e)))
     } finally {
       _busy.value = false
     }

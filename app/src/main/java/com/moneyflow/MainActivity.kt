@@ -54,7 +54,7 @@ class MainActivity : FragmentActivity() {
             contentState.SaveableStateProvider("app-content") {
               val density = androidx.compose.ui.platform.LocalDensity.current
               // 간단 모드: everything a little bigger.
-              val scaled = if (s.simpleMode) androidx.compose.ui.unit.Density(density.density, density.fontScale * 1.15f) else density
+              val scaled = if (s.simpleMode) androidx.compose.ui.unit.Density(density.density, (density.fontScale * 1.15f).coerceAtMost(2f)) else density
               androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
                 MoneyFlowNavHost(messages = appViewModel.messages, navController = navController, prefill = appViewModel.prefill, simpleMode = s.simpleMode)
               }

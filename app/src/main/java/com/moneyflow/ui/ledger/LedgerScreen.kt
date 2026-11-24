@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
@@ -75,7 +76,9 @@ import java.time.ZoneId
 fun LedgerScreen(
   onAddTransaction: () -> Unit,
   onOpenTransaction: (Long) -> Unit,
-  viewModel: LedgerViewModel = hiltViewModel()
+  viewModel: LedgerViewModel = hiltViewModel(),
+  /** Shown as a back arrow when the screen is opened from 간단 모드 (no bottom tabs there). */
+  onBack: (() -> Unit)? = null
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   val query by viewModel.queryInput.collectAsStateWithLifecycle()
@@ -88,7 +91,7 @@ fun LedgerScreen(
     state.transactions.groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
   }
   val today = state.today
-  var showDetail by remember { mutableStateOf(false) }
+  var showDetail by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
   if (showDetail) {
     DetailFilterDialog(
       state = state,
@@ -111,6 +114,7 @@ fun LedgerScreen(
       onNextMonth = viewModel::nextMonth,
       onCurrentMonth = viewModel::goToCurrentMonth,
       onToggleCalendar = viewModel::toggleCalendarView,
+      onBack = onBack,
       onExportCsv = {
         // Export exactly what is listed; name the file after the shown range (and mark filtered lists).
         val suffix = if (state.filters.isAnyActive) "${state.dateRangeLabel}_검색결과" else state.monthLabel
@@ -203,11 +207,17 @@ private fun LedgerHeader(
   onNextMonth: () -> Unit,
   onCurrentMonth: () -> Unit,
   onToggleCalendar: () -> Unit,
-  onExportCsv: () -> Unit
+  onExportCsv: () -> Unit,
+  onBack: (() -> Unit)? = null
 ) {
   Surface(color = CardSurface, modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp)) {
       Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (onBack != null) {
+          IconButton(onClick = onBack, modifier = Modifier.testTag("ledger_back")) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로", tint = Gray900)
+          }
+        }
         MonthSwitcher(
           label = state.monthLabel,
           onPrevious = onPrevMonth,

@@ -105,7 +105,7 @@ class FamilyViewModel @Inject constructor(
       val r = familySync.sync(forceUpload = true) ?: return@launch
       messages.show(if (r.loaded.isEmpty()) "가족 기록이 최신이에요." else "${r.loaded.joinToString(", ")}님의 새 기록을 받았어요.")
     } catch (e: Exception) {
-      _errors.send(e.message ?: "합산하지 못했어요. 인터넷 연결을 확인해 주세요.")
+      _errors.send(com.moneyflow.util.UserErrors.message(e, "합산하지 못했어요."))
     } finally {
       _busy.value = false
     }
@@ -128,7 +128,7 @@ class FamilyViewModel @Inject constructor(
       val r = repo.import(bytes, password.toCharArray(), name)
       messages.show(if (r.updated) "${r.member.name}님의 기록을 새 백업으로 바꿨어요. (${r.transactionCount}건)" else "${r.member.name}님의 기록 ${r.transactionCount}건을 불러왔어요.")
     } catch (e: Exception) {
-      _errors.send(e.message ?: "불러오지 못했어요.")
+      _errors.send(com.moneyflow.util.UserErrors.message(e, "불러오지 못했어요."))
     } finally {
       _busy.value = false
     }
@@ -204,7 +204,7 @@ fun FamilyScreen(onBack: () -> Unit, onOpenDrive: () -> Unit = {}, viewModel: Fa
       } else {
         SettingsItem(
           title = "구글 드라이브로 자동 합산",
-          subtitle = "가족 공유 폴더로 파일을 주고받지 않아도 자동으로 합쳐져요",
+          subtitle = "백업 파일을 일일이 보내지 않아도 가족 기록이 자동으로 모여요",
           icon = Icons.Filled.FamilyRestroom,
           onClick = onOpenDrive,
           modifier = Modifier.testTag("family_sync_open")
@@ -284,7 +284,7 @@ fun FamilyScreen(onBack: () -> Unit, onOpenDrive: () -> Unit = {}, viewModel: Fa
   error?.let { msg ->
     AlertDialog(
       onDismissRequest = { error = null },
-      title = { Text("알림", fontWeight = FontWeight.Bold) },
+      title = { Text("확인이 필요해요", fontWeight = FontWeight.Bold) },
       text = { Text(msg) },
       confirmButton = { TextButton(onClick = { error = null }) { Text("확인") } }
     )

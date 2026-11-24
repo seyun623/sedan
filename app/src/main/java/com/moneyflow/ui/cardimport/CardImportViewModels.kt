@@ -106,7 +106,7 @@ class CardBrowserViewModel @Inject constructor(
         _events.send(BrowserEvent.OpenPreview)
       }
     } catch (e: Exception) {
-      _events.send(BrowserEvent.Error(e.message ?: "화면을 읽지 못했어요."))
+      _events.send(BrowserEvent.Error(com.moneyflow.util.UserErrors.message(e, "화면을 읽지 못했어요.")))
     } finally {
       _busy.value = false
     }
@@ -131,7 +131,7 @@ class CardBrowserViewModel @Inject constructor(
         _events.send(BrowserEvent.OpenPreview)
       }
     } catch (e: Exception) {
-      _events.send(BrowserEvent.Error(e.message ?: "화면을 읽지 못했어요."))
+      _events.send(BrowserEvent.Error(com.moneyflow.util.UserErrors.message(e, "화면을 읽지 못했어요.")))
     } finally {
       _busy.value = false
     }

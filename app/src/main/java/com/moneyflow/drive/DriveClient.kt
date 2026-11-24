@@ -68,8 +68,8 @@ class DriveClient(
       throw DriveException(
         when {
           err.contains("invalid_grant", true) || err.contains("Invalid JWT", true) ->
-            "봇 열쇠를 쓸 수 없어요. 열쇠가 삭제됐거나 휴대폰 시간이 맞지 않아요. (날짜·시간 자동 설정 확인)"
-          err.contains("account not found", true) || err.contains("invalid_client", true) -> "봇 계정을 찾을 수 없어요. 열쇠 파일을 다시 받아 주세요."
+            "연결 파일을 쓸 수 없어요. 연결 파일이 바뀌었거나 휴대폰 시간이 맞지 않아요. (날짜·시간 자동 설정을 켜 주세요)"
+          err.contains("account not found", true) || err.contains("invalid_client", true) -> "연결 파일이 더 이상 쓰이지 않아요. 새 연결 파일을 받아 주세요."
           else -> "구글 로그인에 실패했어요 ($code) $err".trim()
         },
         code
@@ -160,7 +160,7 @@ class DriveClient(
         code == 403 && (reason == "insufficientFilePermissions" || message.contains("permission", true)) ->
           "봇에게 편집 권한이 없어요. 폴더 공유에서 봇 이메일을 '편집자'로 바꿔 주세요."
         code == 403 -> "드라이브가 요청을 거부했어요. ($message)"
-        code == 401 -> "봇 로그인이 거부됐어요. 열쇠 파일을 다시 불러와 주세요."
+        code == 401 -> "구글 드라이브 로그인이 거부됐어요. 연결 파일을 다시 불러와 주세요."
         code == 429 || code >= 500 -> "구글 드라이브가 바빠요. 잠시 후 다시 시도해 주세요."
         else -> "드라이브 요청에 실패했어요 ($code) $message".trim()
       }

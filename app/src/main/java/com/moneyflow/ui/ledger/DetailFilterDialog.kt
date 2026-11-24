@@ -19,7 +19,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -39,21 +41,19 @@ internal fun DetailFilterDialog(
   onDeleteSaved: (SavedFilter) -> Unit
 ) {
   val f = state.filters
-  var min by remember { mutableStateOf(f.minAmount?.toString() ?: "") }
-  var max by remember { mutableStateOf(f.maxAmount?.toString() ?: "") }
-  var accounts by remember { mutableStateOf(f.accountIds) }
-  var tags by remember { mutableStateOf(f.tags) }
-  var saveName by remember { mutableStateOf("") }
+  var min by rememberSaveable { mutableStateOf(f.minAmount?.toString() ?: "") }
+  var max by rememberSaveable { mutableStateOf(f.maxAmount?.toString() ?: "") }
+  var accounts by rememberSaveable { mutableStateOf(f.accountIds.toList()) }
+  var tags by rememberSaveable { mutableStateOf(f.tags.toList()) }
+  var saveName by rememberSaveable { mutableStateOf("") }
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("상세 필터", fontWeight = FontWeight.Bold) },
     text = {
       Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("금액", fontWeight = FontWeight.SemiBold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Column(Modifier.weight(1f)) { KrwAmountField(value = min, onValueChange = { min = it }, label = "최소") }
-          Column(Modifier.weight(1f)) { KrwAmountField(value = max, onValueChange = { max = it }, label = "최대") }
-        }
+        KrwAmountField(value = min, onValueChange = { min = it }, label = "최소 금액")
+        KrwAmountField(value = max, onValueChange = { max = it }, label = "최대 금액")
         if (state.accounts.isNotEmpty()) {
           Text("계좌·카드", fontWeight = FontWeight.SemiBold)
           FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -78,7 +78,7 @@ internal fun DetailFilterDialog(
             modifier = Modifier.weight(1f).testTag("saved_filter_name")
           )
           TextButton(enabled = saveName.isNotBlank(), onClick = {
-            onApply(min.toLongOrNull(), max.toLongOrNull(), accounts, tags)
+            onApply(min.toLongOrNull(), max.toLongOrNull(), accounts.toSet(), tags.toSet())
             onSave(saveName)
             onDismiss()
           }) { Text("저장") }
@@ -86,18 +86,28 @@ internal fun DetailFilterDialog(
         if (state.savedFilters.isNotEmpty()) {
           FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             state.savedFilters.forEach { s ->
-              InputChip(selected = false, onClick = { onDeleteSaved(s) }, label = { Text("★ ${s.name}  ✕") })
+              InputChip(
+                selected = false, onClick = { }, label = { Text("★ ${s.name}") },
+                trailingIcon = {
+                  androidx.compose.material3.IconButton(onClick = { onDeleteSaved(s) }, modifier = Modifier.size(32.dp)) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = "'${s.name}' 저장된 필터 지우기", modifier = Modifier.size(16.dp))
+                  }
+                }
+              )
             }
           }
-          Text("저장된 필터를 누르면 지워져요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+          Text("✕를 누르면 저장된 필터가 지워져요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        }
+        if (f.detailCount > 0) {
+          TextButton(onClick = { onApply(null, null, emptySet(), emptySet()); onDismiss() }) { Text("상세 조건 모두 지우기") }
         }
       }
     },
     confirmButton = {
-      TextButton(onClick = { onApply(min.toLongOrNull(), max.toLongOrNull(), accounts, tags); onDismiss() }, modifier = Modifier.testTag("detail_filter_apply")) {
+      TextButton(onClick = { onApply(min.toLongOrNull(), max.toLongOrNull(), accounts.toSet(), tags.toSet()); onDismiss() }, modifier = Modifier.testTag("detail_filter_apply")) {
         Text("적용", fontWeight = FontWeight.Bold)
       }
     },
-    dismissButton = { TextButton(onClick = { onApply(null, null, emptySet(), emptySet()); onDismiss() }) { Text("상세 조건 지우기") } }
+    dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
   )
 }

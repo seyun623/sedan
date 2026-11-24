@@ -489,7 +489,7 @@ fun CardBrowserScreen(
   error?.let { msg ->
     AlertDialog(
       onDismissRequest = { error = null },
-      title = { Text("알림", fontWeight = FontWeight.Bold) },
+      title = { Text("확인이 필요해요", fontWeight = FontWeight.Bold) },
       text = { Text(msg) },
       confirmButton = { TextButton(onClick = { error = null }) { Text("확인") } }
     )

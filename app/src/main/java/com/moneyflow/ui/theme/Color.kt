@@ -105,3 +105,7 @@ val AccentGreenLight: Color @Composable @ReadOnlyComposable get() = LocalPalette
 val AccentRedLight: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.redContainer
 val AccentOrangeLight: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.orangeContainer
 val AccentPurpleLight: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.purpleContainer
+
+/** Green / red for text (amounts): darker in light mode so small text stays readable (≥4.5:1). */
+val AccentGreenText: Color @Composable @ReadOnlyComposable get() = if (LocalPalette.current.isDark) AccentGreen else Color(0xFF00805A)
+val AccentRedText: Color @Composable @ReadOnlyComposable get() = if (LocalPalette.current.isDark) AccentRed else Color(0xFFD22D3B)

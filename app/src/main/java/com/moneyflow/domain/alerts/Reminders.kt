@@ -156,7 +156,7 @@ object BackupReminders {
     return Reminder(
       key, ReminderChannel.BACKUP,
       if (lastBackup == null) "아직 백업한 적이 없어요" else "백업한 지 ${days}일 지났어요",
-      "휴대폰을 잃어버리면 기록도 사라져요. 설정 → 백업 및 복원에서 백업하거나 자동 백업을 켜 주세요."
+      "백업해 두면 휴대폰을 바꾸거나 잃어버려도 기록을 그대로 옮길 수 있어요. 설정 → 백업 및 복원에서 자동 백업을 켜 두면 편해요."
     )
   }
 }

@@ -204,12 +204,16 @@ fun LockScreen(
       }
       Box(Modifier.heightIn(min = 40.dp).padding(top = 12.dp), contentAlignment = Alignment.Center) {
         if (statusText != null) {
+          // The countdown changes every second: announce only a fixed sentence, not every tick.
           Text(
             statusText,
-            color = AccentRed,
+            color = com.moneyflow.ui.theme.AccentRedText,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            modifier = Modifier.semantics {
+              liveRegion = LiveRegionMode.Polite
+              contentDescription = if (lockedOut) "입력 시도가 너무 많아요. 잠시 후 다시 시도해 주세요." else statusText
+            }
           )
         }
       }
@@ -242,6 +246,25 @@ fun LockScreen(
           enabled = pin.length >= MIN_PIN && !lockedOut && !verifying,
           modifier = Modifier.testTag("lock_confirm_button")
         ) { Text("확인", fontWeight = FontWeight.Bold) }
+      }
+      var forgotHelp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+      TextButton(onClick = { forgotHelp = true }, modifier = Modifier.testTag("lock_forgot_pin")) {
+        Text("PIN을 잊었어요", color = Gray600)
+      }
+      if (forgotHelp) {
+        androidx.compose.material3.AlertDialog(
+          onDismissRequest = { forgotHelp = false },
+          title = { Text("PIN을 잊었을 때", fontWeight = FontWeight.Bold) },
+          text = {
+            Text(
+              "PIN은 이 휴대폰에만 있어서 다시 알려 드릴 수 없어요.\n\n" +
+                "1. 앱을 지우고 다시 설치해요.\n" +
+                "2. 설정 → 백업 및 복원 → '백업 파일 불러오기'로 마지막 백업을 복원해요. (드라이브 자동 백업을 켜 두었다면 '머니플로우 가족' 폴더에 있어요)\n\n" +
+                "백업 뒤에 적은 기록은 다시 입력해야 해요. 가족 자동 합산을 쓰고 있다면 가족 폰에는 마지막으로 올라간 기록이 남아 있어요."
+            )
+          },
+          confirmButton = { TextButton(onClick = { forgotHelp = false }) { Text("확인") } }
+        )
       }
     }
   }

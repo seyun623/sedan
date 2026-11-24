@@ -57,7 +57,7 @@ fun ProblemReportScreen(onBack: () -> Unit) {
         modifier = Modifier.testTag("report_send")
       )
       SettingsItem(
-        title = "기록 지우기",
+        title = "오류 기록 지우기",
         subtitle = "문제가 해결되었으면 지워 주세요",
         icon = Icons.Filled.Delete,
         iconTint = AccentRed,

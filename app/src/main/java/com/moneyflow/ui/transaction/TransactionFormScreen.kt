@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -652,9 +653,9 @@ private fun FormActionBar(
           onClick = onSaveAndContinue,
           enabled = enabled,
           shape = RoundedCornerShape(14.dp),
-          modifier = Modifier.weight(1f).height(52.dp).testTag("form_save_and_continue_button")
+          modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("form_save_and_continue_button")
         ) {
-          Text("저장 후 계속 입력", fontWeight = FontWeight.Bold, color = TossBlue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text("저장 후 계속 입력", fontWeight = FontWeight.Bold, color = TossBlue, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
       }
       Button(
@@ -662,7 +663,7 @@ private fun FormActionBar(
         enabled = enabled,
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = OnBrand),
-        modifier = Modifier.weight(1f).height(52.dp).testTag("form_submit_button")
+        modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("form_submit_button")
       ) {
         Text(if (isEditMode) "수정 완료" else "저장", fontWeight = FontWeight.Bold, maxLines = 1)
       }

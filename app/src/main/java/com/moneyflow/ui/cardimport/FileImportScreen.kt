@@ -99,7 +99,7 @@ class FileImportViewModel @Inject constructor(
       _state.value = FileImportState()
       _openPreview.send(Unit)
     } catch (e: Exception) {
-      _state.value = FileImportState(error = e.message ?: "파일을 읽지 못했어요.")
+      _state.value = FileImportState(error = com.moneyflow.util.UserErrors.message(e, "파일을 읽지 못했어요."))
     }
   }
 
@@ -118,7 +118,7 @@ class FileImportViewModel @Inject constructor(
       _state.value = FileImportState()
       _openPreview.send(Unit)
     } catch (e: Exception) {
-      _state.value = FileImportState(error = e.message ?: "AI가 읽지 못했어요.")
+      _state.value = FileImportState(error = com.moneyflow.util.UserErrors.message(e, "AI가 읽지 못했어요."))
     }
   }
 
