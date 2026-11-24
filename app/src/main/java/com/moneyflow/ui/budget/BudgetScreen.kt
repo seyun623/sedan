@@ -58,7 +58,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moneyflow.data.model.CategoryBudgetProgress
 import com.moneyflow.data.model.RecurringTransactionEntity
@@ -117,6 +117,8 @@ fun BudgetScreen(
     onExecuteRecurring = { viewModel.executeRecurringNow(it) },
     onEditRecurring = { editRecurringId = it.id },
     onDeleteRecurring = { deleteRecurringId = it.id },
+    onAcceptSuggestion = viewModel::acceptSuggestion,
+    onDismissSuggestion = viewModel::dismissSuggestion,
     onAddGoal = { showAddGoal = true },
     onDepositGoal = { depositGoalId = it.id },
     onEditGoal = { editGoalId = it.id },
@@ -231,6 +233,8 @@ private fun BudgetContent(
   onExecuteRecurring: (RecurringTransactionEntity) -> Unit,
   onEditRecurring: (RecurringTransactionEntity) -> Unit,
   onDeleteRecurring: (RecurringTransactionEntity) -> Unit,
+  onAcceptSuggestion: (com.moneyflow.domain.RecurringSuggestion) -> Unit = {},
+  onDismissSuggestion: (com.moneyflow.domain.RecurringSuggestion) -> Unit = {},
   onAddGoal: () -> Unit,
   onDepositGoal: (SavingGoalEntity) -> Unit,
   onEditGoal: (SavingGoalEntity) -> Unit,
@@ -336,6 +340,12 @@ private fun BudgetContent(
           onEdit = { onEditRecurring(item) },
           onDelete = { onDeleteRecurring(item) }
         )
+      }
+    }
+
+    if (state.recurringSuggestions.isNotEmpty()) {
+      items(state.recurringSuggestions.take(3), key = { "rec_sug_${it.key}" }) { sug ->
+        RecurringSuggestionCard(sug, onAccept = { onAcceptSuggestion(sug) }, onDismiss = { onDismissSuggestion(sug) })
       }
     }
 
@@ -925,4 +935,26 @@ private fun SectionCard(
       .padding(padding.dp),
     content = content
   )
+}
+
+/** "매달 반복되는 것 같아요": a hand-typed payment seen every month, offered as a 고정 거래. */
+@Composable
+private fun RecurringSuggestionCard(
+  s: com.moneyflow.domain.RecurringSuggestion,
+  onAccept: () -> Unit,
+  onDismiss: () -> Unit
+) {
+  SectionCard(background = TossBlueContainer, modifier = Modifier.testTag("recurring_suggestion")) {
+    Text("매달 반복되는 것 같아요", style = MaterialTheme.typography.labelMedium, color = TossBlue, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(4.dp))
+    Text(s.title, fontWeight = FontWeight.Bold, color = Gray900)
+    Text(
+      "${s.months}개월째 · 매달 ${s.dayOfMonth}일쯤 · ${if (s.type == com.moneyflow.data.model.TransactionType.INCOME) "+" else ""}${Formatters.formatCurrency(s.amount)} · ${s.category}",
+      style = MaterialTheme.typography.bodySmall, color = Gray600
+    )
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+      TextButton(onClick = onDismiss) { Text("아니에요", color = Gray600) }
+      TextButton(onClick = onAccept) { Text("고정 거래로 등록", fontWeight = FontWeight.Bold, color = TossBlue) }
+    }
+  }
 }

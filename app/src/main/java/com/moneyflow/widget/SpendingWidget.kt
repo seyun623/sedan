@@ -39,8 +39,20 @@ data class WidgetContent(
   val month: Long = 0,
   val monthLabel: String = "",
   /** Remaining budget (negative = over); null when no budget is set. */
-  val remainingBudget: Long? = null
+  val remainingBudget: Long? = null,
+  val budgetTotal: Long = 0,
+  /** This month's biggest categories (large widget). */
+  val topCategories: List<Pair<String, Long>> = emptyList()
 ) {
+  /** 0..100 of the budget used; null without a budget. */
+  val budgetPercent: Int?
+    get() {
+      val left = remainingBudget ?: return null
+      if (hidden || budgetTotal <= 0) return null
+      return ((budgetTotal - left) * 100 / budgetTotal).toInt().coerceIn(0, 100)
+    }
+  val categoriesText: String
+    get() = if (hidden) "" else topCategories.joinToString("\n") { (c, a) -> "$c  ${Formatters.formatCurrency(a)}" }
   val todayText: String get() = if (hidden) "앱 잠금 중" else Formatters.formatCurrency(today)
   val monthText: String get() = if (hidden) "눌러서 열기" else "$monthLabel ${Formatters.formatCurrency(month)}"
   val budgetText: String
@@ -63,7 +75,10 @@ data class WidgetContent(
         today = expenses.filter { it.timestamp in todayStart..todayEnd }.sumOf { it.amount },
         month = expenses.sumOf { it.amount },
         monthLabel = "${today.monthValue}월",
-        remainingBudget = if (budgetTotal > 0) budgetTotal - budgetSpent else null
+        remainingBudget = if (budgetTotal > 0) budgetTotal - budgetSpent else null,
+        budgetTotal = budgetTotal,
+        topCategories = expenses.groupBy { it.category }.map { (c, l) -> c to l.sumOf { it.amount } }
+          .sortedByDescending { it.second }.take(3)
       )
     }
   }
@@ -80,7 +95,13 @@ interface WidgetEntryPoint {
 
 /** Home screen widget: today's and this month's spending, remaining budget, "+ 기록". */
 class SpendingWidgetProvider : AppWidgetProvider() {
-  override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+  override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = refresh(context, ids)
+
+  /** The widget was resized: pick the layout for the new size. */
+  override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: android.os.Bundle) =
+    refresh(context, intArrayOf(id))
+
+  private fun refresh(context: Context, ids: IntArray) {
     val pending = goAsync()
     scope.launch {
       try { SpendingWidget.update(context, ids) } catch (_: Exception) { } finally { pending.finish() }
@@ -112,10 +133,36 @@ object SpendingWidget {
       WidgetContent.of(txs, clock.today(), clock.zone, ep.budgets().observeBudget(month).first().total, hidden = false)
     }
     val manager = AppWidgetManager.getInstance(context)
-    ids.forEach { id -> manager.updateAppWidget(id, views(context, content)) }
+    ids.forEach { id ->
+      val rv = if (android.os.Build.VERSION.SDK_INT >= 31) {
+        // The launcher picks the layout that fits as the widget is resized.
+        RemoteViews(mapOf(
+          android.util.SizeF(110f, 40f) to views(context, content, WidgetSize.SMALL),
+          android.util.SizeF(180f, 110f) to views(context, content, WidgetSize.MEDIUM),
+          android.util.SizeF(180f, 200f) to views(context, content, WidgetSize.LARGE)
+        ))
+      } else {
+        val o = manager.getAppWidgetOptions(id)
+        views(context, content, WidgetSize.of(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)))
+      }
+      manager.updateAppWidget(id, rv)
+    }
   }
 
-  private fun views(context: Context, c: WidgetContent): RemoteViews {
+  enum class WidgetSize {
+    SMALL, MEDIUM, LARGE;
+    companion object {
+      /** Size class from the widget's size in dp (0 = unknown → medium). */
+      fun of(widthDp: Int, heightDp: Int): WidgetSize = when {
+        widthDp == 0 && heightDp == 0 -> MEDIUM
+        heightDp in 1..99 || widthDp in 1..169 -> SMALL
+        heightDp >= 200 -> LARGE
+        else -> MEDIUM
+      }
+    }
+  }
+
+  private fun views(context: Context, c: WidgetContent, size: WidgetSize): RemoteViews {
     val open = PendingIntent.getActivity(
       context, 100,
       Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -128,10 +175,23 @@ object SpendingWidget {
         .also { PrefillIntents.put(it, FormPrefill()) },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
+    if (size == WidgetSize.SMALL) {
+      return RemoteViews(context.packageName, R.layout.widget_spending_small).apply {
+        setTextViewText(R.id.widget_today, c.todayText)
+        setOnClickPendingIntent(R.id.widget_root, open)
+        setOnClickPendingIntent(R.id.widget_add, add)
+      }
+    }
     return RemoteViews(context.packageName, R.layout.widget_spending).apply {
       setTextViewText(R.id.widget_today, c.todayText)
       setTextViewText(R.id.widget_month, c.monthText)
       setTextViewText(R.id.widget_budget, c.budgetText)
+      val large = size == WidgetSize.LARGE
+      val percent = c.budgetPercent
+      setViewVisibility(R.id.widget_budget_bar, if (large && percent != null) android.view.View.VISIBLE else android.view.View.GONE)
+      percent?.let { setProgressBar(R.id.widget_budget_bar, 100, it, false) }
+      setViewVisibility(R.id.widget_categories, if (large && c.categoriesText.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE)
+      setTextViewText(R.id.widget_categories, c.categoriesText)
       setOnClickPendingIntent(R.id.widget_root, open)
       setOnClickPendingIntent(R.id.widget_add, add)
     }

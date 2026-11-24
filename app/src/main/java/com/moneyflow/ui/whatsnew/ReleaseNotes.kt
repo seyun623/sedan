@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.2.0", "2026.11",
+      listOf(
+        "예산·목표 탭: 매달 직접 입력하는 비슷한 거래(구독료, 월급 등)를 찾아 '고정 거래로 등록'을 제안해요",
+        "가족 합산: 가족 한 달 예산을 정하고, 카테고리마다 누가 얼마 썼는지 볼 수 있어요",
+        "위젯 크기에 맞춰 보여 줘요: 작게 하면 오늘 지출만, 크게 하면 예산 진행 막대와 많이 쓴 카테고리까지"
+      )
+    ),
+    ReleaseNote(
       "2.1.0", "2026.11",
       listOf(
         "카드사 화면 기억하기: 카드사에서 가져오기로 이용내역·실적·혜택 화면을 연 뒤 '이 화면 기억하기'를 눌러 두세요",

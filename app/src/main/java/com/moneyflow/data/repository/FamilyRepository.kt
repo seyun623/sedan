@@ -27,11 +27,16 @@ data class FamilyPersonTotal(
   val asOf: Long?
 )
 
+/** One category's combined spending and each person's part (largest first). */
+data class FamilyCategory(val category: String, val total: Long, val byPerson: List<Pair<String, Long>>)
+
 data class FamilyMonth(
   val month: YearMonth,
   val people: List<FamilyPersonTotal>,
   /** Combined expense by category, largest first. */
-  val categories: List<Pair<String, Long>>
+  val categories: List<FamilyCategory>,
+  /** Family monthly budget (0 = not set). */
+  val budget: Long = 0
 ) {
   val totalIncome: Long get() = people.sumOf { it.income }
   val totalExpense: Long get() = people.sumOf { it.expense }
@@ -52,6 +57,8 @@ class FamilyRepository @Inject constructor(
   private val clock: AppClock
 ) {
   private val dao = db.familyDao()
+
+  suspend fun setBudget(amount: Long) = settings.setFamilyBudget(amount.coerceAtLeast(0))
 
   val members: Flow<List<FamilyMemberEntity>> = dao.observeMembers()
 
@@ -101,8 +108,9 @@ class FamilyRepository @Inject constructor(
     return combine(
       db.transactionDao().observeBetween(start, end),
       dao.observeBetween(start, end),
-      dao.observeMembers()
-    ) { mine, family, members ->
+      dao.observeMembers(),
+      settings.settings
+    ) { mine, family, members, s ->
       val me = FamilyPersonTotal(
         null, "나",
         mine.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
@@ -118,12 +126,17 @@ class FamilyRepository @Inject constructor(
           m.backupCreatedAt
         )
       }
-      val categories = (mine.filter { it.type == TransactionType.EXPENSE }.map { it.category to it.amount } +
-        family.filter { it.type == TransactionType.EXPENSE }.map { it.category to it.amount })
-        .groupBy({ it.first }, { it.second })
-        .map { (c, amounts) -> c to amounts.sum() }
-        .sortedByDescending { it.second }
-      FamilyMonth(month, listOf(me) + others, categories)
+      val names = members.associate { it.id to it.name }
+      // (category, person, amount) for every expense of everyone.
+      val rows = mine.filter { it.type == TransactionType.EXPENSE }.map { Triple(it.category, "나", it.amount) } +
+        family.filter { it.type == TransactionType.EXPENSE }.map { Triple(it.category, names[it.memberId] ?: "가족", it.amount) }
+      val categories = rows.groupBy { it.first }.map { (c, list) ->
+        FamilyCategory(
+          c, list.sumOf { it.third },
+          list.groupBy { it.second }.map { (p, l) -> p to l.sumOf { it.third } }.sortedByDescending { it.second }
+        )
+      }.sortedByDescending { it.total }
+      FamilyMonth(month, listOf(me) + others, categories, s.familyBudget)
     }
   }
 }

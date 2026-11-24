@@ -62,7 +62,12 @@ class FamilyRepositoryTest {
     assertEquals(listOf("나", "남편"), m.people.map { it.name })
     assertEquals(100_000, m.totalExpense)
     assertEquals(2_000_000, m.totalIncome)
-    assertEquals("식비" to 100_000L, m.categories.first())
+    with(m.categories.first()) {
+      assertEquals("식비", category); assertEquals(100_000L, total)
+      assertEquals(listOf("남편" to 70_000L, "나" to 30_000L), byPerson)
+    }
+    family.setBudget(90_000)
+    assertEquals(90_000L, family.month(YearMonth.of(2026, 11)).first().budget)
 
     // A newer backup of the same phone replaces the copy instead of adding a person.
     LedgerRepository(spouse, clock).addTransaction(TransactionEntity(type = TransactionType.EXPENSE, amount = 5_000, category = "카페/간식", accountId = 1, timestamp = clock.nowMillis(), memo = "커피"))

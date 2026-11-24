@@ -47,6 +47,8 @@ data class BudgetUiState(
   val goals: List<SavingGoalEntity> = emptyList(),
   val accounts: List<AccountEntity> = emptyList(),
   val monthTransactions: List<TransactionEntity> = emptyList(),
+  /** Hand-typed payments that repeat every month (suggested as 고정 거래). */
+  val recurringSuggestions: List<com.moneyflow.domain.RecurringSuggestion> = emptyList(),
   val isLoading: Boolean = true
 )
 
@@ -59,16 +61,18 @@ class BudgetViewModel @Inject constructor(
   private val monthStore: SelectedMonthStore,
   private val stats: MonthlyStatsCalculator,
   private val messages: UserMessageBus,
-  private val clock: AppClock
+  private val clock: AppClock,
+  private val settings: com.moneyflow.data.repository.SettingsRepository
 ) : ViewModel() {
+  private val detector = com.moneyflow.domain.RecurringDetector(clock.zone)
 
   val uiState: StateFlow<BudgetUiState> = combine(
     monthStore.month.flatMapLatest { m -> budgets.observeBudget(m) },
     ledger.transactions,
     ledger.goals,
     ledger.accounts,
-    recurringRepo.items
-  ) { budget, all, goals, accounts, recurring ->
+    combine(recurringRepo.items, settings.settings) { r, s -> r to s.dismissedRecurringSuggestions }
+  ) { budget, all, goals, accounts, (recurring, dismissed) ->
     val month = budget.month
     val today = clock.today()
     val monthTxs = stats.inMonth(all, month)
@@ -93,6 +97,7 @@ class BudgetViewModel @Inject constructor(
       goals = goals,
       accounts = accounts,
       monthTransactions = monthTxs,
+      recurringSuggestions = detector.detect(all, recurring, dismissed, today).filter { s -> accounts.any { it.id == s.accountId } },
       isLoading = false
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetUiState())
@@ -108,6 +113,24 @@ class BudgetViewModel @Inject constructor(
   }
 
   // ---- Recurring ----
+  /** Registers a detected repeating payment as a 고정 거래 (from next month if this month is paid). */
+  fun acceptSuggestion(s: com.moneyflow.domain.RecurringSuggestion) = viewModelScope.launch {
+    val account = uiState.value.accounts.firstOrNull { it.id == s.accountId } ?: return@launch
+    val start = if (s.paidThisMonth) clock.currentMonth().plusMonths(1) else clock.currentMonth()
+    recurringRepo.add(
+      RecurringTransactionEntity(
+        title = s.title, type = s.type, amount = s.amount, category = s.category, dayOfMonth = s.dayOfMonth,
+        accountId = account.id, accountName = account.name, memo = s.title, paymentMethod = s.paymentMethod,
+        startMonth = com.moneyflow.domain.MonthKeys.of(start)
+      )
+    )
+    messages.show("'${s.title}'을(를) 매달 ${s.dayOfMonth}일 고정 거래로 등록했어요." + if (s.paidThisMonth) " 다음 달부터 기록돼요." else "")
+  }
+
+  fun dismissSuggestion(s: com.moneyflow.domain.RecurringSuggestion) = viewModelScope.launch {
+    settings.dismissRecurringSuggestion(s.key)
+  }
+
   fun addRecurring(item: RecurringTransactionEntity) = viewModelScope.launch {
     recurringRepo.add(item)
     messages.show("'${item.title}' 매월 ${item.dayOfMonth}일 고정 거래를 등록했어요.")

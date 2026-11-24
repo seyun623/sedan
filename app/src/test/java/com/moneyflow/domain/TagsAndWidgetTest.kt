@@ -46,9 +46,16 @@ class TagsAndWidgetTest {
     assertEquals(115_000, c.month)
     assertEquals(5_000L, c.remainingBudget)
     assertEquals("예산 5,000원 남음", c.budgetText)
+    assertEquals(75, c.budgetPercent) // 15,000 of 20,000 (the excluded item doesn't count)
+    assertEquals(listOf("식비" to 115_000L), c.topCategories)
+    assertEquals(com.moneyflow.widget.SpendingWidget.WidgetSize.SMALL, com.moneyflow.widget.SpendingWidget.WidgetSize.of(110, 60))
+    assertEquals(com.moneyflow.widget.SpendingWidget.WidgetSize.MEDIUM, com.moneyflow.widget.SpendingWidget.WidgetSize.of(250, 140))
+    assertEquals(com.moneyflow.widget.SpendingWidget.WidgetSize.LARGE, com.moneyflow.widget.SpendingWidget.WidgetSize.of(250, 260))
     assertNull(WidgetContent.of(txs, LocalDate.of(2026, 11, 24), zone, 0, false).remainingBudget)
     val hidden = WidgetContent.of(txs, LocalDate.of(2026, 11, 24), zone, 20_000, hidden = true)
     assertEquals("앱 잠금 중", hidden.todayText)
     assertEquals("", hidden.budgetText)
+    assertEquals(null, hidden.budgetPercent)
+    assertEquals("", hidden.categoriesText)
   }
 }

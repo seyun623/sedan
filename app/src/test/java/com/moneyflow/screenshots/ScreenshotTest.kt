@@ -117,7 +117,7 @@ class ScreenshotTest {
   @Test fun analyticsLight() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", false) { AnalyticsScreen({}, viewModel = vm) } }
   @Test fun analyticsDark() { val vm = AnalyticsViewModel(ledger, monthStore(), stats, clock); shot("03_analytics", true) { AnalyticsScreen({}, viewModel = vm) } }
 
-  private fun budgetVm() = BudgetViewModel(ledger, budgets, recurring, monthStore(), stats, bus, clock)
+  private fun budgetVm() = BudgetViewModel(ledger, budgets, recurring, monthStore(), stats, bus, clock, settings)
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 

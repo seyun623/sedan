@@ -71,4 +71,25 @@
         android:textColor="@color/widget_accent"
         android:textSize="13sp"
         android:textStyle="bold" />
+
+    <ProgressBar
+        android:id="@+id/widget_budget_bar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="6dp"
+        android:max="100"
+        android:progressTint="@color/widget_accent"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/widget_categories"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:lineSpacingExtra="2dp"
+        android:maxLines="4"
+        android:textColor="@color/widget_sub"
+        android:textSize="12sp"
+        android:visibility="gone" />
 </LinearLayout>

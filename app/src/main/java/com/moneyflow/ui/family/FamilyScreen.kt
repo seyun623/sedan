@@ -37,7 +37,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -114,6 +114,11 @@ class FamilyViewModel @Inject constructor(
     }
   }
 
+  fun setBudget(amount: Long) = viewModelScope.launch {
+    repo.setBudget(amount)
+    messages.show(if (amount > 0) "가족 예산을 ${Formatters.formatCurrency(amount)}(으)로 정했어요." else "가족 예산을 지웠어요.")
+  }
+
   fun delete(member: FamilyMemberEntity) = viewModelScope.launch {
     repo.delete(member)
     messages.show("${member.name}님의 기록을 지웠어요.")
@@ -133,6 +138,7 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
   var error by rememberSaveable { mutableStateOf<String?>(null) }
   var deleting by remember { mutableStateOf<FamilyMemberEntity?>(null) }
   var managing by remember { mutableStateOf<FamilyMemberEntity?>(null) }
+  var editBudget by rememberSaveable { mutableStateOf(false) }
 
   val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) pickedUri = uri.toString() }
   LaunchedEffect(viewModel) { viewModel.errors.collect { error = it } }
@@ -145,7 +151,7 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
       onNext = { viewModel.moveMonth(1) },
       modifier = Modifier.padding(horizontal = 8.dp)
     )
-    summary?.let { s -> FamilySummary(s) }
+    summary?.let { s -> FamilySummary(s, onEditBudget = { editBudget = true }) }
 
     SettingsSection("가족 기록") {
       members.forEach { m ->
@@ -186,6 +192,18 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
       onSubmit = { pw, name -> pickedUri = null; viewModel.import(Uri.parse(uri), pw, name) }
     )
   }
+  if (editBudget) {
+    var value by rememberSaveable { mutableStateOf(summary?.budget?.takeIf { it > 0 }?.toString() ?: "") }
+    AlertDialog(
+      onDismissRequest = { editBudget = false },
+      title = { Text("가족 한 달 예산", fontWeight = FontWeight.Bold) },
+      text = {
+        com.moneyflow.ui.common.KrwAmountField(value = value, onValueChange = { value = it }, label = "가족 전체 예산", supportingText = "비워 두면 가족 예산을 쓰지 않아요")
+      },
+      confirmButton = { TextButton(onClick = { editBudget = false; viewModel.setBudget(value.toLongOrNull() ?: 0) }) { Text("저장", fontWeight = FontWeight.Bold) } },
+      dismissButton = { TextButton(onClick = { editBudget = false }) { Text("취소") } }
+    )
+  }
   managing?.let { m ->
     AlertDialog(
       onDismissRequest = { managing = null },
@@ -217,7 +235,7 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
 }
 
 @Composable
-private fun FamilySummary(s: FamilyMonth) {
+private fun FamilySummary(s: FamilyMonth, onEditBudget: () -> Unit) {
   androidx.compose.material3.Surface(
     shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
     color = com.moneyflow.ui.theme.CardSurface,
@@ -227,7 +245,27 @@ private fun FamilySummary(s: FamilyMonth) {
       Text("가족 전체 지출", color = Gray600, style = MaterialTheme.typography.labelLarge)
       Text(Formatters.formatCurrency(s.totalExpense), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall, color = Gray900)
       Text("수입 ${Formatters.formatCurrency(s.totalIncome)}", color = AccentGreen, style = MaterialTheme.typography.bodyMedium)
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(8.dp))
+      if (s.budget > 0) {
+        val left = s.budget - s.totalExpense
+        LinearProgressIndicator(
+          progress = { (s.totalExpense.toFloat() / s.budget).coerceIn(0f, 1f) },
+          color = if (left < 0) AccentRed else TossBlue,
+          trackColor = Gray200,
+          modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text(
+            if (left >= 0) "가족 예산 ${Formatters.formatCurrency(s.budget)} 중 ${Formatters.formatCurrency(left)} 남음"
+            else "가족 예산보다 ${Formatters.formatCurrency(-left)} 더 썼어요",
+            color = if (left < 0) AccentRed else Gray600, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)
+          )
+          TextButton(onClick = onEditBudget) { Text("수정") }
+        }
+      } else {
+        TextButton(onClick = onEditBudget, modifier = Modifier.testTag("family_budget")) { Text("가족 예산 정하기") }
+      }
+      Spacer(Modifier.height(4.dp))
       s.people.forEach { p ->
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
           Text(p.name, fontWeight = FontWeight.SemiBold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -240,19 +278,26 @@ private fun FamilySummary(s: FamilyMonth) {
       if (s.categories.isNotEmpty()) {
         Spacer(Modifier.height(12.dp))
         Text("함께 많이 쓴 곳", fontWeight = FontWeight.Bold, color = Gray900)
-        val max = s.categories.first().second.coerceAtLeast(1)
-        s.categories.take(6).forEach { (category, amount) ->
+        val max = s.categories.first().total.coerceAtLeast(1)
+        val showPeople = s.people.size > 1
+        s.categories.take(6).forEach { c ->
           Column(Modifier.padding(vertical = 4.dp)) {
             Row {
-              Text(category, color = Gray900, modifier = Modifier.weight(1f))
-              Text(Formatters.formatCurrency(amount), color = Gray600)
+              Text(c.category, color = Gray900, modifier = Modifier.weight(1f))
+              Text(Formatters.formatCurrency(c.total), color = Gray600)
             }
             LinearProgressIndicator(
-              progress = { amount.toFloat() / max },
-              color = Color(FinanceCategories.getColorForCategory(category)),
+              progress = { c.total.toFloat() / max },
+              color = Color(FinanceCategories.getColorForCategory(c.category)),
               trackColor = Gray200,
               modifier = Modifier.fillMaxWidth().padding(top = 3.dp)
             )
+            if (showPeople) {
+              Text(
+                c.byPerson.joinToString(" · ") { (p, a) -> "$p ${Formatters.formatCurrency(a)}" },
+                style = MaterialTheme.typography.labelSmall, color = Gray600, modifier = Modifier.padding(top = 2.dp)
+              )
+            }
           }
         }
       }

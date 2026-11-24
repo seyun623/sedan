@@ -69,6 +69,10 @@ data class AppSettings(
   val monthlySummaryEnabled: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
+  /** Family monthly budget for the combined view (0 = not set). */
+  val familyBudget: Long = 0L,
+  /** Repeating-payment suggestions the user said are not 고정 거래. */
+  val dismissedRecurringSuggestions: Set<String> = emptySet(),
   /** Card company pages to read automatically after login, by card site id. */
   val cardSavedPages: Map<String, List<com.moneyflow.domain.cardimport.SavedPage>> = emptyMap(),
   /** Show amounts on the home screen widget while app lock is on. */
@@ -128,6 +132,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     val INSTALL_ID = stringPreferencesKey("install_id")
     val CARD_SAVED_PAGES = stringPreferencesKey("card_saved_pages_json")
+    val FAMILY_BUDGET = longPreferencesKey("family_budget")
+    val RECURRING_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("recurring_suggestions_dismissed")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
     fun aiModel(p: AiProvider) = stringPreferencesKey("ai_model_${p.name}")
   }
@@ -171,7 +177,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
-      cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES])
+      cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
+      dismissedRecurringSuggestions = p[Keys.RECURRING_DISMISSED] ?: emptySet(),
+      familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L
     )
   }
 
@@ -290,6 +298,12 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val map = com.moneyflow.domain.cardimport.SavedPages.decode(it[Keys.CARD_SAVED_PAGES]).toMutableMap()
     map[siteId] = pages
     it[Keys.CARD_SAVED_PAGES] = com.moneyflow.domain.cardimport.SavedPages.encode(map)
+  }
+
+  suspend fun setFamilyBudget(amount: Long) = store.edit { it[Keys.FAMILY_BUDGET] = amount }
+
+  suspend fun dismissRecurringSuggestion(key: String) = store.edit {
+    it[Keys.RECURRING_DISMISSED] = ((it[Keys.RECURRING_DISMISSED] ?: emptySet()) + key).toList().takeLast(200).toSet()
   }
 
   suspend fun setSplitInstallments(enabled: Boolean) = store.edit { it[Keys.SPLIT_INSTALLMENTS] = enabled }
