@@ -79,11 +79,22 @@ class MigrationTest {
     db.query("SELECT COUNT(*) FROM family_transactions").use { c -> c.moveToNext(); assertEquals(1, c.getInt(0)) }
   }
 
+  @Test fun migrate6To7_addsFamilyGoals() {
+    helper.createDatabase(DB7, 6).apply {
+      execSQL("INSERT INTO family_members(name,deviceId,backupCreatedAt,importedAt) VALUES('엄마','x',1,2)")
+      close()
+    }
+    val db = helper.runMigrationsAndValidate(DB7, 7, true, com.moneyflow.data.local.MIGRATION_6_7)
+    db.execSQL("INSERT INTO family_goals(memberId,title,targetAmount,currentAmount,targetDate) VALUES(1,'가족 여행',100,10,0)")
+    db.query("SELECT title FROM family_goals").use { c -> c.moveToNext(); assertEquals("가족 여행", c.getString(0)) }
+  }
+
   private companion object {
     const val DB = "migration-test"
     const val DB4 = "migration-test-4"
     const val DB24 = "migration-test-24"
     const val DB5 = "migration-test-5"
     const val DB6 = "migration-test-6"
+    const val DB7 = "migration-test-7"
   }
 }

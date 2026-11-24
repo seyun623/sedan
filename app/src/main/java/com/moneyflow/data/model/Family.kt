@@ -33,3 +33,18 @@ data class FamilyTransactionEntity(
   val memo: String,
   val isExcludedFromBudget: Boolean = false
 )
+
+/** A family member's saving goal, copied from their backup (for shared goals). */
+@Entity(
+  tableName = "family_goals",
+  foreignKeys = [ForeignKey(entity = FamilyMemberEntity::class, parentColumns = ["id"], childColumns = ["memberId"], onDelete = ForeignKey.CASCADE)],
+  indices = [Index(value = ["memberId"])]
+)
+data class FamilyGoalEntity(
+  @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val memberId: Long,
+  val title: String,
+  val targetAmount: Long,
+  val currentAmount: Long,
+  val targetDate: Long
+)

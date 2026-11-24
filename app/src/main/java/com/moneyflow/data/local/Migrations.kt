@@ -118,3 +118,15 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     db.execSQL("CREATE INDEX IF NOT EXISTS `index_family_transactions_timestamp` ON `family_transactions` (`timestamp`)")
   }
 }
+
+/** v6 -> v7: family members' saving goals (shared goals in the combined view). */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `family_goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `memberId` INTEGER NOT NULL, " +
+        "`title` TEXT NOT NULL, `targetAmount` INTEGER NOT NULL, `currentAmount` INTEGER NOT NULL, `targetDate` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`memberId`) REFERENCES `family_members`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_family_goals_memberId` ON `family_goals` (`memberId`)")
+  }
+}

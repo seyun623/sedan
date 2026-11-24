@@ -21,4 +21,8 @@ interface FamilyDao {
   @Query("SELECT COUNT(*) FROM family_transactions WHERE memberId = :memberId") suspend fun count(memberId: Long): Int
   @Query("DELETE FROM family_transactions WHERE memberId = :memberId") suspend fun clearTransactions(memberId: Long)
   @Insert suspend fun insertTransactions(items: List<FamilyTransactionEntity>)
+
+  @Query("SELECT * FROM family_goals") fun observeGoals(): Flow<List<com.moneyflow.data.model.FamilyGoalEntity>>
+  @Query("DELETE FROM family_goals WHERE memberId = :memberId") suspend fun clearGoals(memberId: Long)
+  @Insert suspend fun insertGoals(items: List<com.moneyflow.data.model.FamilyGoalEntity>)
 }

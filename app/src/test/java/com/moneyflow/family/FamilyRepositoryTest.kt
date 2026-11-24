@@ -82,6 +82,23 @@ class FamilyRepositoryTest {
     assertEquals(30_000, family.month(YearMonth.of(2026, 11)).first().totalExpense)
   }
 
+  @Test fun sameNamedGoalsAreCombined() = runBlocking {
+    fun goal(title: String, target: Long, current: Long) =
+      com.moneyflow.data.model.SavingGoalEntity(title = title, targetAmount = target, currentAmount = current, targetDate = clock.nowMillis())
+    LedgerRepository(mine, clock).addGoal(goal("가족 여행", 3_000_000, 500_000))
+    LedgerRepository(mine, clock).addGoal(goal("내 노트북", 2_000_000, 100_000))
+    LedgerRepository(spouse, clock).addGoal(goal("가족여행", 4_000_000, 700_000))
+    assertTrue(family.sharedGoals.first().isEmpty()) // nobody loaded yet
+    family.import(BackupRepository(spouse, spouseSettings, clock).createBackup(pw, "2.3.0"), pw, "아내")
+    val g = family.sharedGoals.first().single()
+    assertEquals("가족 여행", g.title)
+    assertEquals(4_000_000, g.target)
+    assertEquals(1_200_000, g.saved)
+    assertEquals(listOf("아내" to 700_000L, "나" to 500_000L), g.byPerson)
+    family.delete(family.members.first().single())
+    assertTrue(family.sharedGoals.first().isEmpty())
+  }
+
   @Test fun ownBackupIsRejected() = runBlocking {
     val own = BackupRepository(mine, mySettings, clock).createBackup(pw, "2.0.0")
     try { family.import(own, pw, "나"); fail() } catch (e: FamilyImportException) { assertTrue(e.message!!.contains("이 휴대폰")) }

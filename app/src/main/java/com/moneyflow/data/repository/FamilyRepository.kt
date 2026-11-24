@@ -42,6 +42,18 @@ data class FamilyMonth(
   val totalExpense: Long get() = people.sumOf { it.expense }
 }
 
+/** A goal several people save toward: same title on each phone ("가족 여행", "이사 자금"). */
+data class SharedGoal(
+  val title: String,
+  /** The largest target any of them set. */
+  val target: Long,
+  val byPerson: List<Pair<String, Long>>,
+  val targetDate: Long
+) {
+  val saved: Long get() = byPerson.sumOf { it.second }
+  val progress: Float get() = if (target > 0) (saved.toFloat() / target).coerceIn(0f, 1f) else 0f
+}
+
 /** Result of loading a family member's backup. */
 data class FamilyImportResult(val member: FamilyMemberEntity, val transactionCount: Int, val updated: Boolean)
 
@@ -78,6 +90,7 @@ class FamilyRepository @Inject constructor(
       val memberId = if (existing != null) {
         dao.updateMember(existing.id, name.trim().ifEmpty { existing.name }, content.summary.createdAt, now)
         dao.clearTransactions(existing.id)
+        dao.clearGoals(existing.id)
         existing.id
       } else {
         dao.insertMember(FamilyMemberEntity(name = name.trim().ifEmpty { "가족" }, deviceId = deviceId, backupCreatedAt = content.summary.createdAt, importedAt = now))
@@ -88,6 +101,11 @@ class FamilyRepository @Inject constructor(
           timestamp = it.timestamp, memo = it.memo, isExcludedFromBudget = it.isExcludedFromBudget
         )
       })
+      dao.insertGoals(content.goals.map {
+        com.moneyflow.data.model.FamilyGoalEntity(
+          memberId = memberId, title = it.title, targetAmount = it.targetAmount, currentAmount = it.currentAmount, targetDate = it.targetDate
+        )
+      })
       FamilyImportResult(
         FamilyMemberEntity(memberId, name.trim().ifEmpty { existing?.name ?: "가족" }, deviceId, content.summary.createdAt, now),
         items.size,
@@ -96,7 +114,32 @@ class FamilyRepository @Inject constructor(
     }
   }
 
+  /**
+   * Goals with the same name (spaces / case ignored) on this phone and at least one family
+   * member's phone, combined. Each person's saved amount comes from their own goal.
+   */
+  val sharedGoals: Flow<List<SharedGoal>> = combine(db.savingGoalDao().observeAll(), dao.observeGoals(), dao.observeMembers()) { mine, family, members ->
+    val names = members.associate { it.id to it.name }
+    data class Part(val key: String, val title: String, val person: String, val target: Long, val current: Long, val date: Long)
+    val parts = mine.map { Part(norm(it.title), it.title, "나", it.targetAmount, it.currentAmount, it.targetDate) } +
+      family.map { Part(norm(it.title), it.title, names[it.memberId] ?: "가족", it.targetAmount, it.currentAmount, it.targetDate) }
+    parts.groupBy { it.key }
+      .filterValues { list -> list.map { it.person }.distinct().size >= 2 }
+      .map { (_, list) ->
+        SharedGoal(
+          title = list.firstOrNull { it.person == "나" }?.title ?: list.first().title,
+          target = list.maxOf { it.target },
+          byPerson = list.groupBy { it.person }.map { (p, l) -> p to l.sumOf { it.current } }.sortedByDescending { it.second },
+          targetDate = list.maxOf { it.date }
+        )
+      }
+      .sortedBy { it.title }
+  }
+
+  private fun norm(s: String) = s.replace(" ", "").lowercase()
+
   suspend fun delete(member: FamilyMemberEntity) = db.withTransaction {
+    dao.clearGoals(member.id)
     dao.clearTransactions(member.id)
     dao.deleteMember(member.id)
   }

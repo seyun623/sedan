@@ -9,12 +9,12 @@ import java.io.File
 object DatabaseFactory {
 
   /** [passphrase] is an ASCII (hex) key; the same string is used for SQLCipher's KDF everywhere. */
-  fun create(context: Context, passphrase: String): AppDatabase {
+  fun create(context: Context, passphrase: String, name: String = AppDatabase.NAME): AppDatabase {
     System.loadLibrary("sqlcipher")
-    encryptPlaintextDatabaseIfNeeded(context, passphrase)
-    return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+    encryptPlaintextDatabaseIfNeeded(context, passphrase, name)
+    return Room.databaseBuilder(context, AppDatabase::class.java, name)
       .openHelperFactory(SupportOpenHelperFactory(passphrase.toByteArray(Charsets.UTF_8)))
-      .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+      .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
       // v1 only ever existed in early AI Studio previews; nothing to migrate from it.
       .fallbackToDestructiveMigrationFrom(true, 1)
       .build()
@@ -24,11 +24,11 @@ object DatabaseFactory {
    * Builds before encryption stored the database in plaintext. Converts such a file in place
    * (sqlcipher_export into a new encrypted file, then swap) so existing data is kept.
    */
-  private fun encryptPlaintextDatabaseIfNeeded(context: Context, passphrase: String) {
-    val dbFile = context.getDatabasePath(AppDatabase.NAME)
+  private fun encryptPlaintextDatabaseIfNeeded(context: Context, passphrase: String, name: String) {
+    val dbFile = context.getDatabasePath(name)
     if (!dbFile.exists() || !isPlaintextSqlite(dbFile)) return
 
-    val tmp = File(dbFile.parentFile, "${AppDatabase.NAME}.encrypting")
+    val tmp = File(dbFile.parentFile, "$name.encrypting")
     tmp.delete()
     val plain = SQLiteDatabase.openDatabase(dbFile.absolutePath, "", null, SQLiteDatabase.OPEN_READWRITE, null, null)
     try {
@@ -46,7 +46,7 @@ object DatabaseFactory {
     }
   }
 
-  private fun isPlaintextSqlite(file: File): Boolean = runCatching {
+  internal fun isPlaintextSqlite(file: File): Boolean = runCatching {
     file.inputStream().use { input ->
       val header = ByteArray(16)
       input.read(header) == 16 && String(header, Charsets.US_ASCII) == "SQLite format 3\u0000"

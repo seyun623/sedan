@@ -90,6 +90,8 @@ class FamilyViewModel @Inject constructor(
   val summary: StateFlow<FamilyMonth?> = _month.flatMapLatest { repo.month(it) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
   val members: StateFlow<List<FamilyMemberEntity>> = repo.members.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+  val sharedGoals: StateFlow<List<com.moneyflow.data.repository.SharedGoal>> =
+    repo.sharedGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
   private val _busy = MutableStateFlow(false)
   val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -132,6 +134,7 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
   val summary by viewModel.summary.collectAsStateWithLifecycle()
   val members by viewModel.members.collectAsStateWithLifecycle()
   val busy by viewModel.busy.collectAsStateWithLifecycle()
+  val sharedGoals by viewModel.sharedGoals.collectAsStateWithLifecycle()
   var pickedUri by rememberSaveable { mutableStateOf<String?>(null) }
   /** Name suggested when updating an existing member. */
   var suggestedName by rememberSaveable { mutableStateOf("") }
@@ -152,6 +155,16 @@ fun FamilyScreen(onBack: () -> Unit, viewModel: FamilyViewModel = hiltViewModel(
       modifier = Modifier.padding(horizontal = 8.dp)
     )
     summary?.let { s -> FamilySummary(s, onEditBudget = { editBudget = true }) }
+
+    if (members.isNotEmpty()) SettingsSection("함께 모으는 목표") {
+      if (sharedGoals.isEmpty()) {
+        Text(
+          "가족이 각자 예산·목표 탭에서 같은 이름의 저축 목표(예: 가족 여행)를 만들면, 여기서 함께 모은 금액을 보여 드려요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(16.dp)
+        )
+      }
+      sharedGoals.forEach { g -> SharedGoalRow(g) }
+    }
 
     SettingsSection("가족 기록") {
       members.forEach { m ->
@@ -328,4 +341,21 @@ private fun FamilyImportDialog(initialName: String, onDismiss: () -> Unit, onSub
     confirmButton = { TextButton(enabled = name.isNotBlank() && pw.length >= 4, onClick = { onSubmit(pw, name) }) { Text("불러오기", fontWeight = FontWeight.Bold) } },
     dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
   )
+}
+
+@Composable
+private fun SharedGoalRow(g: com.moneyflow.data.repository.SharedGoal) {
+  Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("shared_goal")) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(g.title, fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text("${(g.progress * 100).toInt()}%", fontWeight = FontWeight.Bold, color = TossBlue)
+    }
+    LinearProgressIndicator(progress = { g.progress }, color = TossBlue, trackColor = Gray200, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+    Text(
+      "${Formatters.formatCurrency(g.saved)} / ${Formatters.formatCurrency(g.target)}" +
+        if (g.saved < g.target) " · ${Formatters.formatCurrency(g.target - g.saved)} 남음" else " · 달성!",
+      style = MaterialTheme.typography.bodySmall, color = Gray900
+    )
+    Text(g.byPerson.joinToString(" · ") { (p, a) -> "$p ${Formatters.formatCurrency(a)}" }, style = MaterialTheme.typography.labelSmall, color = Gray600)
+  }
 }
