@@ -151,7 +151,8 @@ fun MoneyFlowNavHost(
       composable(Routes.LEDGER) {
         LedgerScreen(onAddTransaction = { openTransaction(null) }, onOpenTransaction = { openTransaction(it) })
       }
-      composable(Routes.ANALYTICS) { AnalyticsScreen(onOpenTransaction = { openTransaction(it) }) }
+      composable(Routes.ANALYTICS) { AnalyticsScreen(onOpenTransaction = { openTransaction(it) }, onOpenYearly = { navController.navigate(Routes.YEARLY) }) }
+      composable(Routes.YEARLY) { com.moneyflow.ui.analytics.YearlyReportScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.BUDGET) { BudgetScreen(onOpenTransaction = { openTransaction(it) }) }
       composable(
         Routes.TRANSACTION,

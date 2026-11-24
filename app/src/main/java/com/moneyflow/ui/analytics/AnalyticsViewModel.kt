@@ -45,6 +45,8 @@ data class AnalyticsUiState(
   val monthTransactions: List<TransactionEntity> = emptyList(),
   /** #tag totals of the month. */
   val tags: List<com.moneyflow.util.TagSpend> = emptyList(),
+  /** Month-end net worth for up to 12 months ending this month, oldest first. */
+  val netWorth: List<com.moneyflow.domain.report.NetWorthPoint> = emptyList(),
   val isLoading: Boolean = true
 )
 
@@ -57,7 +59,7 @@ class AnalyticsViewModel @Inject constructor(
   private val clock: AppClock
 ) : ViewModel() {
 
-  val uiState: StateFlow<AnalyticsUiState> = combine(ledger.transactions, monthStore.month) { all, month ->
+  val uiState: StateFlow<AnalyticsUiState> = combine(ledger.transactions, ledger.accounts, monthStore.month) { all, accounts, month ->
     val monthTxs = stats.inMonth(all, month)
     val expense = stats.totalExpense(monthTxs)
     val elapsed = stats.elapsedDays(month, clock.today())
@@ -78,6 +80,7 @@ class AnalyticsViewModel @Inject constructor(
       topExpenses = monthTxs.filter { it.type == TransactionType.EXPENSE }.sortedByDescending { it.amount },
       monthTransactions = monthTxs,
       tags = com.moneyflow.util.Tags.summarize(monthTxs),
+      netWorth = com.moneyflow.domain.report.NetWorthHistory.monthly(accounts, all, clock.currentMonth(), 12, clock.zone),
       isLoading = false
     )
   }.flowOn(Dispatchers.Default)

@@ -75,6 +75,7 @@ import kotlin.math.abs
 @Composable
 fun AnalyticsScreen(
   onOpenTransaction: (Long) -> Unit,
+  onOpenYearly: () -> Unit = {},
   viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -83,7 +84,8 @@ fun AnalyticsScreen(
     onPrevMonth = viewModel::previousMonth,
     onNextMonth = viewModel::nextMonth,
     onCurrentMonth = viewModel::goToCurrentMonth,
-    onOpenTransaction = onOpenTransaction
+    onOpenTransaction = onOpenTransaction,
+    onOpenYearly = onOpenYearly
   )
 }
 
@@ -93,7 +95,8 @@ private fun AnalyticsContent(
   onPrevMonth: () -> Unit,
   onNextMonth: () -> Unit,
   onCurrentMonth: () -> Unit,
-  onOpenTransaction: (Long) -> Unit
+  onOpenTransaction: (Long) -> Unit,
+  onOpenYearly: () -> Unit = {}
 ) {
   val monthKey = state.month.toString()
   var selectedCategory by rememberSaveable(monthKey) { mutableStateOf<String?>(null) }
@@ -285,6 +288,63 @@ private fun AnalyticsContent(
           )
         }
       }
+    }
+
+    if (state.netWorth.isNotEmpty()) {
+      item(key = "net_worth") { NetWorthCard(state.netWorth) }
+    }
+    item(key = "yearly") {
+      SectionCard(modifier = Modifier.clickable(onClick = onOpenYearly).testTag("open_yearly_report")) {
+        SectionTitle("${state.month.year}년 결산 보기 →", "1년 동안 번 돈·쓴 돈, 가장 많이 쓴 곳을 한눈에 보고 이미지로 공유해요")
+      }
+    }
+  }
+}
+
+@Composable
+private fun NetWorthCard(points: List<com.moneyflow.domain.report.NetWorthPoint>) {
+  val last = points.last()
+  val prev = points.getOrNull(points.size - 2)
+  SectionCard(modifier = Modifier.testTag("net_worth_card")) {
+    SectionTitle("순자산 추이", "자산에서 부채(카드 대금·대출)를 뺀 금액이에요. 지난달까지는 기록으로 거꾸로 계산한 추정치예요")
+    Text(
+      Formatters.formatCurrency(last.netWorth),
+      style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Gray900,
+      modifier = Modifier.padding(top = 8.dp)
+    )
+    prev?.let { p ->
+      val diff = last.netWorth - p.netWorth
+      Text(
+        (if (diff >= 0) "지난달보다 +" else "지난달보다 -") + Formatters.formatCurrency(kotlin.math.abs(diff)),
+        style = MaterialTheme.typography.bodySmall, color = if (diff >= 0) AccentGreen else AccentRed
+      )
+    }
+    if (points.size >= 2) {
+      val line = TossBlue
+      val grid = Gray200
+      val min = points.minOf { it.netWorth }
+      val max = points.maxOf { it.netWorth }
+      val span = (max - min).coerceAtLeast(1)
+      androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(120.dp).padding(top = 12.dp)) {
+        val stepX = size.width / (points.size - 1)
+        fun y(v: Long) = size.height - (v - min).toFloat() / span * size.height
+        drawLine(grid, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 2f)
+        val path = androidx.compose.ui.graphics.Path()
+        points.forEachIndexed { i, p ->
+          val x = i * stepX
+          if (i == 0) path.moveTo(x, y(p.netWorth)) else path.lineTo(x, y(p.netWorth))
+        }
+        drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f))
+        points.forEachIndexed { i, p -> drawCircle(line, radius = 7f, center = androidx.compose.ui.geometry.Offset(i * stepX, y(p.netWorth))) }
+      }
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("${points.first().month.monthValue}월", style = MaterialTheme.typography.labelSmall, color = Gray600)
+        Text("${last.month.monthValue}월", style = MaterialTheme.typography.labelSmall, color = Gray600)
+      }
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text("자산 ${Formatters.formatCurrency(last.assets)}", style = MaterialTheme.typography.bodySmall, color = Gray600)
+      Text("부채 ${Formatters.formatCurrency(last.debts)}", style = MaterialTheme.typography.bodySmall, color = Gray600)
     }
   }
 }

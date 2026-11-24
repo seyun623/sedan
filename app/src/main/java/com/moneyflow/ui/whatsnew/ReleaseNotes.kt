@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.7.0", "2026.11",
+      listOf(
+        "분석 탭 → 순자산 추이: 최근 12개월 월말 순자산(자산 - 카드 대금·대출)을 그래프로 보여 줘요",
+        "분석 탭 → 연간 결산: 1년 동안 번 돈·쓴 돈, 월별 지출, 많이 쓴 카테고리와 자주 간 곳을 보고 이미지로 공유해요"
+      )
+    ),
+    ReleaseNote(
       "2.6.0", "2026.11",
       listOf(
         "결제일 미리 알림: 카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 줘요 (계좌 수정에서 결제일 입력, 설정 → 알림에서 끄기)",
