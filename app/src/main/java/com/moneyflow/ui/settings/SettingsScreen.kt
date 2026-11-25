@@ -115,13 +115,19 @@ fun SettingsScreen(
     }
 
     if (com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE) SettingsSection("결제 알림 자동 등록") {
+      // Saved switches alone can say "사용 중" while Android has taken the access away: check it too.
+      val access = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
       val on = listOfNotNull(
-        "알림".takeIf { settings.notificationCaptureEnabled },
+        "알림".takeIf { settings.notificationCaptureEnabled && access },
         "문자".takeIf { settings.smsCaptureEnabled }
       )
       SettingsItem(
         title = "카드·은행 알림으로 자동 기록",
-        subtitle = if (on.isEmpty()) "꺼져 있어요" else "${on.joinToString(", ")} 자동 등록 사용 중",
+        subtitle = when {
+          settings.notificationCaptureEnabled && !access -> "⚠ 알림 접근 권한이 꺼져 있어요. 눌러서 점검해 주세요"
+          on.isEmpty() -> "꺼져 있어요"
+          else -> "${on.joinToString(", ")} 자동 등록 사용 중"
+        },
         icon = Icons.Filled.NotificationsActive,
         onClick = onOpenAutoCapture,
         modifier = Modifier.testTag("settings_auto_capture")

@@ -125,6 +125,11 @@ class ScreenshotTest {
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
+  private fun diagVm() = com.moneyflow.ui.settings.CaptureDiagnosticsViewModel(
+    androidx.test.core.app.ApplicationProvider.getApplicationContext(),
+    AutoCaptureProcessor(db, ledger, settings, clock, object : com.moneyflow.domain.capture.CaptureNotifier { override fun foreignPayment(prompt: com.moneyflow.domain.capture.ForeignPaymentPrompt) {} }),
+    com.moneyflow.domain.capture.CaptureLog(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+  )
   private fun settingsVm() = SettingsViewModel(settings, ledger, AppLockManager(settings, clock), AutoCaptureProcessor(db, ledger, settings, clock, object : com.moneyflow.domain.capture.CaptureNotifier { override fun foreignPayment(prompt: com.moneyflow.domain.capture.ForeignPaymentPrompt) {} }), seeder, bus)
   @Test fun settingsLight() { val vm = settingsVm(); shot("06_settings", false) { SettingsScreen({}, {}, {}, viewModel = vm) } }
   @Test fun settingsDark() { val vm = settingsVm(); shot("06_settings", true) { SettingsScreen({}, {}, {}, viewModel = vm) } }
@@ -133,8 +138,8 @@ class ScreenshotTest {
   @Test fun lockLight() = shot("07_lock", false) { LockScreen(lockSettings, { _, _ -> }, {}) }
   @Test fun securityLight() { val vm = settingsVm(); shot("08_security", false) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = vm) } }
   @Test fun securityDark() { val vm = settingsVm(); shot("08_security", true) { com.moneyflow.ui.settings.SecuritySettingsScreen({}, viewModel = vm) } }
-  @Test fun captureLight() { val vm = settingsVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
-  @Test fun captureDark() { val vm = settingsVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm) } }
+  @Test fun captureLight() { val vm = settingsVm(); val diag = diagVm(); shot("09_autocapture", false) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm, diagnostics = diag) } }
+  @Test fun captureDark() { val vm = settingsVm(); val diag = diagVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm, diagnostics = diag) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
     SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, com.moneyflow.data.repository.CardRepository(db, clock),
     com.moneyflow.domain.card.BenefitReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), bus)

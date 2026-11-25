@@ -218,4 +218,34 @@ class AutoCaptureProcessorTest {
     assertEquals(39_000, t.amount)
     assertEquals(-39_000, db.accountDao().getById(cardId)!!.balance)
   }
+
+  // ---- 2.13: KakaoTalk 알림톡 and the text-message app ----
+
+  @Test fun kakaoCardChannelIsRecordedButFriendsAreNot() = runBlocking {
+    val alimtalk = "[신한카드 승인 안내]\n홍*동님, 신한카드(1234) 승인 내역입니다.\n▶승인금액 : 12,500원(일시불)\n▶승인일시 : 11/21 14:32\n▶가맹점명 : 스타벅스 강남R점"
+    val out = processor.process(CaptureChannel.NOTIFICATION, "com.kakao.talk", "카카오톡", "신한카드", alimtalk, clock.nowMillis())
+    assertTrue(out.toString(), out is CaptureOutcome.Recorded)
+    assertEquals("스타벅스 강남R점", txs().single().memo)
+    // The same text sent by a friend, or a channel of another company, is not recorded.
+    assertTrue(processor.process(CaptureChannel.NOTIFICATION, "com.kakao.talk", "카카오톡", "엄마", alimtalk, clock.nowMillis()) is CaptureOutcome.Skipped)
+    assertTrue(processor.process(CaptureChannel.NOTIFICATION, "com.kakao.talk", "카카오톡", "삼성카드", alimtalk, clock.nowMillis()) is CaptureOutcome.Skipped)
+    assertEquals(1, txs().size)
+  }
+
+  @Test fun textMessageAppNotificationIsReadLikeSms() = runBlocking {
+    // Long "[Web발신]" alerts (MMS) never reach the SMS receiver; the messages app's notification is read.
+    val out = processor.process(CaptureChannel.NOTIFICATION, "com.samsung.android.messaging", "메시지", "15447200", approval, clock.nowMillis())
+    assertTrue(out is CaptureOutcome.Recorded)
+    // The same message arriving by SMS too is not recorded twice.
+    processor.process(CaptureChannel.SMS, "15447200", null, "", approval, clock.nowMillis() + 30_000)
+    assertEquals(1, txs().size)
+    // A personal text through the same app is not a payment.
+    assertTrue(processor.process(CaptureChannel.NOTIFICATION, "com.samsung.android.messaging", "메시지", "엄마", "저녁 먹었어?", clock.nowMillis()) is CaptureOutcome.Skipped)
+  }
+
+  @Test fun testRunChecksEverythingButSavesNothing() = runBlocking {
+    val out = processor.process(CaptureChannel.TEST, "test", "시험", "", approval, clock.nowMillis())
+    assertTrue(out is CaptureOutcome.WouldRecord)
+    assertTrue(txs().isEmpty())
+  }
 }

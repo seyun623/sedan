@@ -89,9 +89,16 @@ private fun isSmsPermissionGranted(context: Context): Boolean =
 @Composable
 fun AutoCaptureSettingsScreen(
   onBack: () -> Unit,
-  viewModel: SettingsViewModel = hiltViewModel()
+  viewModel: SettingsViewModel = hiltViewModel(),
+  diagnostics: CaptureDiagnosticsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val logEntries by diagnostics.entries.collectAsStateWithLifecycle()
+  var listenerConnected by remember { mutableStateOf(false) }
+  var batteryOk by remember { mutableStateOf(true) }
+  var restrictedHelp by rememberSaveable { mutableStateOf(false) }
+  var testNote by rememberSaveable { mutableStateOf<String?>(null) }
+  var realResult by remember { mutableStateOf<String?>(null) }
   val settings = state.settings
   val context = LocalContext.current
 
@@ -101,8 +108,14 @@ fun AutoCaptureSettingsScreen(
 
   // Re-check permissions whenever the user comes back from system settings.
   LifecycleResumeEffect(Unit) {
+    val before = notificationAccess
     notificationAccess = isNotificationAccessGranted(context)
     smsGranted = isSmsPermissionGranted(context)
+    batteryOk = isIgnoringBatteryOptimizations(context)
+    // Access was just granted: turn capture on too (it used to stay off and nothing was recorded).
+    if (!before && notificationAccess) viewModel.setNotificationCapture(true)
+    if (notificationAccess) com.moneyflow.service.FinanceNotificationListenerService.rebind(context)
+    listenerConnected = com.moneyflow.service.FinanceNotificationListenerService.isConnected(context)
     onPauseOrDispose { }
   }
 
@@ -121,7 +134,7 @@ fun AutoCaptureSettingsScreen(
       Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardSurface).padding(12.dp)
     ) {
       Text(
-        "카드·은행·간편결제 앱의 결제 알림이나 문자를 읽어 지출과 수입을 자동으로 기록해요. " +
+        "카드·은행·간편결제 앱 알림, 카카오톡 알림톡(카드사·은행 채널), 문자를 읽어 지출과 수입을 자동으로 기록해요. 친구와의 대화는 읽지 않아요. " +
           "금액, 가맹점, 시간을 분석하고 카테고리도 자동으로 분류해요.",
         style = MaterialTheme.typography.bodyMedium,
         color = Gray700,
@@ -138,6 +151,68 @@ fun AutoCaptureSettingsScreen(
           fontWeight = FontWeight.SemiBold
         )
       }
+    }
+
+    SettingsSection("점검 (하나라도 ⚠면 기록되지 않을 수 있어요)") {
+      CheckRow(
+        ok = notificationAccess,
+        title = "알림 접근 허용",
+        detail = if (notificationAccess) null else "카드사 앱·카카오톡 알림톡·문자 앱 알림을 읽으려면 필요해요",
+        action = if (notificationAccess) null else "허용하기",
+        onAction = {
+          try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+        }
+      )
+      if (!notificationAccess && android.os.Build.VERSION.SDK_INT >= 33) {
+        CheckRow(ok = false, title = "켜지지 않나요? '제한된 설정'", detail = "파일로 설치한 앱은 한 번 풀어 줘야 해요", action = "방법 보기", onAction = { restrictedHelp = true })
+      }
+      CheckRow(
+        ok = settings.notificationCaptureEnabled && notificationAccess,
+        title = "알림 자동 등록 켜짐",
+        action = if (settings.notificationCaptureEnabled || !notificationAccess) null else "켜기",
+        onAction = { viewModel.setNotificationCapture(true) }
+      )
+      if (notificationAccess) {
+        CheckRow(
+          ok = listenerConnected,
+          title = "알림 읽기 연결됨",
+          detail = if (listenerConnected) null else "휴대폰이 알림 읽기를 멈췄어요. '다시 연결'을 누르거나 알림 접근을 껐다 켜 주세요",
+          action = if (listenerConnected) null else "다시 연결",
+          onAction = {
+            com.moneyflow.service.FinanceNotificationListenerService.rebind(context)
+            listenerConnected = com.moneyflow.service.FinanceNotificationListenerService.isConnected(context)
+          }
+        )
+      }
+      CheckRow(
+        ok = batteryOk,
+        title = "배터리 사용 '제한 없음'",
+        detail = if (batteryOk) null else "절전 때문에 알림을 늦게 받거나 놓칠 수 있어요",
+        action = if (batteryOk) null else "설정",
+        onAction = { openBatterySettings(context) }
+      )
+      CheckRow(
+        ok = state.accounts.isNotEmpty() && settings.autoCaptureDefaultAccountId != null,
+        title = "기본 등록 계좌",
+        detail = when {
+          state.accounts.isEmpty() -> "계좌가 없으면 기록할 곳이 없어요. 홈에서 통장·카드를 먼저 추가해 주세요"
+          settings.autoCaptureDefaultAccountId == null -> "카드사 이름과 맞는 계좌가 없으면 건너뛰어요. 아래에서 하나 골라 주세요"
+          else -> null
+        }
+      )
+    }
+
+    SettingsSection("최근 받은 결제 알림") {
+      CaptureLogList(logEntries, onClear = diagnostics::clear)
+      OutlinedButton(
+        onClick = {
+          testNote = if (!notificationAccess) "먼저 알림 접근을 허용해 주세요."
+          else if (diagnostics.sendTestNotification()) "시험 알림을 보냈어요. 몇 초 뒤 위 목록에 '시험 성공'이 보이면 정상이에요. (아무것도 기록되지 않아요)"
+          else "알림을 보낼 수 없어요. 휴대폰 설정에서 머니플로우 알림을 켜 주세요."
+        },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("capture_send_test")
+      ) { Text("시험 알림 보내기") }
+      testNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
     }
 
     SettingsSection("알림") {
@@ -171,8 +246,8 @@ fun AutoCaptureSettingsScreen(
       SettingsSwitchItem(
         title = "문자(SMS) 자동 등록",
         subtitle = when {
-          smsDenied && !smsGranted -> "문자 수신 권한이 거부되었어요. 앱 설정에서 허용해 주세요."
-          else -> "카드사·은행 문자로 받은 결제 내역을 기록해요"
+          smsDenied && !smsGranted -> "문자 수신 권한이 거부되었어요. 아래 '앱 정보 열기'에서 권한 → SMS를 허용해 주세요."
+          else -> "짧은 문자도 바로 받아요 (선택). 장문 카드 문자는 위 '알림 자동 등록'으로 읽어요"
         },
         icon = Icons.Filled.Sms,
         checked = settings.smsCaptureEnabled && smsGranted,
@@ -185,6 +260,9 @@ fun AutoCaptureSettingsScreen(
         },
         modifier = Modifier.testTag("sms_capture_switch")
       )
+      if (smsDenied && !smsGranted) {
+        OutlinedButton(onClick = { openAppDetails(context) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { Text("앱 정보 열기") }
+      }
     }
 
     SettingsSection("기본 등록 계좌") {
@@ -249,7 +327,11 @@ fun AutoCaptureSettingsScreen(
         )
         Spacer(Modifier.height(8.dp))
         Button(
-          onClick = { result = viewModel.previewParse(sampleText) },
+          onClick = {
+            result = viewModel.previewParse(sampleText)
+            realResult = null
+            diagnostics.tryText(sampleText) { realResult = com.moneyflow.domain.capture.CaptureLog.describe(it).second }
+          },
           enabled = sampleText.isNotBlank(),
           modifier = Modifier.fillMaxWidth().height(48.dp).testTag("parser_test_button"),
           shape = RoundedCornerShape(12.dp),
@@ -259,9 +341,16 @@ fun AutoCaptureSettingsScreen(
           Spacer(Modifier.height(12.dp))
           ParseResultView(it)
         }
+        realResult?.let {
+          Text("실제로 받으면: $it", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = Gray900,
+            modifier = Modifier.padding(top = 8.dp).testTag("parser_test_real"))
+        }
       }
     }
     Spacer(Modifier.height(24.dp))
+  }
+  if (restrictedHelp) {
+    RestrictedSettingsHelp(onDismiss = { restrictedHelp = false }, onOpenAppInfo = { restrictedHelp = false; openAppDetails(context) })
   }
 }
 

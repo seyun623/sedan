@@ -49,6 +49,10 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     RecurringWorker.schedule(this)
     com.moneyflow.work.CardAlertWorker.schedule(this)
     ReminderWorker.schedule(this)
+    // After an app update Samsung may leave the notification reader unbound: ask to reconnect.
+    if (BuildConfig.AUTO_CAPTURE_AVAILABLE &&
+      androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+    ) com.moneyflow.service.FinanceNotificationListenerService.rebind(this)
     AutoBackupWorker.schedule(this)
     com.moneyflow.work.FamilySyncWorker.schedule(this)
 

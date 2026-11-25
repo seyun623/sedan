@@ -165,4 +165,35 @@ class PaymentMessageParserTest {
     assertEquals(TransactionType.EXPENSE, p.type)
     assertEquals("홍길동", p.merchant)
   }
+
+  // ---- 2.13: real-world layouts (KakaoTalk 알림톡, short card tags, labelled lines) ----
+
+  private data class Exp(val title: String, val body: String, val amount: Long, val merchant: String, val type: TransactionType, val provider: String? = null)
+
+  @Test fun realWorldAlerts() = listOf(
+    Exp("신한카드", "[신한카드 승인 안내]\n홍*동님, 신한카드(1234) 승인 내역입니다.\n\n▶승인금액 : 12,500원(일시불)\n▶승인일시 : 11/25 14:32\n▶가맹점명 : 스타벅스 강남R점\n▶누적금액 : 1,234,560원", 12_500, "스타벅스 강남R점", TransactionType.EXPENSE, "신한카드"),
+    Exp("KB국민카드", "KB국민카드 승인\n홍*동님\n카드 : KB국민카드(1*2*)\n승인금액 : 48,300원\n승인일시 : 11/25 19:05\n가맹점명 : 이마트 성수점\n할부 : 일시불\n누적금액 : 1,234,560원\n\n자세히 보기", 48_300, "이마트 성수점", TransactionType.EXPENSE, "KB국민카드"),
+    Exp("현대카드", "홍*동 님, 현대카드 M(1234) 승인\n누적 이용금액: 1,234,560원\n금액: 33,000원 일시불\n일시: 11/25 12:10\n가맹점: 쿠팡\n결제 예정일: 12/14", 33_000, "쿠팡", TransactionType.EXPENSE, "현대카드"),
+    Exp("", "[Web발신]\n삼성1337승인 홍*동\n7,500원 일시불\n11/25 12:34 스타벅스\n누적123,456원", 7_500, "스타벅스", TransactionType.EXPENSE, "삼성카드"),
+    Exp("", "[Web발신]\n우리(9*0*)승인\n홍*동님\n8,900원 일시불\n11/25 13:10\n올리브영 강남\n누적1,234,560원", 8_900, "올리브영 강남", TransactionType.EXPENSE, "우리카드"),
+    Exp("", "[Web발신]\nNH카드3*4*승인\n홍*동\n6,000원 일시불\n11/25 08:45\n메가MGC커피\n총누적1,234,560원", 6_000, "메가MGC커피", TransactionType.EXPENSE, "NH농협카드"),
+    Exp("우리카드", "우리카드 승인\n승인금액 : 8,900\n가맹점 : 올리브영 강남\n이용일시 : 11/25 13:10", 8_900, "올리브영 강남", TransactionType.EXPENSE, "우리카드"),
+    Exp("", "[Web발신]\n신한 11/25 09:01\n입출금(1234)\n입금 3,500,000\n잔액 4,200,000\n (주)머니플로우", 3_500_000, "(주)머니플로우", TransactionType.INCOME),
+    Exp("토스", "GS25 역삼점에서 3,200원 결제했어요", 3_200, "GS25 역삼점", TransactionType.EXPENSE),
+    Exp("KB국민카드", "KB국민카드1*2*승인\n홍*동님\n48,300원 일시불\n11/25 19:05\n이마트 성수점\n누적1,234,560원\n※이용대금명세서는 KB Pay에서 확인", 48_300, "이마트 성수점", TransactionType.EXPENSE)
+  ).forEach { e ->
+    val p = ok(e.body, title = e.title)
+    assertEquals(e.body, e.amount, p.amount)
+    assertEquals(e.body, e.merchant, p.merchant)
+    assertEquals(e.body, e.type, p.type)
+    e.provider?.let { assertEquals(e.body, it, p.provider) }
+  }
+
+  @Test fun bareCancelAndDeposits() {
+    assertEquals(com.moneyflow.domain.capture.PaymentKind.CANCELLATION, ok("[Web발신]\n삼성1337취소 홍*동\n7,500원\n11/25 12:50 스타벅스").kind)
+    assertEquals(TransactionType.INCOME, ok("홍길동님이 내 입출금통장(1234)에 50,000원을 입금했어요", title = "카카오뱅크").type)
+    // Smishing with a short link is still refused, a card company's own site is fine.
+    assertTrue(parser.parse("", "[국외발신] 해외결제 승인 980,000원 홍*동 확인 bit.ly/abc", received) is ParseResult.Ignored)
+    assertEquals(12_000L, ok("신한카드(1234)승인 홍*동 12,000원 11/25 10:00 스타벅스 https://www.shinhancard.com").amount)
+  }
 }

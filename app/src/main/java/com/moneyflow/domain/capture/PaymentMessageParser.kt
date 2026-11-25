@@ -47,25 +47,42 @@ sealed interface ParseResult {
 class PaymentMessageParser(private val zone: ZoneId) {
 
   fun parse(title: String, body: String, receivedAt: Long): ParseResult {
-    val text = normalize("$title $body")
+    val whole = normalize("$title $body")
+    if (whole.isBlank()) return ParseResult.Ignored("빈 메시지")
+    if (AD.containsMatchIn(whole)) return ParseResult.Ignored("광고 메시지")
+    // Links: shorteners and unknown sites are smishing; card companies' own sites are fine.
+    if (SHORT_LINK.containsMatchIn(whole) || WEB_LINK.findAll(whole).any { m -> OFFICIAL_DOMAINS.none { m.value.contains(it, true) } }) {
+      return ParseResult.Ignored("링크가 있는 메시지")
+    }
+    // Lines that are only footers (명세서 안내, 결제 예정일, 고객센터, 자세히 보기, links) are not
+    // part of the payment: they must not decide whether the message is a payment.
+    val lines = "$title\n$body".replace("[Web발신]", " ").replace("[국외발신]", " ")
+      .lines().map { it.replace(WEB_LINK, " ").trim() }.filter { it.isNotEmpty() && !FOOTER.containsMatchIn(it) }
+    val text = normalize(lines.joinToString("\n"))
     if (text.isBlank()) return ParseResult.Ignored("빈 메시지")
-    // Links: card companies don't send purchase alerts with links; smishing texts do.
-    if (LINK.containsMatchIn(text)) return ParseResult.Ignored("링크가 있는 메시지")
     if (REJECTED.containsMatchIn(text)) return ParseResult.Ignored("거절·실패 알림")
     if (NOTICE.containsMatchIn(text)) return ParseResult.Ignored("광고·안내 메시지")
 
-    val provider = detectProvider(text)
-    val paidAt = extractDateTime(text, receivedAt)
-    val cardLast4 = CARD_LAST4.find(text)?.groupValues?.get(1)
+    // 알림톡 style "승인금액 : 12,500원 / 가맹점명 : 스타벅스" lines.
+    val labels = labelValues(lines)
+    // Short card tags in SMS: "삼성1337승인", "우리(9*0*)승인", "NH카드3*4*승인", "신한체크승인".
+    val tag = CARD_TAG.find(text)
+    val tagProvider = tag?.let { CARD_TAG_NAMES[it.groupValues[1].uppercase()] }
+    val provider = normalize(title).takeIf { it.isNotBlank() }?.let { detectProvider(it) }
+      ?: tagProvider ?: detectProvider(text)
+    val paidAt = labels[Label.TIME]?.let { extractDateTime(it.replace(Regex("^(\\d{1,2})[/.\\-](\\d{1,2})\\s+"), "$1/$2 "), receivedAt) }
+      ?: extractDateTime(text, receivedAt)
+    val cardLast4 = CARD_LAST4.find(text)?.groupValues?.get(1) ?: tag?.groupValues?.get(3)?.takeIf { it.isNotEmpty() }
     val installment = INSTALLMENT.find(text)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 1 }
 
-    val isCancel = CANCEL.containsMatchIn(text)
-    val action = ACTION.find(text) ?: return ParseResult.Ignored("결제/입출금 문구가 없음")
+    val isCancel = CANCEL.containsMatchIn(text) || BARE_CANCEL.containsMatchIn(text)
+    val action = ACTION.find(text) ?: BARE_CANCEL.find(text) ?: return ParseResult.Ignored("결제/입출금 문구가 없음")
 
     // Foreign currency purchases ("해외승인 USD 12.50") have no KRW amount yet.
+    val forAmount = text.replace(CUMULATIVE, " ")
     FOREIGN.find(text)?.let { m ->
-      if (amountCandidates(text).isEmpty()) {
-        val merchant = extractMerchant(text, provider, isIncome = false)
+      if (labels[Label.AMOUNT]?.let { parseLabelAmount(it) } == null && amountCandidates(forAmount).isEmpty()) {
+        val merchant = labels[Label.MERCHANT]?.let(::cleanMerchant) ?: extractMerchant(stripTag(text, tag), provider, isIncome = false)
         return ParseResult.Success(
           ParsedPayment(
             kind = PaymentKind.FOREIGN_CURRENCY,
@@ -83,7 +100,8 @@ class PaymentMessageParser(private val zone: ZoneId) {
       }
     }
 
-    val amount = pickAmount(text, action.range.first) ?: return ParseResult.Ignored("금액을 찾을 수 없음")
+    val amount = labels[Label.AMOUNT]?.let { parseLabelAmount(it) }
+      ?: pickAmount(forAmount, action.range.first.coerceAtMost(forAmount.length)) ?: return ParseResult.Ignored("금액을 찾을 수 없음")
     if (amount <= 0) return ParseResult.Ignored("금액이 0원")
 
     val billCard = PROVIDERS.filter { it.second.endsWith("카드") }
@@ -101,7 +119,9 @@ class PaymentMessageParser(private val zone: ZoneId) {
       isIncome -> TransactionType.INCOME
       else -> TransactionType.EXPENSE
     }
-    val merchant = extractMerchant(text, provider, isIncome)
+    val merchant = labels[Label.MERCHANT]?.let(::cleanMerchant)?.takeIf { it.length >= 2 }
+      ?: payAppMerchant(lines)
+      ?: extractMerchant(stripTag(text, tag), provider, isIncome)
     val category = when (type) {
       TransactionType.TRANSFER -> FinanceCategories.CARD_PAYMENT
       TransactionType.INCOME -> classifyIncome(text)
@@ -122,6 +142,47 @@ class PaymentMessageParser(private val zone: ZoneId) {
       )
     )
   }
+
+  // ---- Labelled lines ("가맹점명 : 스타벅스") -------------------------------------------------
+
+  private enum class Label { AMOUNT, MERCHANT, TIME }
+
+  private fun labelValues(lines: List<String>): Map<Label, String> {
+    val out = HashMap<Label, String>()
+    for (line in lines) {
+      val m = LABEL_LINE.find(line) ?: continue
+      val key = m.groupValues[1].replace(" ", "")
+      val value = m.groupValues[2].trim()
+      if (value.isEmpty()) continue
+      val label = when {
+        key.endsWith("금액") || key == "금액" -> Label.AMOUNT
+        key.endsWith("일시") || key == "일시" -> Label.TIME
+        else -> Label.MERCHANT
+      }
+      out.putIfAbsent(label, value)
+    }
+    return out
+  }
+
+  private fun parseLabelAmount(value: String): Long? =
+    Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)").find(value)?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull()?.takeIf { it > 0 }
+
+  private fun cleanMerchant(value: String): String =
+    value.replace(Regex("\\(?(일시불|[0-9]{1,2}\\s*개월|할부)\\)?"), " ").replace(Regex("\\s+"), " ").trim().take(30)
+
+  /** "GS25 역삼점에서 3,200원 결제했어요" / "토스페이로 15,000원 결제했어요\n무신사" (pay apps). */
+  private fun payAppMerchant(lines: List<String>): String? {
+    for ((i, line) in lines.withIndex()) {
+      PAY_LINE.find(line)?.let { return it.groupValues[1].trim() }
+      if (PAY_BY_WALLET.containsMatchIn(line)) {
+        lines.getOrNull(i + 1)?.takeIf { it.any(Char::isLetter) && LABEL_LINE.find(it) == null && !it.contains("원") }
+          ?.let { return it.substringBefore("|").trim().take(30) }
+      }
+    }
+    return null
+  }
+
+  private fun stripTag(text: String, tag: MatchResult?): String = if (tag == null) text else text.replace(tag.value.trim(), " ")
 
   // ---- Normalization ---------------------------------------------------------------------
 
@@ -225,7 +286,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
       val tokens = scope.split(Regex("[\\s()\\[\\]/·,]+")).filter { it.isNotBlank() }
       for ((category, keywords) in CATEGORY_KEYWORDS) {
         val hit = keywords.any { kw ->
-          if (kw.length <= 2) tokens.any { it.equals(kw, ignoreCase = true) }
+          if (kw.length <= 2) tokens.any { it.equals(kw, ignoreCase = true) || (kw.any { c -> c in '가'..'힣' } && it.startsWith(kw)) }
           else scope.contains(kw, ignoreCase = true)
         }
         if (hit) return category
@@ -245,16 +306,40 @@ class PaymentMessageParser(private val zone: ZoneId) {
     /** "12,000원" / "12,000 원" — but not "123 원할머니보쌈" (a number, then a name starting with 원). */
     private val WON_AMOUNT = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:원|\\s원(?![가-힣A-Za-z]))")
     private val ACTION_AMOUNT = Regex("(승인|출금|입금|결제|사용)\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?![0-9]*[/.:])")
-    /** Web links and URL shorteners (merchant names like "NETFLIX.COM" are fine). */
-    private val LINK = Regex("https?://|www\\.|\\b(?:bit\\.ly|han\\.gl|me2\\.do|url\\.kr|vo\\.la|t\\.ly|buly\\.kr|tinyurl\\.com|goo\\.gl)/", RegexOption.IGNORE_CASE)
+    /** URL shorteners: never in genuine card alerts. */
+    private val SHORT_LINK = Regex("\\b(?:bit\\.ly|han\\.gl|me2\\.do|url\\.kr|vo\\.la|t\\.ly|buly\\.kr|tinyurl\\.com|goo\\.gl|vvd\\.bz|c11\\.kr)/", RegexOption.IGNORE_CASE)
+    /** Web links (merchant names like "NETFLIX.COM" are not links). */
+    private val WEB_LINK = Regex("(?:https?://|www\\.)[^\\s]+", RegexOption.IGNORE_CASE)
+    /** Card companies' / banks' own sites, which genuine alerts may mention. */
+    private val OFFICIAL_DOMAINS = listOf(
+      "shinhancard.com", "shinhan.com", "kbcard.com", "kbstar.com", "hyundaicard.com", "samsungcard.com", "lottecard.co.kr",
+      "wooricard.com", "wooribank.com", "hanacard.co.kr", "kebhana.com", "nonghyup.com", "nhcard", "bccard.com",
+      "kakaobank.com", "tossbank.com", "toss.im", "kakaopay.com", "pay.naver.com", "ibk.co.kr", "citibank.co.kr", "kfcc.co.kr", "epostbank.go.kr"
+    )
+    private val AD = Regex("\\(광고\\)|\\[광고\\]")
+    /** Footer lines: not the payment itself. */
+    private val FOOTER = Regex("^[\\s※]*※|명세서|결제\\s*예정|고객\\s*센터|자세히\\s*보기|수신\\s*거부|무료\\s*거부|설정\\s*시|문의\\s*[:：]?\\s*[0-9]", RegexOption.IGNORE_CASE)
+    /** Cumulative / balance / limit figures, removed before looking for the payment amount. */
+    private val CUMULATIVE = Regex("(총\\s*)?(누적|잔액|잔고|한도|이용\\s*가능|사용\\s*가능)[^0-9\\n]{0,12}-?[0-9,]+\\s*원?")
+    private val LABEL_LINE = Regex("^[\\s▶■□●•·*\\-]*(승인\\s*금액|결제\\s*금액|이용\\s*금액|사용\\s*금액|출금\\s*금액|입금\\s*금액|거래\\s*금액|금액|가맹점\\s*명|가맹점|사용처|이용처|판매자|상호\\s*명|상호|승인\\s*일시|이용\\s*일시|거래\\s*일시|결제\\s*일시|일시)(?=\\s|[:：|])\\s*[:：|]?\\s*(.+)$")
+    private val PAY_LINE = Regex("^(.{2,30}?)에서\\s*[0-9,]+\\s*원")
+    private val PAY_BY_WALLET = Regex("(페이|머니)(로)?\\s*[0-9,]+\\s*원\\s*(결제|사용)")
+    private val CARD_TAG = Regex("(?:^|\\s|\\])(삼성|롯데|우리|하나|NH농협|NH|농협|신한|KB국민|국민|씨티|BC|현대)(카드|체크)?\\s*\\(?([0-9*]{3,4})?\\)?\\s*(?=승인|취소|해외|사용)", RegexOption.IGNORE_CASE)
+    private val CARD_TAG_NAMES = mapOf(
+      "삼성" to "삼성카드", "롯데" to "롯데카드", "우리" to "우리카드", "하나" to "하나카드", "NH농협" to "NH농협카드", "NH" to "NH농협카드",
+      "농협" to "NH농협카드", "신한" to "신한카드", "KB국민" to "KB국민카드", "국민" to "KB국민카드", "씨티" to "씨티카드", "BC" to "BC카드", "현대" to "현대카드"
+    )
+    /** "1*2*취소", "삼성1337취소": a cancellation without "승인". */
+    private val BARE_CANCEL = Regex("(?<=[0-9*)]|카드|체크)\\s*취소")
     private val REJECTED = Regex("승인\\s*거절|거절|결제\\s*실패|승인\\s*실패|한도\\s*초과|잔액\\s*부족|사용\\s*불가|결제\\s*불가")
     private val NOTICE = Regex("\\(광고\\)|결제\\s*예정|청구\\s*(금액|예정|서)|명세서|이용\\s*대금\\s*(안내|명세)|이벤트|최대\\s*[0-9,]+\\s*원|캐시백\\s*(이벤트|혜택|받)")
-    private val BANK_DEBIT = Regex("출금|자동\\s*이체|자동\\s*납부|카드\\s*결제")
+    private val BANK_DEBIT = Regex("(?<!입)출금|자동\\s*이체|자동\\s*납부|카드\\s*결제")
     private val INCOME_ONLY = Regex("입금")
     private val ACTION = Regex("승인|결제|출금|입금|사용|이용|지급|결제했어요|보냈어요|받았어요")
     private val CANCEL = Regex("승인\\s*취소|취소\\s*승인|결제\\s*취소|취소\\s*완료|매출\\s*취소|사용\\s*취소")
     private val INCOME = Regex("입금|급여|받았어요|받은\\s*돈|환급|이자\\s*지급")
-    private val WITHDRAW = Regex("출금|보냈어요")
+    // "입출금(통장)" is an account name, not a withdrawal.
+    private val WITHDRAW = Regex("(?<!입)출금|보냈어요")
     private val CARD_BILL = Regex("(카드\\s*(결제)?\\s*대금|결제대금|카드값).{0,12}(출금|납부|결제)|(출금|납부).{0,12}(카드\\s*대금|결제대금)")
     private val NON_PAYMENT_PREFIX = Regex("누적|잔액|잔고|잔여|한도|이용가능|캐시백|적립|포인트|할인")
     private const val NUM = "(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\\.[0-9]+)?"
@@ -269,7 +354,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
     private val REWARD_NOTE = Regex("\\((캐시백|적립|할인)[^)]*\\)")
     private val BARE_AMOUNT = Regex("(?<![0-9A-Za-z*])[0-9]{1,3}(?:,[0-9]{3})+(?![0-9])")
     private val PERSON_STYLE = Regex("([^\\s\\[\\]]{1,20})님(?:이|에게|께)\\s*[0-9,]+\\s*원")
-    private val SENT_TO_ME = Regex("님이\\s*[0-9,]+\\s*원을?\\s*(보냈|입금)")
+    private val SENT_TO_ME = Regex("님이.{0,25}?[0-9,]+\\s*원을?\\s*(보냈|입금)")
     private val START_BANK_TAG = Regex("^(?:\\[Web발신\\]\\s*)?\\[?(신한|KB|국민|우리|하나|농협|NH|IBK|기업|SC|씨티|부산|경남|대구|광주|전북|제주|수협|새마을|신협|우체국|케이뱅크|카카오뱅크|토스뱅크)\\]?(?=[\\s0-9]|$)", RegexOption.IGNORE_CASE)
     private val BANK_TAGS = mapOf(
       "신한" to "신한은행", "KB" to "KB국민은행", "국민" to "KB국민은행", "우리" to "우리은행", "하나" to "하나은행",
@@ -278,7 +363,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
       "광주" to "광주은행", "전북" to "전북은행", "제주" to "제주은행", "수협" to "수협은행", "새마을" to "새마을금고",
       "신협" to "신협", "우체국" to "우체국", "케이뱅크" to "케이뱅크", "카카오뱅크" to "카카오뱅크", "토스뱅크" to "토스뱅크"
     )
-    private val NOISE = Regex("Web발신|체크카드|신용카드|체크|신용|일시불|할부|[0-9]{1,2}\\s*개월|승인\\s*취소|취소|승인|결제했어요|결제|출금|입금|완료|사용|이용|해외|국내|원$")
+    private val NOISE = Regex("Web발신|체크카드|신용카드|체크|신용|일시불|할부|[0-9]{1,2}\\s*개월|승인\\s*취소|취소|승인금액|결제금액|이용금액|가맹점명|가맹점|승인일시|이용일시|누적금액|승인|결제했어요|결제|출금|입금|완료|사용|이용|해외|국내|내역입니다|안내|원$")
 
     /** (text to look for, canonical provider name). Order does not matter. */
     val PROVIDERS = listOf(

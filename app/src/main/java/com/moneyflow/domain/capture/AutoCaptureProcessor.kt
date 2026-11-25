@@ -16,7 +16,11 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class CaptureChannel { NOTIFICATION, SMS }
+enum class CaptureChannel {
+  NOTIFICATION, SMS,
+  /** "시험해 보기": every check runs, nothing is saved. */
+  TEST
+}
 
 sealed interface CaptureOutcome {
   data class Recorded(val transactionId: Long, val payment: ParsedPayment, val account: AccountEntity) : CaptureOutcome
@@ -24,6 +28,8 @@ sealed interface CaptureOutcome {
   /** Foreign-currency payment: the user was asked to enter the KRW amount. */
   data class NeedsKrwAmount(val prompt: ForeignPaymentPrompt) : CaptureOutcome
   data class Skipped(val reason: String) : CaptureOutcome
+  /** Test run: this is what would be recorded. */
+  data class WouldRecord(val payment: ParsedPayment, val account: AccountEntity) : CaptureOutcome
 }
 
 /**
@@ -42,13 +48,15 @@ class AutoCaptureProcessor @Inject constructor(
   private val ledger: LedgerRepository,
   private val settings: SettingsRepository,
   private val clock: AppClock,
-  private val notifier: CaptureNotifier
+  private val notifier: CaptureNotifier,
+  private val log: CaptureLog? = null
 ) {
   private val parser = PaymentMessageParser(clock.zone)
 
   /** Parse only (used by the settings screen's test box). */
   fun preview(text: String): ParseResult = parser.parse("", text, clock.nowMillis())
 
+  /** Processes a message and writes the outcome to the diagnostic log. */
   suspend fun process(
     channel: CaptureChannel,
     origin: String,
@@ -57,13 +65,61 @@ class AutoCaptureProcessor @Inject constructor(
     body: String,
     receivedAt: Long
   ): CaptureOutcome {
+    val outcome = try {
+      decide(channel, origin, originLabel, title, body, receivedAt)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      com.moneyflow.util.ProblemLog.record("자동 등록", e)
+      CaptureOutcome.Skipped("처리 중 오류 (설정 → 문제 보고)")
+    }
+    log?.let { l ->
+      // Ordinary chats from KakaoTalk / text apps are not logged at all.
+      val gateBlocked = channel == CaptureChannel.NOTIFICATION && FinancialApps.gate(origin, originLabel, title) == FinancialApps.Gate.BLOCKED
+      val looksFinancial = parser.detectProvider("$title $body") != null
+      if (!(gateBlocked && !looksFinancial)) {
+        val (ok, result) = CaptureLog.describe(outcome)
+        l.add(
+          CaptureLogEntry(
+            time = clock.nowMillis(),
+            channel = when (channel) { CaptureChannel.NOTIFICATION -> "알림"; CaptureChannel.SMS -> "문자"; CaptureChannel.TEST -> "시험" },
+            source = originLabel ?: if (channel == CaptureChannel.SMS) "문자" else origin,
+            sender = CaptureLog.maskSender(if (channel == CaptureChannel.SMS) origin else title),
+            recorded = ok,
+            result = result,
+            preview = if (looksFinancial) CaptureLog.maskPreview(body) else ""
+          )
+        )
+      }
+    }
+    return outcome
+  }
+
+  private suspend fun decide(
+    channel: CaptureChannel,
+    origin: String,
+    originLabel: String?,
+    title: String,
+    body: String,
+    receivedAt: Long
+  ): CaptureOutcome {
     val s = settings.current()
+    val dryRun = channel == CaptureChannel.TEST
+    // Messages read from KakaoTalk / the SMS app's notification are checked like text messages.
+    var gate = FinancialApps.Gate.ALLOWED
     when (channel) {
       CaptureChannel.NOTIFICATION -> {
         if (!s.notificationCaptureEnabled) return CaptureOutcome.Skipped("알림 자동 등록 꺼짐")
-        if (!FinancialApps.isAllowed(origin, originLabel)) return CaptureOutcome.Skipped("금융 앱이 아님")
+        gate = FinancialApps.gate(origin, originLabel, title)
+        when (gate) {
+          FinancialApps.Gate.BLOCKED -> return CaptureOutcome.Skipped(
+            if (origin == FinancialApps.KAKAO) "카카오톡: 카드사·은행 채널 메시지가 아님" else "금융 앱이 아님"
+          )
+          else -> Unit
+        }
       }
       CaptureChannel.SMS -> if (!s.smsCaptureEnabled) return CaptureOutcome.Skipped("문자 자동 등록 꺼짐")
+      CaptureChannel.TEST -> Unit
     }
 
     val rules = db.ruleDao().getAll()
@@ -74,13 +130,26 @@ class AutoCaptureProcessor @Inject constructor(
       is ParseResult.Ignored -> return CaptureOutcome.Skipped(result.reason)
       is ParseResult.Success -> result.payment
     }
-    if (channel == CaptureChannel.SMS && payment.provider == null) {
-      return CaptureOutcome.Skipped("카드사/은행 이름이 없는 문자")
+    val textLike = channel == CaptureChannel.SMS || gate == FinancialApps.Gate.SMS_APP || gate == FinancialApps.Gate.KAKAO_CHANNEL
+    if (textLike && payment.provider == null) {
+      return CaptureOutcome.Skipped("카드사/은행 이름이 없는 메시지")
+    }
+    // A KakaoTalk channel must be the company the message is about ("신한카드" channel → 신한카드 payment).
+    if (gate == FinancialApps.Gate.KAKAO_CHANNEL && !FinancialApps.sameCompany(title, payment.provider)) {
+      return CaptureOutcome.Skipped("카카오톡 채널과 카드사가 다름")
     }
     val timestamp = payment.paidAt ?: receivedAt
-    if (payment.kind == PaymentKind.FOREIGN_CURRENCY) return foreignPayment(payment, timestamp, s, rules)
+    if (payment.kind == PaymentKind.FOREIGN_CURRENCY) {
+      if (dryRun) return CaptureOutcome.Skipped("해외 결제: 원화 금액을 입력하라는 알림을 보내요")
+      return foreignPayment(payment, timestamp, s, rules)
+    }
 
     return db.withTransaction {
+      if (payment.kind == PaymentKind.CANCELLATION && dryRun) {
+        val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+          ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
+        return@withTransaction CaptureOutcome.WouldRecord(payment, account)
+      }
       if (payment.kind == PaymentKind.CANCELLATION) {
         // The same cancellation can arrive by SMS and by app push: handle it once (±3 minutes).
         fun cancelKey(minute: Long) = "cancel|" + sha("${payment.amount}|${payment.merchant.replace(" ", "")}|$minute")
@@ -129,7 +198,7 @@ class AutoCaptureProcessor @Inject constructor(
       }
 
       var account = pickAccount(payment, s.autoCaptureDefaultAccountId)
-        ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
+        ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음 (자동 등록 설정에서 기본 계좌를 골라 주세요)")
       // A card bill moves money from a bank account to the card (lowers what the card owes).
       var billTarget: AccountEntity? = null
       if (payment.type == TransactionType.TRANSFER) {
@@ -172,6 +241,7 @@ class AutoCaptureProcessor @Inject constructor(
           toAccountId = billTarget?.id,
           toAccountName = billTarget?.name
         )
+      if (dryRun) return@withTransaction CaptureOutcome.WouldRecord(payment, account)
       val months = payment.installmentMonths
       val id = if (s.splitInstallments && months != null && months > 1 && payment.type == TransactionType.EXPENSE) {
         InstallmentSplitter.split(tx, months, clock.zone).map { ledger.insertWithEffects(it) }.first()
@@ -290,14 +360,65 @@ class AutoCaptureProcessor @Inject constructor(
   }
 }
 
-/** Package allow/deny lists for the notification listener. */
+/** Which notifications may be read, and how strictly. */
 object FinancialApps {
-  /** Messengers and SMS apps are never read (SMS is handled by the SMS receiver). */
-  private val BLOCKED = setOf(
-    "com.kakao.talk", "jp.naver.line.android", "com.facebook.orca", "org.telegram.messenger",
-    "com.whatsapp", "com.instagram.android", "com.discord", "com.Slack",
-    "com.samsung.android.messaging", "com.google.android.apps.messaging", "com.android.mms"
+  const val KAKAO = "com.kakao.talk"
+
+  /**
+   * Text-message apps. Card alerts are mostly long "[Web발신]" messages (MMS) or RCS chats,
+   * which never reach the SMS receiver, so their notifications are read — checked like SMS.
+   */
+  val SMS_APPS = setOf(
+    "com.samsung.android.messaging", "com.google.android.apps.messaging", "com.android.mms", "com.android.messaging"
   )
+
+  /** KakaoTalk 알림톡 channels of card companies / banks / pay services (title, spaces removed). */
+  val KAKAO_CHANNELS = listOf(
+    "신한카드", "KB국민카드", "국민카드", "현대카드", "삼성카드", "롯데카드", "우리카드", "하나카드",
+    "NH농협카드", "농협카드", "BC카드", "비씨카드", "IBK기업은행", "KB국민은행", "국민은행", "신한은행", "우리은행",
+    "하나은행", "NH농협은행", "농협은행", "카카오뱅크", "토스뱅크", "케이뱅크", "카카오페이", "네이버페이", "토스",
+    "SC제일은행", "씨티카드", "새마을금고", "우체국"
+  )
+
+  /** Other messengers are never read. */
+  private val BLOCKED = setOf(
+    "jp.naver.line.android", "com.facebook.orca", "org.telegram.messenger",
+    "com.whatsapp", "com.instagram.android", "com.discord", "com.Slack"
+  )
+
+  enum class Gate {
+    /** A card / bank / pay app. */
+    ALLOWED,
+    /** A KakaoTalk 1:1 chat from a card / bank channel. */
+    KAKAO_CHANNEL,
+    /** The phone's text-message app. */
+    SMS_APP,
+    BLOCKED
+  }
+
+  private fun norm(s: String?) = s.orEmpty().replace(" ", "").replace("\u00A0", "")
+
+  /** The KakaoTalk chat title is a card / bank channel ("신한카드", "KB국민카드 알림" …). */
+  fun isKakaoChannel(title: String?): Boolean {
+    val t = norm(title)
+    return t.isNotEmpty() && KAKAO_CHANNELS.any { c -> t == c || (t.startsWith(c) && t.length <= c.length + 6) }
+  }
+
+  fun gate(packageName: String, appLabel: String?, title: String? = null): Gate = when {
+    packageName == KAKAO -> if (isKakaoChannel(title)) Gate.KAKAO_CHANNEL else Gate.BLOCKED
+    packageName in SMS_APPS -> Gate.SMS_APP
+    packageName in BLOCKED -> Gate.BLOCKED
+    packageName in KNOWN || (appLabel != null && FINANCIAL_LABEL.containsMatchIn(appLabel)) -> Gate.ALLOWED
+    else -> Gate.BLOCKED
+  }
+
+  /** The channel title and the company found in the message are the same company. */
+  fun sameCompany(channelTitle: String?, provider: String?): Boolean {
+    val core = { s: String -> norm(s).removePrefix("NH").removePrefix("KB").removePrefix("IBK").removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크").take(3) }
+    val a = core(channelTitle ?: return false)
+    val b = core(provider ?: return false)
+    return a.isNotEmpty() && b.isNotEmpty() && (a.startsWith(b) || b.startsWith(a))
+  }
 
   /** Known Korean card / bank / pay apps. */
   val KNOWN = setOf(
@@ -313,8 +434,7 @@ object FinancialApps {
 
   private val FINANCIAL_LABEL = Regex("카드|은행|뱅크|뱅킹|페이|증권|Card|Bank|Pay", RegexOption.IGNORE_CASE)
 
-  /** Known apps, or apps whose launcher label looks like a card/bank/pay app. */
+  /** May the listener look at this app's notifications at all (the title is checked later for KakaoTalk). */
   fun isAllowed(packageName: String, appLabel: String?): Boolean =
-    packageName !in BLOCKED &&
-      (packageName in KNOWN || (appLabel != null && FINANCIAL_LABEL.containsMatchIn(appLabel)))
+    packageName == KAKAO || gate(packageName, appLabel) != Gate.BLOCKED
 }

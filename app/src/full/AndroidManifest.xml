@@ -6,6 +6,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- "배터리 사용 제한 없음" button in the auto-capture check list. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Names of card / bank apps (an unknown app whose name contains 카드·은행·페이 is read too). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <!-- SMS auto-capture is optional; the app must still install on devices without telephony. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
