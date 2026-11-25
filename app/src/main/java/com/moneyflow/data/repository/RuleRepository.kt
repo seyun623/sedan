@@ -4,7 +4,9 @@ import com.moneyflow.data.local.AppDatabase
 import com.moneyflow.data.model.CategoryRuleEntity
 import com.moneyflow.data.model.RuleAction
 import com.moneyflow.data.model.TransactionType
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,14 +23,30 @@ class RuleRepository @Inject constructor(private val db: AppDatabase) {
 
   suspend fun all(): List<CategoryRuleEntity> = dao.getAll()
 
-  /** Saves a rule; a rule with the same keyword is replaced. */
-  suspend fun save(rule: CategoryRuleEntity) {
+  /**
+   * Saves a rule; a rule with the same keyword is replaced. A category rule also changes the
+   * payments already recorded for that place (recorded automatically or imported, and manual ones
+   * still in 기타). Returns how many were changed.
+   */
+  suspend fun save(rule: CategoryRuleEntity): Int {
     val keyword = rule.keyword.trim()
     require(keyword.length >= 2) { "단어를 두 글자 이상 입력해 주세요." }
     require(rule.action == RuleAction.IGNORE || rule.category.isNotBlank()) { "카테고리를 골라 주세요." }
     val sameKeyword = dao.byKeyword(keyword)
     if (sameKeyword != null && sameKeyword.id != rule.id) dao.delete(sameKeyword)
-    dao.upsert(rule.copy(keyword = keyword, category = if (rule.action == RuleAction.IGNORE) "" else rule.category))
+    val saved = rule.copy(keyword = keyword, category = if (rule.action == RuleAction.IGNORE) "" else rule.category)
+    return db.withTransaction {
+      dao.upsert(saved)
+      if (saved.action == RuleAction.CATEGORY) applyToExisting(saved) else 0
+    }
+  }
+
+  private suspend fun applyToExisting(rule: CategoryRuleEntity): Int {
+    val rules = dao.getAll()
+    val txs = db.transactionDao().observeAll().first()
+    val changes = recategorize(txs, rules).filter { (_, category) -> category == rule.category }
+    changes.groupBy({ it.second }, { it.first }).forEach { (category, ids) -> db.transactionDao().setCategory(ids, category) }
+    return changes.size
   }
 
   suspend fun delete(rule: CategoryRuleEntity) = dao.delete(rule)
@@ -49,6 +67,24 @@ class RuleRepository @Inject constructor(private val db: AppDatabase) {
 
   companion object {
     private const val MAX_LEARNED = 60
+
+    /**
+     * Existing payments whose category a rule now decides: (transaction id, new category).
+     * Payments the user filed by hand keep their category unless it is still 기타.
+     */
+    fun recategorize(txs: List<com.moneyflow.data.model.TransactionEntity>, rules: List<CategoryRuleEntity>): List<Pair<Long, String>> =
+      txs.filter { it.type != TransactionType.TRANSFER }
+        .filter {
+          it.source.isAutoCaptured || it.source == com.moneyflow.data.model.TransactionSource.CARD_IMPORT ||
+            it.category == com.moneyflow.data.model.FinanceCategories.OTHER_EXPENSE ||
+            it.category == com.moneyflow.data.model.FinanceCategories.OTHER_INCOME
+        }
+        .mapNotNull { tx ->
+          // A refund is filed under the spending category it reduces.
+          val asType = if (tx.type == TransactionType.REFUND) TransactionType.EXPENSE else tx.type
+          com.moneyflow.data.model.CategoryRules.categoryFor(rules, asType, baseMerchant(tx.memo))
+            ?.takeIf { it != tx.category }?.let { tx.id to it }
+        }
 
     /** "스타벅스 강남점 (할부 3개월)" → "스타벅스 강남점". */
     fun baseMerchant(memo: String): String = memo.substringBefore(" (").trim()

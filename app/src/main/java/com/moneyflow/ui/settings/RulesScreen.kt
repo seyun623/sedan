@@ -61,7 +61,12 @@ class RulesViewModel @Inject constructor(
 
   fun save(rule: CategoryRuleEntity) = viewModelScope.launch {
     runCatching { repo.save(rule) }
-      .onSuccess { messages.show(if (rule.action == RuleAction.IGNORE) "'${rule.keyword.trim()}'이(가) 들어간 알림은 기록하지 않아요." else "'${rule.keyword.trim()}' → ${rule.category} 규칙을 저장했어요.") }
+      .onSuccess { changed ->
+        messages.show(
+          if (rule.action == RuleAction.IGNORE) "'${rule.keyword.trim()}'이(가) 들어간 알림은 기록하지 않아요."
+          else "'${rule.keyword.trim()}' → ${rule.category} 규칙을 저장했어요." + if (changed > 0) " 이미 있던 내역 ${changed}건도 ${rule.category}(으)로 바꿨어요." else ""
+        )
+      }
       .onFailure { messages.show(it.message ?: "저장하지 못했어요.") }
   }
 

@@ -6,6 +6,12 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.14.1", "2026.11",
+      listOf(
+        "자동 분류 규칙을 저장하면 이미 기록된 그 가게의 내역도 바로 그 카테고리로 바뀌어요 (직접 고른 카테고리는 그대로 둬요, 기타는 바꿔요)"
+      )
+    ),
+    ReleaseNote(
       "2.14.0", "2026.11",
       listOf(
         "가계부에서 내역을 왼쪽으로 밀면 바로 지우지 않고 '이 내역을 지울까요?'를 먼저 물어요",
