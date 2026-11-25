@@ -11,6 +11,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,8 +32,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.UploadFile
@@ -70,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.moneyflow.domain.cardimport.CardBrowsing
 import com.moneyflow.domain.cardimport.CardSite
 import com.moneyflow.domain.cardimport.CardSites
 import com.moneyflow.ui.common.EmptyState
@@ -143,43 +149,7 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
 // 2. In-app browser
 // ---------------------------------------------------------------------------------------------
 
-/** Collects visible text of the page and its same-origin frames. */
-private const val READ_TEXT_JS = """
-(function(){
-  function t(d){ try{ var s = d.body ? d.body.innerText : '';
-    var f = d.querySelectorAll('iframe,frame');
-    for (var i=0;i<f.length;i++){ try{ s += '\n' + t(f[i].contentDocument); }catch(e){} }
-    return s; }catch(e){ return ''; } }
-  return t(document);
-})()
-"""
-
-/** Page text plus whether a login form is showing (the session ended or the page needs login). */
-private const val READ_PAGE_JS = """
-(function(){
-  function t(d){ try{ var s = d.body ? d.body.innerText : '';
-    var f = d.querySelectorAll('iframe,frame');
-    for (var i=0;i<f.length;i++){ try{ s += '\n' + t(f[i].contentDocument); }catch(e){} }
-    return s; }catch(e){ return ''; } }
-  function pw(d){ try{ var p = d.querySelectorAll('input[type=password]');
-    for (var i=0;i<p.length;i++){ if (p[i].offsetParent !== null) return true; }
-    var f = d.querySelectorAll('iframe,frame');
-    for (var j=0;j<f.length;j++){ try{ if (pw(f[j].contentDocument)) return true; }catch(e){} }
-    return false; }catch(e){ return false; } }
-  return JSON.stringify({ t: t(document), login: pw(document) });
-})()
-"""
-
-/** Runs [js] and returns its string result. */
-private suspend fun WebView.evaluate(js: String): String = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-  evaluateJavascript(js) { raw ->
-    val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
-    if (cont.isActive) cont.resumeWith(Result.success(text))
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@SuppressLint("SetJavaScriptEnabled")
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun CardBrowserScreen(
   onClose: () -> Unit,
@@ -187,11 +157,17 @@ fun CardBrowserScreen(
   viewModel: CardBrowserViewModel = hiltViewModel()
 ) {
   val site = viewModel.site
+  val web = viewModel.web
   val busy by viewModel.busy.collectAsStateWithLifecycle()
   val aiLabel by viewModel.aiLabel.collectAsStateWithLifecycle()
-  var webView by remember { mutableStateOf<WebView?>(null) }
-  var loading by remember { mutableStateOf(true) }
-  var pageTitle by remember { mutableStateOf(site.name) }
+  val desktop by viewModel.desktop.collectAsStateWithLifecycle()
+  val loading by web.loading.collectAsStateWithLifecycle()
+  val pageTitle by web.title.collectAsStateWithLifecycle()
+  val popups by web.popups.collectAsStateWithLifecycle()
+  val jsDialog by web.jsDialog.collectAsStateWithLifecycle()
+  val blockedApp by web.blockedApp.collectAsStateWithLifecycle()
+  val pageCheck by viewModel.pageCheck.collectAsStateWithLifecycle()
+  val found by viewModel.found.collectAsStateWithLifecycle()
   var pendingText by remember { mutableStateOf<String?>(null) }
   var error by rememberSaveable { mutableStateOf<String?>(null) }
   var aiConsent by remember { mutableStateOf<String?>(null) }
@@ -203,7 +179,12 @@ fun CardBrowserScreen(
   var autoProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
   var autoJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
   var managePages by remember { mutableStateOf(false) }
+  var menuOpen by remember { mutableStateOf(false) }
+  /** The buttons at the bottom folded into a small button (so the site's own buttons are reachable). */
+  var folded by rememberSaveable { mutableStateOf(false) }
+  val imeVisible = WindowInsets.isImeVisible
   val scope = androidx.compose.runtime.rememberCoroutineScope()
+  val context = androidx.compose.ui.platform.LocalContext.current
 
   LaunchedEffect(viewModel) {
     viewModel.events.collect { e ->
@@ -215,23 +196,27 @@ fun CardBrowserScreen(
     }
   }
 
+  // A login page: fold the buttons away. Payments on the page: show them again.
+  LaunchedEffect(pageCheck) {
+    val c = pageCheck ?: return@LaunchedEffect
+    if (c.login) folded = true else if (c.items > 0 || c.performance > 0) folded = false
+  }
+
   /** Opens every remembered page in turn, reads it, then hands all texts to the view model. */
   fun runSavedPages(useAi: Boolean) {
-    val wv = webView ?: return
     val pages = savedPages
     autoJob = scope.launch {
       val texts = mutableListOf<Pair<com.moneyflow.domain.cardimport.SavedPage, String>>()
       try {
         for ((n, page) in pages.withIndex()) {
           autoProgress = n + 1 to pages.size
-          loading = true
-          wv.loadUrl(page.url)
-          kotlinx.coroutines.withTimeoutOrNull(25_000) {
-            androidx.compose.runtime.snapshotFlow { loading }.first { !it }
-          }
+          web.closeTopPopupsForTour()
+          web.loadInFront(page.url)
+          kotlinx.coroutines.delay(300)
+          kotlinx.coroutines.withTimeoutOrNull(25_000) { web.loading.first { !it } }
           // Card sites fill their lists with scripts after the page has loaded.
           kotlinx.coroutines.delay(AUTO_SETTLE_MS)
-          val o = runCatching { org.json.JSONObject(wv.evaluate(READ_PAGE_JS)) }.getOrNull()
+          val o = runCatching { org.json.JSONObject(web.evaluate(CardBrowsing.READ_PAGE_JS)) }.getOrNull()
           if (o?.optBoolean("login") == true) {
             error = "로그인이 필요해요. 이 화면에서 로그인한 뒤 '기억한 화면 읽기'를 다시 눌러 주세요."
             return@launch
@@ -246,112 +231,122 @@ fun CardBrowserScreen(
     }
   }
 
-  // Always wipe the login session when the browser screen goes away.
-  DisposableEffect(Unit) {
-    onDispose {
-      webView?.let { wv ->
-        wv.stopLoading()
-        wv.clearHistory()
-        wv.clearCache(true)
-        wv.clearFormData()
-        wv.destroy()
-      }
-      CookieManager.getInstance().removeAllCookies(null)
-      CookieManager.getInstance().flush()
-      WebStorage.getInstance().deleteAllData()
+  val goBack: () -> Unit = {
+    val top = popups.lastOrNull()
+    val main = web.front
+    when {
+      top != null && top.canGoBack() -> top.goBack()
+      top != null -> web.closeTopPopup()
+      main != null && main.canGoBack() -> main.goBack()
+      else -> onClose()
+    }
+  }
+  BackHandler(onBack = goBack)
+
+  val readThisPage: () -> Unit = {
+    scope.launch {
+      val text = web.evaluate(CardBrowsing.READ_TEXT_JS)
+      if (text.isBlank()) error = "화면 내용을 읽지 못했어요. 페이지가 다 열린 뒤 다시 시도해 주세요."
+      else pendingText = text
     }
   }
 
-  BackHandler {
-    val wv = webView
-    if (wv != null && wv.canGoBack()) wv.goBack() else onClose()
-  }
-
   Scaffold(
+    modifier = Modifier.imePadding(),
     contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       TopAppBar(
         title = {
           Column {
-            Text(site.name, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(pageTitle, style = MaterialTheme.typography.labelSmall, color = Gray600, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(site.name + if (desktop == true) " · PC 화면" else "", fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(pageTitle.ifEmpty { if (loading) "여는 중…" else "" }, style = MaterialTheme.typography.labelSmall, color = Gray600, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         },
         navigationIcon = {
-          IconButton(onClick = { val wv = webView; if (wv != null && wv.canGoBack()) wv.goBack() else onClose() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
-          }
+          IconButton(onClick = goBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
         },
         actions = {
-          if (savedPages.isNotEmpty()) {
-            IconButton(onClick = { managePages = true }) { Icon(Icons.Filled.Bookmarks, contentDescription = "기억한 화면") }
+          IconButton(onClick = { web.front?.reload() }) { Icon(Icons.Filled.Refresh, contentDescription = "새로고침") }
+          Box {
+            IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("card_browser_menu")) {
+              Icon(Icons.Filled.MoreVert, contentDescription = "더 보기")
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+              DropdownMenuItem(
+                text = { Text("이용내역 메뉴 찾기") },
+                onClick = { menuOpen = false; viewModel.findLinks() },
+                modifier = Modifier.testTag("card_find_links")
+              )
+              DropdownMenuItem(
+                text = { Text(if (desktop == true) "휴대폰 화면으로 보기" else "PC 화면으로 보기") },
+                onClick = { menuOpen = false; viewModel.setDesktop(desktop != true) },
+                modifier = Modifier.testTag("card_toggle_desktop")
+              )
+              DropdownMenuItem(
+                text = { Text("화면이 눌리지 않을 때: 가림막 걷기") },
+                onClick = { menuOpen = false; viewModel.removeOverlays() },
+                modifier = Modifier.testTag("card_remove_overlays")
+              )
+              DropdownMenuItem(
+                text = { Text("이 화면 기억하기") },
+                onClick = { menuOpen = false; viewModel.savePage(web.front?.url, web.front?.title.orEmpty()) }
+              )
+              if (savedPages.isNotEmpty()) DropdownMenuItem(text = { Text("기억한 화면 관리") }, onClick = { menuOpen = false; managePages = true })
+              DropdownMenuItem(text = { Text("로그아웃하고 닫기", color = AccentRed) }, onClick = { menuOpen = false; onClose() })
+            }
           }
-          IconButton(onClick = { webView?.reload() }) { Icon(Icons.Filled.Refresh, contentDescription = "새로고침") }
-          IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "로그아웃하고 닫기") }
         },
         windowInsets = WindowInsets(0, 0, 0, 0),
         colors = TopAppBarDefaults.topAppBarColors(containerColor = CardSurface)
       )
     },
     bottomBar = {
-      Surface(color = CardSurface, shadowElevation = 6.dp) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-          if (busy || autoProgress != null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp), color = TossBlue)
-          val readThisPage: () -> Unit = {
-            webView?.evaluateJavascript(READ_TEXT_JS) { raw ->
-              val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
-              if (text.isBlank()) error = "화면 내용을 읽지 못했어요. 페이지가 다 열린 뒤 다시 시도해 주세요."
-              else pendingText = text
-            }
-          }
-          val progress = autoProgress
-          if (progress != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-              Text("기억한 화면 읽는 중 (${progress.first}/${progress.second})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-              TextButton(onClick = { autoJob?.cancel() }) { Text("멈추기") }
-            }
-          } else if (savedPages.isNotEmpty()) {
-            Button(
-              onClick = { autoAsk = true },
-              enabled = !busy && !loading,
-              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("card_auto_read_button"),
-              colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
-              shape = RoundedCornerShape(14.dp)
-            ) { Text("기억한 화면 ${savedPages.size}개 읽기", fontWeight = FontWeight.Bold) }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedButton(onClick = readThisPage, enabled = !busy && !loading, modifier = Modifier.weight(1f).testTag("card_read_button")) { Text("이 화면 가져오기") }
-              OutlinedButton(
-                onClick = { viewModel.savePage(webView?.url, webView?.title.orEmpty()) },
-                enabled = !busy && !loading,
-                modifier = Modifier.weight(1f).testTag("card_save_page_button")
-              ) { Text("이 화면 기억하기") }
-            }
-            Text(
-              "로그인한 뒤 누르면 기억한 화면을 차례로 열어 읽어요",
-              style = MaterialTheme.typography.labelSmall,
-              color = Gray600,
-              modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
-            )
-          } else {
-            Button(
-              onClick = readThisPage,
-              enabled = !busy && !loading,
-              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("card_read_button"),
-              colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
-              shape = RoundedCornerShape(14.dp)
-            ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+      // The keyboard needs the room while typing (login), and a folded bar leaves the site's own buttons free.
+      if (!imeVisible && !folded) {
+        Surface(color = CardSurface, shadowElevation = 6.dp) {
+          Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (busy || autoProgress != null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 6.dp), color = TossBlue)
+            val check = pageCheck
+            if (check != null && check.items > 0 && autoProgress == null) {
               Text(
-                "이용내역·명세서·실적·혜택 화면에서 눌러 주세요",
-                style = MaterialTheme.typography.labelSmall,
-                color = Gray600,
-                modifier = Modifier.weight(1f)
+                "이 화면에서 결제 내역 ${check.items}건이 보여요",
+                style = MaterialTheme.typography.labelMedium, color = TossBlue, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 4.dp).testTag("card_found_items")
               )
-              TextButton(
-                onClick = { viewModel.savePage(webView?.url, webView?.title.orEmpty()) },
-                enabled = !busy && !loading,
-                modifier = Modifier.testTag("card_save_page_button")
-              ) { Text("이 화면 기억하기") }
+            }
+            val progress = autoProgress
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              when {
+                progress != null -> {
+                  Text("기억한 화면 읽는 중 (${progress.first}/${progress.second})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                  TextButton(onClick = { autoJob?.cancel() }) { Text("멈추기") }
+                }
+                else -> {
+                  Button(
+                    onClick = readThisPage,
+                    enabled = !busy && !loading,
+                    modifier = Modifier.weight(1f).height(48.dp).testTag("card_read_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+                    shape = RoundedCornerShape(14.dp)
+                  ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
+                  if (savedPages.isNotEmpty()) {
+                    OutlinedButton(
+                      onClick = { autoAsk = true },
+                      enabled = !busy && !loading,
+                      modifier = Modifier.height(48.dp).testTag("card_auto_read_button")
+                    ) { Text("기억한 ${savedPages.size}개") }
+                  } else {
+                    OutlinedButton(
+                      onClick = { viewModel.findLinks() },
+                      enabled = !busy && !loading,
+                      modifier = Modifier.height(48.dp).testTag("card_find_links_button")
+                    ) { Text("메뉴 찾기") }
+                  }
+                  IconButton(onClick = { folded = true }, modifier = Modifier.testTag("card_fold_bar")) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "버튼 접기")
+                  }
+                }
+              }
             }
           }
         }
@@ -359,45 +354,92 @@ fun CardBrowserScreen(
     }
   ) { padding ->
     Box(Modifier.fillMaxSize().padding(padding)) {
-      AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-          WebView(ctx).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.setSupportMultipleWindows(false)
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            settings.builtInZoomControls = true
-            settings.displayZoomControls = false
-            // Some card sites refuse embedded browsers; present as the regular mobile browser.
-            settings.userAgentString = settings.userAgentString.replace("; wv", "")
-            CookieManager.getInstance().setAcceptCookie(true)
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            webViewClient = object : WebViewClient() {
-              override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val url = request.url.toString()
-                if (url.startsWith("https://") || url.startsWith("http://")) return false
-                openExternal(view, url)
-                return true
-              }
-
-              override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) { loading = true }
-              override fun onPageFinished(view: WebView, url: String?) {
-                loading = false
-                pageTitle = view.title?.takeIf { it.isNotBlank() } ?: url.orEmpty()
-              }
+      if (desktop != null) {
+        AndroidView(
+          modifier = Modifier.fillMaxSize(),
+          factory = { ctx -> web.mainView(ctx, viewModel.startUrl()) },
+          onRelease = { web.detach(it) }
+        )
+      }
+      popups.lastOrNull()?.let { popup ->
+        Column(Modifier.fillMaxSize().background(CardSurface)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().background(Gray100).padding(start = 16.dp)
+          ) {
+            Text("카드사 창 (팝업)", style = MaterialTheme.typography.labelLarge, color = Gray600, modifier = Modifier.weight(1f))
+            IconButton(onClick = { web.closeTopPopup() }, modifier = Modifier.testTag("card_popup_close")) {
+              Icon(Icons.Filled.Close, contentDescription = "팝업 닫기")
             }
-            loadUrl(site.url)
-            webView = this
+          }
+          androidx.compose.runtime.key(popup) {
+            AndroidView(
+              modifier = Modifier.fillMaxSize(),
+              factory = { ctx -> popup.also { web.attach(it, ctx) } },
+              onRelease = { web.detach(it) }
+            )
           }
         }
-      )
+      }
       if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = TossBlue)
+      if (folded && !imeVisible) {
+        androidx.compose.material3.SmallFloatingActionButton(
+          onClick = { folded = false },
+          containerColor = TossBlue,
+          contentColor = OnBrand,
+          modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).testTag("card_unfold_bar")
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp)) {
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
+            Text("가져오기", fontWeight = FontWeight.Bold)
+          }
+        }
+      }
     }
+  }
+
+  jsDialog?.let { d ->
+    AlertDialog(
+      onDismissRequest = { d.cancel(); web.answeredDialog() },
+      title = { Text(site.name, fontWeight = FontWeight.Bold) },
+      text = { Text(d.message) },
+      confirmButton = { TextButton(onClick = { d.ok(); web.answeredDialog() }) { Text("확인", fontWeight = FontWeight.Bold) } },
+      dismissButton = if (d.isConfirm) ({ TextButton(onClick = { d.cancel(); web.answeredDialog() }) { Text("취소") } }) else null
+    )
+  }
+
+  blockedApp?.let {
+    AlertDialog(
+      onDismissRequest = web::dismissBlockedApp,
+      title = { Text("카드사 앱으로 넘어가려고 해요", fontWeight = FontWeight.Bold) },
+      text = {
+        Text(
+          "${site.name} 홈페이지가 스스로 앱을 열려고 해서 멈춰 두었어요. 웹에서 계속하려면 '여기서 계속'을 누르세요. " +
+            "로그인 승인처럼 앱이 꼭 필요하면 '앱 열기'를 누르고, 끝나면 머니플로우로 돌아오세요. 이 화면은 그대로 있어요."
+        )
+      },
+      confirmButton = { TextButton(onClick = web::dismissBlockedApp) { Text("여기서 계속", fontWeight = FontWeight.Bold) } },
+      dismissButton = { TextButton(onClick = { web.openBlockedApp(context) }) { Text("앱 열기") } }
+    )
+  }
+
+  found?.let { links ->
+    AlertDialog(
+      onDismissRequest = viewModel::dismissFound,
+      title = { Text("어느 화면을 열까요?", fontWeight = FontWeight.Bold) },
+      text = {
+        Column {
+          links.forEach { link ->
+            Text(
+              link.text,
+              style = MaterialTheme.typography.bodyLarge,
+              modifier = Modifier.fillMaxWidth().clickable { viewModel.openFound(link) }.padding(vertical = 10.dp)
+            )
+          }
+        }
+      },
+      confirmButton = { TextButton(onClick = viewModel::dismissFound) { Text("닫기") } }
+    )
   }
 
   pendingText?.let { text ->
@@ -493,33 +535,6 @@ fun CardBrowserScreen(
       text = { Text(msg) },
       confirmButton = { TextButton(onClick = { error = null }) { Text("확인") } }
     )
-  }
-}
-
-/** Card sites hand off to their apps (approval, 간편인증) with intent:// or custom schemes. */
-private fun openExternal(view: WebView, url: String) {
-  val ctx = view.context
-  try {
-    val intent = if (url.startsWith("intent:")) {
-      Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
-        addCategory(Intent.CATEGORY_BROWSABLE)
-        component = null
-        selector = null
-      }
-    } else {
-      Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    }
-    try {
-      ctx.startActivity(intent)
-    } catch (e: ActivityNotFoundException) {
-      val fallback = intent.getStringExtra("browser_fallback_url")
-      if (fallback != null && fallback.startsWith("https://")) view.loadUrl(fallback)
-      else intent.`package`?.let { pkg ->
-        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))) }
-      }
-    }
-  } catch (_: Exception) {
-    // Malformed or unsupported link: ignore.
   }
 }
 

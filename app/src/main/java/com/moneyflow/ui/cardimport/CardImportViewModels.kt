@@ -34,6 +34,9 @@ import javax.inject.Inject
 
 const val ARG_SITE_ID = "siteId"
 
+/** Largest card-site file read directly (이용내역 엑셀). */
+private const val MAX_DOWNLOAD = 15 * 1024 * 1024
+
 sealed interface BrowserEvent {
   data object OpenPreview : BrowserEvent
   data class Error(val message: String) : BrowserEvent
@@ -47,9 +50,30 @@ class CardBrowserViewModel @Inject constructor(
   private val aiReader: AiStatementReader,
   private val session: CardImportSession,
   private val clock: AppClock,
-  private val settings: com.moneyflow.data.repository.SettingsRepository
+  private val settings: com.moneyflow.data.repository.SettingsRepository,
+  @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context
 ) : ViewModel() {
   val site: CardSite = CardSites.byId(checkNotNull(savedState.get<String>(ARG_SITE_ID))) ?: CardSites.all.first()
+
+  /** The card site page and its login: kept here so the app lock and the preview don't end it. */
+  val web = CardWebSession(context, site.desktopDefault)
+
+  private val _desktop = MutableStateFlow<Boolean?>(null)
+  /** PC page (true) or phone page (false); null until the saved choice is known. */
+  val desktop: StateFlow<Boolean?> = _desktop.asStateFlow()
+
+  /** Where the browser starts (the PC or the phone address of the site). */
+  fun startUrl(): String = if (_desktop.value == true) site.pcUrl else site.url
+
+  /** What the page now shown looks like (login form, payments found), checked after each load. */
+  data class PageCheck(val login: Boolean, val items: Int, val performance: Int)
+  private val _pageCheck = MutableStateFlow<PageCheck?>(null)
+  val pageCheck: StateFlow<PageCheck?> = _pageCheck.asStateFlow()
+  private var probeJob: kotlinx.coroutines.Job? = null
+
+  private val _found = MutableStateFlow<List<com.moneyflow.domain.cardimport.CardBrowsing.FoundLink>?>(null)
+  /** Menu links to usage / statement pages found on the page ("내역 화면 찾기"). */
+  val found: StateFlow<List<com.moneyflow.domain.cardimport.CardBrowsing.FoundLink>?> = _found.asStateFlow()
 
   private val _busy = MutableStateFlow(false)
   val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -63,6 +87,127 @@ class CardBrowserViewModel @Inject constructor(
 
   init {
     viewModelScope.launch { _aiLabel.value = if (ai.isReady()) ai.providerLabel() else null }
+    viewModelScope.launch {
+      val d = settings.current().cardDesktopModes[site.id] ?: site.desktopDefault
+      web.prepare(d)
+      _desktop.value = d
+    }
+    viewModelScope.launch { web.pageLoads.collect { if (it > 0) probePage() } }
+    viewModelScope.launch {
+      web.download.collect { d -> if (d != null) { web.downloadHandled(); importDownload(d) } }
+    }
+  }
+
+  override fun onCleared() {
+    web.close()
+  }
+
+  /** Switches the site between its PC and phone pages (remembered for this card company). */
+  fun setDesktop(on: Boolean) = viewModelScope.launch {
+    settings.setCardDesktopMode(site.id, on)
+    _desktop.value = on
+    web.setDesktop(on, if (on) site.pcUrl else site.url)
+  }
+
+  /** Looks at the new page: a login form folds the buttons away, found payments bring them back. */
+  private fun probePage() {
+    probeJob?.cancel()
+    probeJob = viewModelScope.launch {
+      _pageCheck.value = null
+      // Card sites fill their lists with scripts after the page has loaded.
+      for (wait in listOf(1_500L, 3_500L)) {
+        kotlinx.coroutines.delay(wait)
+        val o = runCatching { org.json.JSONObject(web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.READ_PAGE_JS)) }.getOrNull() ?: continue
+        val login = o.optBoolean("login")
+        val r = withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(o.optString("t")) }
+        _pageCheck.value = PageCheck(login, r.items.size, r.performance.size)
+        if (login || r.items.isNotEmpty()) break
+      }
+    }
+  }
+
+  fun findLinks() = viewModelScope.launch {
+    val known = if (_desktop.value == true) emptyList() else site.pages
+    val links = com.moneyflow.domain.cardimport.CardBrowsing.withKnownPages(
+      known, com.moneyflow.domain.cardimport.CardBrowsing.parseFoundLinks(web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.FIND_LINKS_JS))
+    )
+    if (links.isEmpty()) {
+      _events.send(BrowserEvent.Error(
+        "이 화면에서 이용내역·명세서 메뉴를 찾지 못했어요. 로그인한 뒤 다시 눌러 보세요." +
+          (site.guide?.let { "\n\n${site.name}: $it" } ?: "")
+      ))
+    } else {
+      _found.value = links
+    }
+  }
+
+  fun openFound(link: com.moneyflow.domain.cardimport.CardBrowsing.FoundLink) = viewModelScope.launch {
+    _found.value = null
+    if (link.id.isEmpty()) { web.loadInFront(link.url); return@launch }
+    val clicked = web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.clickFoundJs(link.id)) == "ok"
+    if (!clicked && link.url.startsWith("https://")) web.loadInFront(link.url)
+  }
+
+  fun dismissFound() { _found.value = null }
+
+  /** "화면 가림막 걷기": for pages whose leftover dimmed layer blocks every touch. */
+  fun removeOverlays() = viewModelScope.launch {
+    val n = web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.REMOVE_OVERLAYS_JS).toIntOrNull() ?: 0
+    _events.send(BrowserEvent.Info(
+      if (n > 0) "화면을 가리던 막 ${n}개를 걷었어요. 이제 눌러 보세요."
+      else "걷을 가림막을 찾지 못했어요. ⋮ → '${if (_desktop.value == true) "휴대폰" else "PC"} 화면으로 보기'를 써 보세요."
+    ))
+  }
+
+  /** The site offered a file (이용내역 엑셀 저장): read it right away with the same login. */
+  private suspend fun importDownload(d: SiteDownload) {
+    if (!d.url.startsWith("https://")) {
+      _events.send(BrowserEvent.Error("이 파일은 바로 읽을 수 없어요. 휴대폰에 저장한 뒤 '엑셀·CSV 파일에서 가져오기'로 열어 주세요."))
+      return
+    }
+    if (_busy.value) return
+    _busy.value = true
+    try {
+      val name = com.moneyflow.domain.cardimport.CardBrowsing.downloadFileName(d.contentDisposition, d.url, d.mimeType)
+      val cookies = web.cookiesFor(d.url)
+      val bytes = withContext(Dispatchers.IO) { fetchFile(d, cookies) }
+      val rows = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.TableFileReader.read(bytes, name) }
+      val result = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.TableStatementReader(clock.today()).read(rows, "카드사 파일") }
+      if (result.items.isEmpty()) {
+        _events.send(BrowserEvent.Error("받은 파일에서 결제 내역을 찾지 못했어요. 이용내역 화면에서 '이 화면 가져오기'를 눌러 주세요."))
+      } else {
+        session.put(site, result)
+        _events.send(BrowserEvent.OpenPreview)
+      }
+    } catch (e: Exception) {
+      _events.send(BrowserEvent.Error(com.moneyflow.util.UserErrors.message(e, "파일을 받지 못했어요. 이용내역 화면에서 '이 화면 가져오기'를 눌러 주세요.")))
+    } finally {
+      _busy.value = false
+    }
+  }
+
+  private fun fetchFile(d: SiteDownload, cookies: String?): ByteArray {
+    val c = java.net.URL(d.url).openConnection() as javax.net.ssl.HttpsURLConnection
+    try {
+      c.connectTimeout = 15_000
+      c.readTimeout = 30_000
+      c.setRequestProperty("User-Agent", d.userAgent)
+      cookies?.let { c.setRequestProperty("Cookie", it) }
+      if (c.responseCode != 200) throw java.io.IOException("파일을 받지 못했어요 (${c.responseCode}).")
+      return c.inputStream.use { input ->
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        while (true) {
+          val n = input.read(buf)
+          if (n < 0) break
+          out.write(buf, 0, n)
+          if (out.size() > MAX_DOWNLOAD) throw java.io.IOException("파일이 너무 커요.")
+        }
+        out.toByteArray()
+      }
+    } finally {
+      c.disconnect()
+    }
   }
 
   /** Pages of this card company read automatically after login ("이 화면 기억하기"). */

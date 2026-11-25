@@ -315,7 +315,7 @@ private fun DayHeader(dayTxs: List<TransactionEntity>) {
   }
 }
 
-/** A transaction card that can be swiped right-to-left to delete (the VM offers undo). */
+/** A transaction card that can be swiped right-to-left to delete, after a confirmation (the VM also offers undo). */
 @Composable
 private fun SwipeToDeleteRow(
   transaction: TransactionEntity,
@@ -324,17 +324,14 @@ private fun SwipeToDeleteRow(
 ) {
   val dismissState = rememberSwipeToDismissBoxState()
   val scope = rememberCoroutineScope()
+  var askDelete by remember { mutableStateOf(false) }
   val shape = RoundedCornerShape(16.dp)
   SwipeToDismissBox(
     state = dismissState,
     enableDismissFromStartToEnd = false,
     onDismiss = { value ->
-      if (value == SwipeToDismissBoxValue.EndToStart) {
-        scope.launch {
-          // Leave the row dismissed while the list updates; bring it back only if nothing was deleted.
-          if (!onDelete().await()) dismissState.reset()
-        }
-      }
+      // A swipe alone never deletes: ask first (an accidental swipe is easy while scrolling).
+      if (value == SwipeToDismissBoxValue.EndToStart) askDelete = true
     },
     backgroundContent = {
       Box(
@@ -356,5 +353,33 @@ private fun SwipeToDeleteRow(
     Surface(color = CardSurface, shape = shape, modifier = Modifier.fillMaxWidth()) {
       TransactionRow(transaction = transaction, onClick = onClick, modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp))
     }
+  }
+  if (askDelete) {
+    val keep: () -> Unit = { askDelete = false; scope.launch { dismissState.reset() } }
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = keep,
+      title = { Text("이 내역을 지울까요?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text(
+          listOfNotNull(
+            transaction.memo.takeIf { it.isNotBlank() } ?: transaction.category,
+            Formatters.formatCurrency(transaction.amount)
+          ).joinToString(" · ")
+        )
+      },
+      confirmButton = {
+        androidx.compose.material3.TextButton(
+          onClick = {
+            askDelete = false
+            scope.launch {
+              // Leave the row dismissed while the list updates; bring it back only if nothing was deleted.
+              if (!onDelete().await()) dismissState.reset()
+            }
+          },
+          modifier = Modifier.testTag("swipe_delete_confirm")
+        ) { Text("지우기", color = AccentRed, fontWeight = FontWeight.Bold) }
+      },
+      dismissButton = { androidx.compose.material3.TextButton(onClick = keep) { Text("취소") } }
+    )
   }
 }

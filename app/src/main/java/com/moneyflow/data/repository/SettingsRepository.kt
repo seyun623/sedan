@@ -109,6 +109,8 @@ data class AppSettings(
   val dismissedRecurringSuggestions: Set<String> = emptySet(),
   /** Card company pages to read automatically after login, by card site id. */
   val cardSavedPages: Map<String, List<com.moneyflow.domain.cardimport.SavedPage>> = emptyMap(),
+  /** Card sites the user switched to the PC (true) or mobile (false) page; others use the site default. */
+  val cardDesktopModes: Map<String, Boolean> = emptyMap(),
   /** Show amounts on the home screen widget while app lock is on. */
   val widgetShowAmountsWhenLocked: Boolean = false
 ) {
@@ -178,6 +180,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     val INSTALL_ID = stringPreferencesKey("install_id")
     val CARD_SAVED_PAGES = stringPreferencesKey("card_saved_pages_json")
+    val CARD_VIEW_MODES = androidx.datastore.preferences.core.stringSetPreferencesKey("card_view_modes")
     val FAMILY_BUDGET = longPreferencesKey("family_budget")
     val DRIVE_KEY = stringPreferencesKey("drive_bot_key_enc")
     val DRIVE_BOT_EMAIL = stringPreferencesKey("drive_bot_email")
@@ -255,6 +258,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
       cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
+      cardDesktopModes = p[Keys.CARD_VIEW_MODES].orEmpty().mapNotNull { e ->
+        e.split('=').takeIf { it.size == 2 }?.let { (id, mode) -> id to (mode == "pc") }
+      }.toMap(),
       dismissedRecurringSuggestions = p[Keys.RECURRING_DISMISSED] ?: emptySet(),
       familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L,
       driveKeyEncrypted = p[Keys.DRIVE_KEY],
@@ -408,6 +414,11 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     } else {
       it[Keys.AUTO_BACKUP_ERROR] = error
     }
+  }
+
+  /** Remembers whether a card site is shown as its PC page ("PC 화면으로 보기"). */
+  suspend fun setCardDesktopMode(siteId: String, desktop: Boolean) = store.edit {
+    it[Keys.CARD_VIEW_MODES] = it[Keys.CARD_VIEW_MODES].orEmpty().filterNot { e -> e.startsWith("$siteId=") }.toSet() + "$siteId=${if (desktop) "pc" else "mobile"}"
   }
 
   /** Replaces the remembered pages of one card site. */
