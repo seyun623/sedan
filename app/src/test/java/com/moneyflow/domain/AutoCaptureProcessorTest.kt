@@ -106,11 +106,40 @@ class AutoCaptureProcessorTest {
 
   @Test fun noMatchingAccountUsesDefaultAccountOrSkips() = runBlocking {
     val msg = "롯데카드 승인 15,000원 11/21 10:00 어떤가게"
+    settings.setAutoCreateCaptureAccounts(false)
     assertTrue(processor.process(CaptureChannel.SMS, "1588", null, "", msg, clock.nowMillis()) is CaptureOutcome.Skipped)
     settings.setDefaultCaptureAccount(bankId)
     val out = processor.process(CaptureChannel.SMS, "1588", null, "", msg, clock.nowMillis())
     assertTrue(out is CaptureOutcome.Recorded)
     assertEquals(bankId, txs().single().accountId)
+  }
+
+  @Test fun unknownCardCompanyGetsItsOwnAccount() = runBlocking {
+    // 2.14.3: "등록할 계좌가 없음" for every 삼성카드 alert → the account is made once.
+    val msg = "[Web발신] 삼성1337승인 황*윤 12,500원 일시불 11/25 19:57 후라토식당"
+    val dry = processor.process(CaptureChannel.TEST, "test", "시험", "", msg, clock.nowMillis())
+    assertTrue(dry.toString(), dry is CaptureOutcome.WouldRecord && dry.newAccount)
+    assertTrue(db.accountDao().getAll().none { it.name == "삼성카드" })
+    val out = processor.process(CaptureChannel.SMS, "15888900", null, "", msg, clock.nowMillis())
+    assertTrue(out.toString(), out is CaptureOutcome.Recorded && out.newAccount)
+    val card = db.accountDao().getAll().single { it.name == "삼성카드" }
+    assertEquals(com.moneyflow.data.model.AccountType.CREDIT_CARD, card.accountType)
+    assertTrue(card.isDebt)
+    assertEquals("1337", card.accountNumber)
+    // The next alert goes to the same account without making another one.
+    clock.advanceMillis(10 * 60_000L)
+    val again = processor.process(CaptureChannel.SMS, "15888900", null, "", msg.replace("12,500", "8,000").replace("19:57", "20:07"), clock.nowMillis())
+    assertTrue(again.toString(), again is CaptureOutcome.Recorded && !again.newAccount)
+    assertEquals(1, db.accountDao().getAll().count { it.name == "삼성카드" })
+  }
+
+  @Test fun bankAppNameGivesTheBank() = runBlocking {
+    val outcome = processor.process(
+      CaptureChannel.NOTIFICATION, "com.wooribank.smart.npib", "우리WON뱅킹", "우리WON뱅킹 입출금알림",
+      "입금 50,000원 홍길동 잔액 1,250,000원", clock.nowMillis()
+    )
+    assertTrue(outcome.toString(), outcome is CaptureOutcome.Recorded)
+    assertEquals("우리은행", (outcome as CaptureOutcome.Recorded).account.name)
   }
 
   @Test fun categoryCorrectedOnceIsReusedForTheSameSender() = runBlocking {

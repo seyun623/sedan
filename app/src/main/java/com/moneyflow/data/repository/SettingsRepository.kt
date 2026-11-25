@@ -45,6 +45,8 @@ data class AppSettings(
   val smsCaptureEnabled: Boolean = false,
   /** Account used for auto-captured transactions when no account matches the card/bank name. */
   val autoCaptureDefaultAccountId: Long? = null,
+  /** A payment from a card company / bank with no matching account creates that account. */
+  val autoCreateCaptureAccounts: Boolean = true,
   val onboardingDone: Boolean = false,
   /** When a backup file was last created (0 = never). */
   val lastBackupAt: Long = 0L,
@@ -156,6 +158,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val NOTI_CAPTURE = booleanPreferencesKey("notification_capture")
     val SMS_CAPTURE = booleanPreferencesKey("sms_capture")
     val DEFAULT_ACCOUNT = longPreferencesKey("auto_capture_default_account")
+    val AUTO_CREATE_ACCOUNTS = booleanPreferencesKey("auto_capture_create_accounts")
     val ONBOARDING = booleanPreferencesKey("onboarding_done")
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
@@ -232,6 +235,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       notificationCaptureEnabled = p[Keys.NOTI_CAPTURE] ?: false,
       smsCaptureEnabled = p[Keys.SMS_CAPTURE] ?: false,
       autoCaptureDefaultAccountId = p[Keys.DEFAULT_ACCOUNT],
+      autoCreateCaptureAccounts = p[Keys.AUTO_CREATE_ACCOUNTS] ?: true,
       onboardingDone = p[Keys.ONBOARDING] ?: false,
       lastBackupAt = p[Keys.LAST_BACKUP] ?: 0L,
       aiEnabled = p[Keys.AI_ENABLED] ?: false,
@@ -542,6 +546,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
 
   suspend fun setLastBackupAt(millis: Long) = store.edit { it[Keys.LAST_BACKUP] = millis }
   suspend fun setOnboardingDone() = store.edit { it[Keys.ONBOARDING] = true }
+  suspend fun setAutoCreateCaptureAccounts(on: Boolean) = store.edit { it[Keys.AUTO_CREATE_ACCOUNTS] = on }
   suspend fun setDefaultCaptureAccount(id: Long?) = store.edit {
     if (id == null) it.remove(Keys.DEFAULT_ACCOUNT) else it[Keys.DEFAULT_ACCOUNT] = id
   }

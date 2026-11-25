@@ -191,11 +191,11 @@ fun AutoCaptureSettingsScreen(
         onAction = { openBatterySettings(context) }
       )
       CheckRow(
-        ok = state.accounts.isNotEmpty() && settings.autoCaptureDefaultAccountId != null,
-        title = "기본 등록 계좌",
+        ok = settings.autoCreateCaptureAccounts || settings.autoCaptureDefaultAccountId != null,
+        title = "기록할 계좌",
         detail = when {
-          state.accounts.isEmpty() -> "계좌가 없으면 기록할 곳이 없어요. 홈에서 통장·카드를 먼저 추가해 주세요"
-          settings.autoCaptureDefaultAccountId == null -> "카드사 이름과 맞는 계좌가 없으면 건너뛰어요. 아래에서 하나 골라 주세요"
+          settings.autoCreateCaptureAccounts -> null
+          settings.autoCaptureDefaultAccountId == null -> "카드사 이름과 맞는 계좌가 없으면 건너뛰어요. 아래 '처음 보는 카드·은행은 계좌 만들기'를 켜거나 기본 계좌를 골라 주세요"
           else -> null
         }
       )
@@ -267,9 +267,17 @@ fun AutoCaptureSettingsScreen(
       }
     }
 
-    SettingsSection("기본 등록 계좌") {
+    SettingsSection("기록할 계좌") {
+      SettingsSwitchItem(
+        title = "처음 보는 카드·은행은 계좌 만들기",
+        subtitle = "삼성카드 결제 알림이 왔는데 삼성카드 계좌가 없으면 '삼성카드' 계좌를 만들어 기록해요 (잔액은 자산 탭에서 맞춰 주세요)",
+        icon = Icons.Filled.AccountBalance,
+        checked = settings.autoCreateCaptureAccounts,
+        onCheckedChange = viewModel::setAutoCreateCaptureAccounts,
+        modifier = Modifier.testTag("capture_auto_create_accounts")
+      )
       Text(
-        "알림의 카드·은행 이름과 맞는 계좌가 없을 때 이 계좌에 기록해요.",
+        "기본 등록 계좌: 카드·은행 이름을 알 수 없는 알림(간편결제 등)을 이 계좌에 기록해요.",
         style = MaterialTheme.typography.bodySmall,
         color = Gray600,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)

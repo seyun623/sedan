@@ -378,7 +378,10 @@ class PaymentMessageParser(private val zone: ZoneId) {
       "IBK기업은행" to "IBK기업은행", "기업은행" to "IBK기업은행",
       "카카오뱅크" to "카카오뱅크", "케이뱅크" to "케이뱅크", "토스뱅크" to "토스뱅크",
       "카카오페이" to "카카오페이", "네이버페이" to "네이버페이", "토스페이" to "토스페이", "토스" to "토스",
-      "삼성페이" to "삼성페이"
+      "삼성페이" to "삼성페이",
+      // Bank / card app names (their own notifications often don't repeat the bank's name).
+      "우리WON" to "우리은행", "스타뱅킹" to "KB국민은행", "SOL뱅크" to "신한은행", "하나원큐" to "하나은행",
+      "NH스마트뱅킹" to "NH농협은행", "NH올원뱅크" to "NH농협은행", "i-ONE" to "IBK기업은행", "페이북" to "BC카드"
     )
 
     private val CATEGORY_KEYWORDS: List<Pair<String, List<String>>> = listOf(

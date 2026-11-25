@@ -121,6 +121,7 @@ class SettingsViewModel @Inject constructor(
   fun setNotificationCapture(enabled: Boolean) = viewModelScope.launch { settingsRepo.setNotificationCapture(enabled) }
   fun setSmsCapture(enabled: Boolean) = viewModelScope.launch { settingsRepo.setSmsCapture(enabled) }
   fun setDefaultCaptureAccount(id: Long?) = viewModelScope.launch { settingsRepo.setDefaultCaptureAccount(id) }
+  fun setAutoCreateCaptureAccounts(on: Boolean) = viewModelScope.launch { settingsRepo.setAutoCreateCaptureAccounts(on) }
 
   /** Parses sample text without saving anything (test box on the auto-capture screen). */
   fun previewParse(text: String): ParseResult = capture.preview(text)

@@ -23,13 +23,13 @@ enum class CaptureChannel {
 }
 
 sealed interface CaptureOutcome {
-  data class Recorded(val transactionId: Long, val payment: ParsedPayment, val account: AccountEntity) : CaptureOutcome
+  data class Recorded(val transactionId: Long, val payment: ParsedPayment, val account: AccountEntity, val newAccount: Boolean = false) : CaptureOutcome
   data class CancelledOriginal(val removed: TransactionEntity) : CaptureOutcome
   /** Foreign-currency payment: the user was asked to enter the KRW amount. */
   data class NeedsKrwAmount(val prompt: ForeignPaymentPrompt) : CaptureOutcome
   data class Skipped(val reason: String) : CaptureOutcome
   /** Test run: this is what would be recorded. */
-  data class WouldRecord(val payment: ParsedPayment, val account: AccountEntity) : CaptureOutcome
+  data class WouldRecord(val payment: ParsedPayment, val account: AccountEntity, val newAccount: Boolean = false) : CaptureOutcome
 }
 
 /**
@@ -77,7 +77,12 @@ class AutoCaptureProcessor @Inject constructor(
       // Ordinary chats from KakaoTalk / text apps are not logged at all.
       val gateBlocked = channel == CaptureChannel.NOTIFICATION && FinancialApps.gate(origin, originLabel, title) == FinancialApps.Gate.BLOCKED
       val looksFinancial = parser.detectProvider("$title $body") != null
-      if (!(gateBlocked && !looksFinancial)) {
+      // Ads and app news ("결제/입출금 문구가 없음" without a card company) would bury the real ones.
+      val noise = outcome is CaptureOutcome.Skipped && (
+        outcome.reason.startsWith("광고") ||
+          (!looksFinancial && outcome.reason.startsWith("결제/입출금 문구가 없음"))
+        )
+      if (!(gateBlocked && !looksFinancial) && !noise) {
         val (ok, result) = CaptureLog.describe(outcome)
         l.add(
           CaptureLogEntry(
@@ -113,7 +118,12 @@ class AutoCaptureProcessor @Inject constructor(
         gate = FinancialApps.gate(origin, originLabel, title)
         when (gate) {
           FinancialApps.Gate.BLOCKED -> return CaptureOutcome.Skipped(
-            if (origin == FinancialApps.KAKAO) "카카오톡: 카드사·은행 채널 메시지가 아님" else "금융 앱이 아님"
+            when {
+              origin == FinancialApps.KAKAO && PAY_SERVICE.containsMatchIn(title) ->
+                "결제 서비스 알림(${title.take(12)}) · 같은 결제의 카드사 알림으로 기록돼요"
+              origin == FinancialApps.KAKAO -> "카카오톡: 카드사·은행 채널 메시지가 아님"
+              else -> "금융 앱이 아님"
+            }
           )
           else -> Unit
         }
@@ -126,10 +136,14 @@ class AutoCaptureProcessor @Inject constructor(
     CategoryRules.ignores(rules, title, body)?.let { return CaptureOutcome.Skipped("무시 규칙: ${it.keyword}") }
 
     val result = parser.parse(title, body, receivedAt)
-    val payment = when (result) {
+    val parsed = when (result) {
       is ParseResult.Ignored -> return CaptureOutcome.Skipped(result.reason)
       is ParseResult.Success -> result.payment
     }
+    // A bank / card app's own notification often doesn't repeat the company name: take it from the app.
+    val payment = if (parsed.provider == null && channel == CaptureChannel.NOTIFICATION && gate == FinancialApps.Gate.ALLOWED) {
+      parsed.copy(provider = originLabel?.let { parser.detectProvider(it) } ?: parser.detectProvider(title))
+    } else parsed
     val textLike = channel == CaptureChannel.SMS || gate == FinancialApps.Gate.SMS_APP || gate == FinancialApps.Gate.KAKAO_CHANNEL
     if (textLike && payment.provider == null) {
       return CaptureOutcome.Skipped("카드사/은행 이름이 없는 메시지")
@@ -146,9 +160,9 @@ class AutoCaptureProcessor @Inject constructor(
 
     return db.withTransaction {
       if (payment.kind == PaymentKind.CANCELLATION && dryRun) {
-        val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
-          ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음")
-        return@withTransaction CaptureOutcome.WouldRecord(payment, account)
+        val account = pickAccount(payment, s, dryRun)
+          ?: return@withTransaction CaptureOutcome.Skipped(NO_ACCOUNT)
+        return@withTransaction CaptureOutcome.WouldRecord(payment, account, account.id == 0L)
       }
       if (payment.kind == PaymentKind.CANCELLATION) {
         // The same cancellation can arrive by SMS and by app push: handle it once (±3 minutes).
@@ -161,7 +175,7 @@ class AutoCaptureProcessor @Inject constructor(
         // No matching purchase in the ledger (bought before the app, or entered differently):
         // keep the money as a refund so spending still goes down.
         if (outcome is CaptureOutcome.Skipped && payment.merchant != UNKNOWN_MERCHANT) {
-          val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+          val account = pickAccount(payment, s, dryRun)
           if (account != null) {
             val refund = TransactionEntity(
               type = TransactionType.REFUND,
@@ -197,8 +211,9 @@ class AutoCaptureProcessor @Inject constructor(
         return@withTransaction CaptureOutcome.Skipped("같은 할부 결제가 다른 경로로 이미 등록됨")
       }
 
-      var account = pickAccount(payment, s.autoCaptureDefaultAccountId)
-        ?: return@withTransaction CaptureOutcome.Skipped("등록할 계좌가 없음 (자동 등록 설정에서 기본 계좌를 골라 주세요)")
+      var account = pickAccount(payment, s, dryRun)
+        ?: return@withTransaction CaptureOutcome.Skipped(NO_ACCOUNT)
+      val createdAccount = account.id == lastCreatedId
       // A card bill moves money from a bank account to the card (lowers what the card owes).
       var billTarget: AccountEntity? = null
       if (payment.type == TransactionType.TRANSFER) {
@@ -241,14 +256,14 @@ class AutoCaptureProcessor @Inject constructor(
           toAccountId = billTarget?.id,
           toAccountName = billTarget?.name
         )
-      if (dryRun) return@withTransaction CaptureOutcome.WouldRecord(payment, account)
+      if (dryRun) return@withTransaction CaptureOutcome.WouldRecord(payment, account, account.id == 0L)
       val months = payment.installmentMonths
       val id = if (s.splitInstallments && months != null && months > 1 && payment.type == TransactionType.EXPENSE) {
         InstallmentSplitter.split(tx, months, clock.zone).map { ledger.insertWithEffects(it) }.first()
       } else {
         ledger.insertWithEffects(tx)
       }
-      CaptureOutcome.Recorded(id, payment, account)
+      CaptureOutcome.Recorded(id, payment, account, createdAccount)
     }
   }
 
@@ -286,7 +301,7 @@ class AutoCaptureProcessor @Inject constructor(
     val minute = timestamp / 60_000
     if ((minute - 3..minute + 3).any { keyAt(it) in s.sentCardAlerts }) return CaptureOutcome.Skipped("이미 알린 외화 결제")
     val key = keyAt(minute)
-    val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+    val account = pickAccount(payment, s, dryRun = false)
     val prompt = ForeignPaymentPrompt(
       key = key,
       merchant = payment.merchant,
@@ -324,13 +339,22 @@ class AutoCaptureProcessor @Inject constructor(
     return a.isNotEmpty() && b.isNotEmpty() && (a.contains(b) || b.contains(a.take(b.length)))
   }
 
-  private suspend fun pickAccount(payment: ParsedPayment, defaultId: Long?): AccountEntity? {
+  /** Id of the account the last [pickAccount] call created (to say so in the log). */
+  private var lastCreatedId: Long = -1
+
+  /**
+   * The account for a payment: the card's last digits, then the card company / bank name, then
+   * (when allowed) a new account for that company, then the default account. Must run inside a
+   * DB transaction when it may create. A test run never creates: it returns an unsaved account (id 0).
+   */
+  private suspend fun pickAccount(payment: ParsedPayment, s: com.moneyflow.data.repository.AppSettings, dryRun: Boolean): AccountEntity? {
+    lastCreatedId = -1
     val accounts = db.accountDao().getAll()
-    if (accounts.isEmpty()) return null
     payment.cardLast4?.filter { it.isDigit() }?.takeIf { it.length >= 3 }?.let { digits ->
       accounts.firstOrNull { it.accountNumber.filter(Char::isDigit).endsWith(digits) }?.let { return it }
     }
-    payment.provider?.let { provider ->
+    val provider = payment.provider
+    provider?.let {
       val core = provider.removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크").removeSuffix("페이")
       val wantsCard = provider.endsWith("카드")
       val matches = accounts.filter {
@@ -340,8 +364,30 @@ class AutoCaptureProcessor @Inject constructor(
       (matches.firstOrNull { (it.accountType == AccountType.CREDIT_CARD) == wantsCard } ?: matches.firstOrNull())
         ?.let { return it }
     }
-    defaultId?.let { id -> accounts.firstOrNull { it.id == id }?.let { return it } }
+    if (s.autoCreateCaptureAccounts && provider != null && newAccountType(provider) != null) {
+      val type = newAccountType(provider)!!
+      val fresh = AccountEntity(
+        name = provider,
+        bankName = provider,
+        accountType = type,
+        accountNumber = payment.cardLast4?.filter { it.isDigit() }.orEmpty(),
+        balance = 0,
+        isDebt = type == AccountType.CREDIT_CARD
+      )
+      if (dryRun) return fresh
+      val id = db.accountDao().insert(fresh)
+      lastCreatedId = id
+      return fresh.copy(id = id)
+    }
+    s.autoCaptureDefaultAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { return it } }
     return null
+  }
+
+  /** A card company gets a card account, a bank a bank account; pay services get none (their card pays). */
+  private fun newAccountType(provider: String): AccountType? = when {
+    provider.endsWith("카드") -> AccountType.CREDIT_CARD
+    provider.endsWith("은행") || provider.endsWith("뱅크") || provider in setOf("새마을금고", "신협", "우체국", "농협", "수협") -> AccountType.BANK
+    else -> null
   }
 
   private fun dedupKey(p: ParsedPayment, timestamp: Long): String {
@@ -357,6 +403,8 @@ class AutoCaptureProcessor @Inject constructor(
     const val CANCEL_LOOKBACK_MS = 60L * 24 * 60 * 60_000
     private const val DAY_MS = 24 * 60 * 60_000L
     private const val UNKNOWN_MERCHANT = "알 수 없는 가맹점"
+    private val PAY_SERVICE = Regex("페이|PAY|Pay|pay")
+    const val NO_ACCOUNT = "등록할 계좌가 없음 (자동 등록 설정 → 기본 등록 계좌를 골라 주세요)"
   }
 }
 

@@ -69,10 +69,11 @@ class CaptureLog @Inject constructor(@ApplicationContext private val context: Co
       text.replace(Regex("\\s+"), " ").trim().take(40).map { if (it.isDigit()) '•' else it }.joinToString("")
 
     fun describe(outcome: CaptureOutcome): Pair<Boolean, String> = when (outcome) {
-      is CaptureOutcome.Recorded -> true to "기록됨 · ${outcome.account.name} ${com.moneyflow.util.Formatters.formatCurrency(outcome.payment.amount)}"
+      is CaptureOutcome.Recorded -> true to "기록됨 · ${outcome.account.name} ${com.moneyflow.util.Formatters.formatCurrency(outcome.payment.amount)}" +
+        if (outcome.newAccount) " (새 계좌 '${outcome.account.name}'를 만들었어요 · 잔액은 자산 탭에서 맞춰 주세요)" else ""
       is CaptureOutcome.CancelledOriginal -> true to "취소 반영 · ${outcome.removed.memo} 지움"
       is CaptureOutcome.NeedsKrwAmount -> true to "해외 결제 · 원화 금액 입력 알림 보냄"
-      is CaptureOutcome.WouldRecord -> true to "시험 성공 · ${outcome.account.name}에 ${com.moneyflow.util.Formatters.formatCurrency(outcome.payment.amount)} ${outcome.payment.type.title}으로 기록돼요"
+      is CaptureOutcome.WouldRecord -> true to "시험 성공 · ${outcome.account.name}${if (outcome.newAccount) "(새로 만들 계좌)" else ""}에 ${com.moneyflow.util.Formatters.formatCurrency(outcome.payment.amount)} ${outcome.payment.type.title}으로 기록돼요"
       is CaptureOutcome.Skipped -> false to "건너뜀 · ${outcome.reason}"
     }
 
