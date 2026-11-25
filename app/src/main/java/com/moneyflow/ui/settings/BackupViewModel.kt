@@ -132,6 +132,9 @@ class BackupViewModel @Inject constructor(
   val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
   /** A backup that was opened and is waiting for the user's confirmation to restore. */
+  private val _pendingRestoreOwner = MutableStateFlow<String?>(null)
+  /** The opened backup belongs to this family member (shown as a warning before restoring). */
+  val pendingRestoreOwner: StateFlow<String?> = _pendingRestoreOwner.asStateFlow()
   private val _pendingRestore = MutableStateFlow<BackupContent?>(null)
   val pendingRestore: StateFlow<BackupContent?> = _pendingRestore.asStateFlow()
 
@@ -164,7 +167,9 @@ class BackupViewModel @Inject constructor(
     val bytes = withContext(Dispatchers.IO) {
       context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("파일을 열 수 없어요.")
     }
-    _pendingRestore.value = withContext(Dispatchers.Default) { backups.readBackup(bytes, password.toCharArray()) }
+    val content = withContext(Dispatchers.Default) { backups.readBackup(bytes, password.toCharArray()) }
+    _pendingRestoreOwner.value = backups.familyMemberOf(content)
+    _pendingRestore.value = content
   }
 
   fun cancelRestore() { _pendingRestore.value = null }

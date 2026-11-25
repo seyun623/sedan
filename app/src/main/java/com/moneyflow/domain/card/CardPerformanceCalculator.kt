@@ -9,6 +9,7 @@ import com.moneyflow.domain.MonthKeys
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import com.moneyflow.data.model.spending
 
 /** A 실적 period, inclusive. */
 data class CardPeriod(val start: LocalDate, val end: LocalDate) {
@@ -69,7 +70,7 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
     val from = MonthKeys.dayStartMillis(period.start, zone)
     val to = MonthKeys.dayEndMillis(period.end, zone)
     return txs.filter { tx ->
-      tx.accountId == profile.accountId && tx.type == TransactionType.EXPENSE && tx.timestamp in from..to &&
+      tx.accountId == profile.accountId && tx.type.isSpending && tx.timestamp in from..to &&
         countsToward(profile, tx.category, tx.memo)
     }
   }
@@ -87,7 +88,7 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
   ): CardStatus {
     val period = periodContaining(today, profile.cycleStartDay)
     val counted = countedExpenses(txs, profile, period)
-    val previousPerformance = countedExpenses(txs, profile, previous(period)).sumOf { it.amount }
+    val previousPerformance = countedExpenses(txs, profile, previous(period)).sumOf { it.spending }.coerceAtLeast(0)
     val from = MonthKeys.dayStartMillis(period.start, zone)
     val to = MonthKeys.dayEndMillis(period.end, zone)
     val periodExpenses = txs.filter { it.accountId == profile.accountId && it.type == TransactionType.EXPENSE && it.timestamp in from..to }
@@ -95,7 +96,7 @@ class CardPerformanceCalculator(private val zone: ZoneId) {
       accountId = profile.accountId,
       profile = profile,
       period = period,
-      performance = counted.sumOf { it.amount },
+      performance = counted.sumOf { it.spending }.coerceAtLeast(0),
       previousPerformance = previousPerformance,
       daysLeft = ChronoUnit.DAYS.between(today, period.end).toInt() + 1,
       benefits = benefits.filter { it.isActive && it.accountId == profile.accountId }

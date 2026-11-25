@@ -115,7 +115,7 @@ fun TransferDialog(
         if (!fromLocked) {
           Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             IconButton(onClick = { val f = fromId; fromId = toId; toId = f }) {
-              Icon(Icons.Default.SwapVert, contentDescription = "보내는 계좌와 받는 계좌 바꾸기", tint = TossBlue)
+              Icon(Icons.Default.SwapVert, contentDescription = "보내는 계좌와 받는 계좌 바꾸기", tint = com.moneyflow.ui.theme.TossBlueText)
             }
           }
         } else {

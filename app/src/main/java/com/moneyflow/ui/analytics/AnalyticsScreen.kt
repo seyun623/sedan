@@ -677,7 +677,7 @@ private fun InsightPill(text: String) {
       .padding(12.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Text(text, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = TossBlue)
+    Text(text, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = com.moneyflow.ui.theme.TossBlueText)
   }
 }
 
@@ -716,7 +716,7 @@ private fun TagCard(tags: List<com.moneyflow.util.TagSpend>, periodLabel: String
           .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Text("#${t.tag}", fontWeight = FontWeight.SemiBold, color = TossBlue, modifier = Modifier.weight(1f))
+        Text("#${t.tag}", fontWeight = FontWeight.SemiBold, color = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.weight(1f))
         Text("${t.transactions.size}건 · ", style = MaterialTheme.typography.bodySmall, color = Gray600)
         Text(Formatters.formatCurrency(t.expense), fontWeight = FontWeight.Bold, color = Gray900)
       }

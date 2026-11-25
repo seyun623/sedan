@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import com.moneyflow.data.model.spending
 
 /** What the widget shows. [hidden] = app lock is on and amounts are not shown on the home screen. */
 data class WidgetContent(
@@ -66,14 +67,14 @@ data class WidgetContent(
     /** Pure: totals for [today] from this month's transactions. */
     fun of(monthTxs: List<TransactionEntity>, today: LocalDate, zone: ZoneId, budgetTotal: Long, hidden: Boolean): WidgetContent {
       if (hidden) return WidgetContent(hidden = true)
-      val expenses = monthTxs.filter { it.type == TransactionType.EXPENSE }
+      val expenses = monthTxs.filter { it.type.isSpending }
       val todayStart = MonthKeys.dayStartMillis(today, zone)
       val todayEnd = MonthKeys.dayEndMillis(today, zone)
-      val budgetSpent = expenses.filter { !it.isExcludedFromBudget }.sumOf { it.amount }
+      val budgetSpent = expenses.filter { !it.isExcludedFromBudget }.sumOf { it.spending }.coerceAtLeast(0)
       return WidgetContent(
         hidden = false,
-        today = expenses.filter { it.timestamp in todayStart..todayEnd }.sumOf { it.amount },
-        month = expenses.sumOf { it.amount },
+        today = expenses.filter { it.timestamp in todayStart..todayEnd }.sumOf { it.spending }.coerceAtLeast(0),
+        month = expenses.sumOf { it.spending }.coerceAtLeast(0),
         monthLabel = "${today.monthValue}월",
         remainingBudget = if (budgetTotal > 0) budgetTotal - budgetSpent else null,
         budgetTotal = budgetTotal,

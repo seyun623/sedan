@@ -53,6 +53,7 @@ object CsvExportHelper {
               TransactionType.EXPENSE -> "지출"
               TransactionType.INCOME -> "수입"
               TransactionType.TRANSFER -> "이체"
+              TransactionType.REFUND -> "환불"
             }
             val categoryStr = escapeCsv(tx.category)
             val memoStr = escapeCsv(tx.memo)

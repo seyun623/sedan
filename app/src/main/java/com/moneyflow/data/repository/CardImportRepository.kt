@@ -117,7 +117,24 @@ class CardImportRepository @Inject constructor(
           // Same place only; otherwise just when a single purchase of that amount was made that day.
           val original = candidates.firstOrNull { sameMerchant(it.memo, item.merchant) }
             ?: candidates.filter { kotlin.math.abs(it.timestamp - millis) <= 24 * 3_600_000L }.singleOrNull()
-          original?.let { ledger.deleteWithEffects(it) } != null
+          if (original != null) {
+            ledger.deleteWithEffects(original)
+            true
+          } else {
+            // The purchase isn't in the ledger (e.g. from before using the app): record the money back
+            // as a refund so this card's spending still goes down. Imported once only.
+            val key = "refund-" + dedupKey(account.id, item, 0)
+            if (db.transactionDao().countByDedupKey(key) == 0) {
+              ledger.insertWithEffects(
+                TransactionEntity(
+                  type = TransactionType.REFUND, amount = item.amount, category = categoryFor(item.merchant),
+                  accountId = account.id, timestamp = millis, memo = "${item.merchant} (취소)",
+                  paymentMethod = "카드", source = TransactionSource.CARD_IMPORT, dedupKey = key
+                )
+              )
+              true
+            } else false
+          }
         }
         if (removed) cancelled++ else skipped++
         continue

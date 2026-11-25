@@ -64,10 +64,11 @@ fun TransactionRow(
     TransactionType.EXPENSE -> "-${Formatters.formatCurrency(transaction.amount)}"
     TransactionType.INCOME -> "+${Formatters.formatCurrency(transaction.amount)}"
     TransactionType.TRANSFER -> Formatters.formatCurrency(transaction.amount)
+    TransactionType.REFUND -> "+${Formatters.formatCurrency(transaction.amount)} 환불"
   }
   val amountColor = when (transaction.type) {
     TransactionType.EXPENSE -> com.moneyflow.ui.theme.AccentRedText
-    TransactionType.INCOME -> com.moneyflow.ui.theme.AccentGreenText
+    TransactionType.INCOME, TransactionType.REFUND -> com.moneyflow.ui.theme.AccentGreenText
     TransactionType.TRANSFER -> TossBlue
   }
 

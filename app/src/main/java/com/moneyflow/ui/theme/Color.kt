@@ -109,3 +109,9 @@ val AccentPurpleLight: Color @Composable @ReadOnlyComposable get() = LocalPalett
 /** Green / red for text (amounts): darker in light mode so small text stays readable (≥4.5:1). */
 val AccentGreenText: Color @Composable @ReadOnlyComposable get() = if (LocalPalette.current.isDark) AccentGreen else Color(0xFF00805A)
 val AccentRedText: Color @Composable @ReadOnlyComposable get() = if (LocalPalette.current.isDark) AccentRed else Color(0xFFD22D3B)
+
+/**
+ * Blue for text and icons. The brand blue is too dark to read on dark-mode cards (~3.4:1), so a
+ * lighter blue is used there (≥4.5:1). Filled blue buttons keep [TossBlue] with white text.
+ */
+val TossBlueText: Color @Composable @ReadOnlyComposable get() = if (LocalPalette.current.isDark) Color(0xFF5B9BFF) else TossBlue

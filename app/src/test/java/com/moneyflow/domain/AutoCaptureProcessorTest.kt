@@ -208,4 +208,14 @@ class AutoCaptureProcessorTest {
     assertEquals(samsung.id, t.toAccountId)
     assertEquals(0L, db.accountDao().getById(samsung.id)!!.balance)
   }
+
+  @Test fun aCancellationWithoutThePurchaseIsKeptAsARefund() = runBlocking {
+    val cancel = "[Web발신] 신한카드(1234)승인취소 홍*동 39,000원 11/21 15:00 무신사"
+    processor.process(CaptureChannel.SMS, "15447200", null, "", cancel, clock.nowMillis())
+    processor.process(CaptureChannel.NOTIFICATION, shinhanApp, "신한카드", "", cancel, clock.nowMillis() + 20_000)
+    val t = txs().single()
+    assertEquals(com.moneyflow.data.model.TransactionType.REFUND, t.type)
+    assertEquals(39_000, t.amount)
+    assertEquals(-39_000, db.accountDao().getById(cardId)!!.balance)
+  }
 }

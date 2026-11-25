@@ -500,14 +500,14 @@ private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
             .padding(12.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Icon(Icons.Default.Savings, contentDescription = null, tint = TossBlue, modifier = Modifier.size(20.dp))
+          Icon(Icons.Default.Savings, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(20.dp))
           Spacer(Modifier.width(8.dp))
           Column {
             Text(
               "오늘부터 하루 ${Formatters.formatCurrency(allowance)} 쓸 수 있어요",
               style = MaterialTheme.typography.bodySmall,
               fontWeight = FontWeight.Bold,
-              color = TossBlue
+              color = com.moneyflow.ui.theme.TossBlueText
             )
             Text("남은 ${state.daysLeft}일 기준", style = MaterialTheme.typography.labelSmall, color = Gray600)
           }
@@ -517,9 +517,9 @@ private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
         Spacer(Modifier.weight(1f))
       }
       TextButton(onClick = onEdit, modifier = Modifier.testTag("open_set_budget_dialog_btn")) {
-        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp), tint = TossBlue)
+        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp), tint = com.moneyflow.ui.theme.TossBlueText)
         Spacer(Modifier.width(4.dp))
-        Text("예산 수정", color = TossBlue, fontWeight = FontWeight.Bold)
+        Text("예산 수정", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
       }
     }
   }
@@ -752,9 +752,9 @@ private fun RecurringCard(
     Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       TextButton(onClick = onExecute, modifier = Modifier.testTag("execute_recurring_now_${item.id}")) {
-        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TossBlue, modifier = Modifier.size(18.dp))
+        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(4.dp))
-        Text("지금 기록", color = TossBlue, fontWeight = FontWeight.Bold)
+        Text("지금 기록", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
       }
       Spacer(Modifier.weight(1f))
       IconButton(onClick = onEdit) {
@@ -889,9 +889,9 @@ private fun SectionHeader(
       onClick = onAction,
       modifier = if (actionTestTag != null) Modifier.testTag(actionTestTag) else Modifier
     ) {
-      Icon(actionIcon, contentDescription = null, tint = TossBlue, modifier = Modifier.size(16.dp))
+      Icon(actionIcon, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(16.dp))
       Spacer(Modifier.width(4.dp))
-      Text(actionLabel, color = TossBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+      Text(actionLabel, color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold, maxLines = 1)
     }
   }
 }
@@ -945,7 +945,7 @@ private fun RecurringSuggestionCard(
   onDismiss: () -> Unit
 ) {
   SectionCard(background = TossBlueContainer, modifier = Modifier.testTag("recurring_suggestion")) {
-    Text("매달 반복되는 것 같아요", style = MaterialTheme.typography.labelMedium, color = TossBlue, fontWeight = FontWeight.Bold)
+    Text("매달 반복되는 것 같아요", style = MaterialTheme.typography.labelMedium, color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(4.dp))
     Text(s.title, fontWeight = FontWeight.Bold, color = Gray900)
     Text(
@@ -954,7 +954,7 @@ private fun RecurringSuggestionCard(
     )
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
       TextButton(onClick = onDismiss) { Text("아니에요", color = Gray600) }
-      TextButton(onClick = onAccept) { Text("고정 거래로 등록", fontWeight = FontWeight.Bold, color = TossBlue) }
+      TextButton(onClick = onAccept) { Text("고정 거래로 등록", fontWeight = FontWeight.Bold, color = com.moneyflow.ui.theme.TossBlueText) }
     }
   }
 }

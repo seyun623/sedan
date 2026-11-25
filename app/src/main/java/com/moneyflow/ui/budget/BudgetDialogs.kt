@@ -632,7 +632,7 @@ internal fun GoalDialog(
         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("goal_date_button"),
         shape = RoundedCornerShape(12.dp)
       ) {
-        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = TossBlue)
+        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText)
         Spacer(Modifier.width(8.dp))
         Text(
           text = targetEpochDay?.let { LocalDate.ofEpochDay(it).format(dateLabelFormat) } ?: "날짜 선택",

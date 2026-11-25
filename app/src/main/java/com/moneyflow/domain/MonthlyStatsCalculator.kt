@@ -4,6 +4,7 @@ import com.moneyflow.data.model.CategoryBudgetProgress
 import com.moneyflow.data.model.FinanceCategories
 import com.moneyflow.data.model.TransactionEntity
 import com.moneyflow.data.model.TransactionType
+import com.moneyflow.data.model.spending
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -24,18 +25,19 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
   fun totalIncome(txs: List<TransactionEntity>): Long =
     txs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
 
-  fun totalExpense(txs: List<TransactionEntity>): Long =
-    txs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+  /** Spending: purchases minus refunds. */
+  fun totalExpense(txs: List<TransactionEntity>): Long = txs.sumOf { it.spending }.coerceAtLeast(0)
 
   fun budgetExpense(txs: List<TransactionEntity>): Long =
-    txs.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }.sumOf { it.amount }
+    txs.filter { !it.isExcludedFromBudget }.sumOf { it.spending }.coerceAtLeast(0)
 
   fun categoryBreakdown(txs: List<TransactionEntity>): List<CategorySpend> {
-    val expenses = txs.filter { it.type == TransactionType.EXPENSE }
-    val total = expenses.sumOf { it.amount }
-    return expenses.groupBy { it.category }
-      .map { (cat, list) ->
-        val amount = list.sumOf { it.amount }
+    // Refunds lower their category; a category with nothing left is not shown.
+    val byCategory = txs.filter { it.type.isSpending }.groupBy { it.category }
+      .mapValues { (_, l) -> l.sumOf { it.spending } }.filterValues { it > 0 }
+    val total = byCategory.values.sum()
+    return byCategory
+      .map { (cat, amount) ->
         CategorySpend(
           category = cat,
           amount = amount,
@@ -51,9 +53,9 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
     limits: Map<String, Long>
   ): List<CategoryBudgetProgress> {
     val spentByCategory = txs
-      .filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }
+      .filter { it.type.isSpending && !it.isExcludedFromBudget }
       .groupBy { it.category }
-      .mapValues { (_, list) -> list.sumOf { it.amount } }
+      .mapValues { (_, list) -> list.sumOf { it.spending }.coerceAtLeast(0) }
     return FinanceCategories.expenseCategories.map { (cat, color) ->
       val limit = limits[cat] ?: 0L
       val spent = spentByCategory[cat] ?: 0L
@@ -75,11 +77,11 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
   fun weekdaySpend(txs: List<TransactionEntity>): List<Pair<String, Long>> {
     val labels = listOf("월", "화", "수", "목", "금", "토", "일")
     val sums = LongArray(7)
-    txs.filter { it.type == TransactionType.EXPENSE }.forEach {
+    txs.filter { it.type.isSpending }.forEach {
       val dow = MonthKeys.toLocalDate(it.timestamp, zone).dayOfWeek
-      sums[dow.value - DayOfWeek.MONDAY.value] += it.amount
+      sums[dow.value - DayOfWeek.MONDAY.value] += it.spending
     }
-    return labels.mapIndexed { i, l -> l to sums[i] }
+    return labels.mapIndexed { i, l -> l to sums[i].coerceAtLeast(0) }
   }
 
   /** Real expense totals for the [count] months ending at [endMonth]. No placeholder values. */
@@ -91,12 +93,13 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
   ): List<MonthlyTrendItem> {
     val items = (count - 1 downTo 0).map { offset ->
       val m = endMonth.minusMonths(offset.toLong())
-      val expenses = inMonth(all, m).filter { it.type == TransactionType.EXPENSE }
+      val monthTxs = inMonth(all, m)
+      val expenses = monthTxs.filter { it.type == TransactionType.EXPENSE }
       MonthlyTrendItem(
         monthKey = MonthKeys.of(m),
         monthLabel = "${m.monthValue}월",
         fullDisplay = "${m.year}년 ${m.monthValue}월",
-        totalExpense = expenses.sumOf { it.amount },
+        totalExpense = totalExpense(monthTxs),
         transactionCount = expenses.size,
         isCurrentMonth = m == currentMonth
       )
@@ -117,16 +120,16 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
 
   fun weeklyProgress(txs: List<TransactionEntity>, month: YearMonth): List<WeeklyProgressItem> {
     val maxDays = month.lengthOfMonth()
-    val expenses = txs.filter { it.type == TransactionType.EXPENSE }
-      .map { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth to it.amount }
+    val expenses = txs.filter { it.type.isSpending }
+      .map { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth to it.spending }
     return (1..(maxDays + 6) / 7).map { week ->
       val startDay = (week - 1) * 7 + 1
       val endDay = (week * 7).coerceAtMost(maxDays)
       val inWeek = expenses.filter { it.first in startDay..endDay }
       WeeklyProgressItem(
         weekLabel = "${week}주차",
-        totalExpense = inWeek.sumOf { it.second },
-        transactionCount = inWeek.size,
+        totalExpense = inWeek.sumOf { it.second }.coerceAtLeast(0),
+        transactionCount = inWeek.count { it.second > 0 },
         dateRangeLabel = "${month.monthValue}.$startDay ~ ${month.monthValue}.$endDay"
       )
     }
@@ -146,9 +149,10 @@ class MonthlyStatsCalculator(private val zone: ZoneId) {
 
   /** Expense per day-of-month (for the calendar view). */
   fun dailyExpense(txs: List<TransactionEntity>): Map<Int, Long> =
-    txs.filter { it.type == TransactionType.EXPENSE }
+    txs.filter { it.type.isSpending }
       .groupBy { MonthKeys.toLocalDate(it.timestamp, zone).dayOfMonth }
-      .mapValues { (_, l) -> l.sumOf { it.amount } }
+      .mapValues { (_, l) -> l.sumOf { it.spending } }
+      .filterValues { it > 0 }
 
   /** Days in the month used for daily averages: elapsed days for the current month. */
   fun elapsedDays(month: YearMonth, today: LocalDate): Int = when {

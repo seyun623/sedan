@@ -186,7 +186,7 @@ fun MonthSwitcher(
       Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "다음 달", tint = Gray900)
     }
     if (showToday) {
-      TextButton(onClick = onToday) { Text("이번 달", color = TossBlue, fontWeight = FontWeight.Bold) }
+      TextButton(onClick = onToday) { Text("이번 달", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold) }
     }
   }
 }

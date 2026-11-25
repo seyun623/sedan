@@ -261,7 +261,7 @@ fun TransactionFormScreen(
       timestamp = timestamp,
       memo = memo,
       paymentMethod = paymentMethod,
-      isExcludedFromBudget = type == TransactionType.EXPENSE && excludeFromBudget,
+      isExcludedFromBudget = type.isSpending && excludeFromBudget,
       keepOpen = keepOpen,
       installmentMonths = if (type == TransactionType.EXPENSE && !isEditMode) installmentMonths else 0
     )
@@ -510,7 +510,7 @@ fun TransactionFormScreen(
                 )
               }
             }
-            if (type == TransactionType.EXPENSE) {
+            if (type.isSpending) {
               Spacer(Modifier.height(8.dp))
               ExcludeFromBudgetRow(checked = excludeFromBudget, onCheckedChange = { excludeFromBudget = it })
             }
@@ -539,7 +539,7 @@ fun TransactionFormScreen(
             showDatePicker = false
           },
           modifier = Modifier.testTag("date_picker_confirm_button")
-        ) { Text("확인", color = TossBlue, fontWeight = FontWeight.Bold) }
+        ) { Text("확인", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold) }
       },
       dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("취소", color = Gray600) } },
       colors = DatePickerDefaults.colors(containerColor = CardSurface)
@@ -566,7 +566,7 @@ fun TransactionFormScreen(
             showTimePicker = false
           },
           modifier = Modifier.testTag("time_picker_confirm_button")
-        ) { Text("확인", color = TossBlue, fontWeight = FontWeight.Bold) }
+        ) { Text("확인", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold) }
       },
       dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("취소", color = Gray600) } }
     )
@@ -655,7 +655,7 @@ private fun FormActionBar(
           shape = RoundedCornerShape(14.dp),
           modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("form_save_and_continue_button")
         ) {
-          Text("저장 후 계속 입력", fontWeight = FontWeight.Bold, color = TossBlue, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+          Text("저장 후 계속 입력", fontWeight = FontWeight.Bold, color = com.moneyflow.ui.theme.TossBlueText, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
       }
       Button(
@@ -810,7 +810,7 @@ private fun AiSuggestionPanel(
             Text(
               rec.suggestedPaymentMethod,
               style = MaterialTheme.typography.labelSmall,
-              color = TossBlue,
+              color = com.moneyflow.ui.theme.TossBlueText,
               fontWeight = FontWeight.Bold,
               maxLines = 1,
               modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)

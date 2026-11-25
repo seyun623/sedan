@@ -158,7 +158,7 @@ class LedgerRepository @Inject constructor(
     if (from != null) {
       val delta = when (tx.type) {
         TransactionType.EXPENSE, TransactionType.TRANSFER -> if (from.isDebt) amount else -amount
-        TransactionType.INCOME -> if (from.isDebt) -amount else amount
+        TransactionType.INCOME, TransactionType.REFUND -> if (from.isDebt) -amount else amount
       }
       accountDao.adjustBalance(from.id, delta)
     }

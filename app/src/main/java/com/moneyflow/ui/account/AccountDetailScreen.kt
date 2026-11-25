@@ -284,7 +284,7 @@ fun AccountDetailScreen(
       onDismissRequest = { errorMessage = null },
       title = { Text("처리하지 못했어요", fontWeight = FontWeight.Bold) },
       text = { Text(message) },
-      confirmButton = { TextButton(onClick = { errorMessage = null }) { Text("확인", color = TossBlue) } }
+      confirmButton = { TextButton(onClick = { errorMessage = null }) { Text("확인", color = com.moneyflow.ui.theme.TossBlueText) } }
     )
   }
 }

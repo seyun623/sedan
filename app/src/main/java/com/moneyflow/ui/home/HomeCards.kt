@@ -92,7 +92,7 @@ internal fun LockTipCard(onOpenSecurity: () -> Unit, onDismiss: () -> Unit) {
         .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      Icon(Icons.Filled.Lock, contentDescription = null, tint = TossBlue, modifier = Modifier.size(20.dp))
+      Icon(Icons.Filled.Lock, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(20.dp))
       Spacer(Modifier.width(12.dp))
       Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
         Text("앱 잠금을 켜 보세요", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleSmall)
@@ -313,8 +313,8 @@ internal fun SpendingSummaryCard(
         onClick = onNavigateToAnalytics,
         modifier = Modifier.align(Alignment.End).testTag("home_analytics_link")
       ) {
-        Text("소비분석 보기", color = TossBlue, fontWeight = FontWeight.Bold)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = TossBlue)
+        Text("소비분석 보기", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText)
       }
     }
   }
@@ -404,7 +404,7 @@ private fun BudgetPrompt(onNavigateToBudget: () -> Unit) {
       .testTag("home_set_budget_prompt"),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Icon(Icons.Filled.Tune, contentDescription = null, tint = TossBlue, modifier = Modifier.size(20.dp))
+    Icon(Icons.Filled.Tune, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(20.dp))
     Spacer(Modifier.width(10.dp))
     Column(Modifier.weight(1f)) {
       Text("예산을 설정해 보세요", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Gray900)
@@ -552,7 +552,7 @@ internal fun CardGuideCard(
         ) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.label, fontWeight = FontWeight.SemiBold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(names[best.accountId] ?: "카드", fontWeight = FontWeight.Bold, color = TossBlue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(names[best.accountId] ?: "카드", fontWeight = FontWeight.Bold, color = com.moneyflow.ui.theme.TossBlueText, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
           Text(
             buildString {

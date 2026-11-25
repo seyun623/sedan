@@ -105,7 +105,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
     val category = when (type) {
       TransactionType.TRANSFER -> FinanceCategories.CARD_PAYMENT
       TransactionType.INCOME -> classifyIncome(text)
-      TransactionType.EXPENSE -> classify(merchant, text)
+      TransactionType.EXPENSE, TransactionType.REFUND -> classify(merchant, text)
     }
     return ParseResult.Success(
       ParsedPayment(

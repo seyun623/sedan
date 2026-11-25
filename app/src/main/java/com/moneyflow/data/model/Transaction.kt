@@ -8,7 +8,12 @@ import androidx.room.PrimaryKey
 enum class TransactionType(val title: String) {
   EXPENSE("지출"),
   INCOME("수입"),
-  TRANSFER("이체")
+  TRANSFER("이체"),
+  /** Money back for a purchase (returned goods, cancelled order): lowers spending in its category. */
+  REFUND("환불");
+
+  /** Counts as spending (a refund is negative spending). */
+  val isSpending: Boolean get() = this == EXPENSE || this == REFUND
 }
 
 /** Where a transaction came from. Stored as its name. */
@@ -61,7 +66,7 @@ object FinanceCategories {
   )
 
   fun categoriesFor(type: TransactionType): List<String> = when (type) {
-    TransactionType.EXPENSE -> expenseCategories.map { it.first }
+    TransactionType.EXPENSE, TransactionType.REFUND -> expenseCategories.map { it.first }
     TransactionType.INCOME -> incomeCategories.map { it.first }
     TransactionType.TRANSFER -> transferCategories.map { it.first }
   }
@@ -103,3 +108,11 @@ data class TransactionEntity(
   val recurringId: Long? = null,
   val goalId: Long? = null
 )
+
+/** Spending of a record: a purchase counts +amount, a refund -amount, anything else 0. */
+val TransactionEntity.spending: Long
+  get() = when (type) {
+    TransactionType.EXPENSE -> amount
+    TransactionType.REFUND -> -amount
+    else -> 0L
+  }

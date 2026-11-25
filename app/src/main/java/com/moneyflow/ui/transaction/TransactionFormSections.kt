@@ -71,7 +71,7 @@ internal val PAYMENT_METHODS = listOf("체크카드", "신용카드", "계좌이
 
 internal fun TransactionType.accentColor(): Color = when (this) {
   TransactionType.EXPENSE -> AccentRed
-  TransactionType.INCOME -> AccentGreen
+  TransactionType.INCOME, TransactionType.REFUND -> AccentGreen
   TransactionType.TRANSFER -> TossBlue
 }
 
@@ -133,6 +133,10 @@ internal fun TypeSegmentedControl(selected: TransactionType, onSelect: (Transact
 private data class QuickTemplate(val label: String, val amount: Long, val category: String, val memo: String, val paymentMethod: String)
 
 private fun templatesFor(type: TransactionType): List<QuickTemplate> = when (type) {
+  TransactionType.REFUND -> listOf(
+    QuickTemplate("🛍 쇼핑 반품", 30000L, "쇼핑", "반품 환불", "신용카드"),
+    QuickTemplate("📦 주문 취소", 20000L, "쇼핑", "주문 취소 환불", "간편결제")
+  )
   TransactionType.EXPENSE -> listOf(
     QuickTemplate("☕ 커피", 4500L, "카페/간식", "커피", "체크카드"),
     QuickTemplate("🍱 점심 식사", 10000L, "식비", "점심 식사", "체크카드"),
@@ -175,7 +179,7 @@ internal fun QuickTemplatesCard(
         ) {
           Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(tpl.label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Gray900, maxLines = 1)
-            Text(Formatters.formatCurrency(tpl.amount), style = MaterialTheme.typography.labelSmall, color = TossBlue, maxLines = 1)
+            Text(Formatters.formatCurrency(tpl.amount), style = MaterialTheme.typography.labelSmall, color = com.moneyflow.ui.theme.TossBlueText, maxLines = 1)
           }
         }
       }
@@ -216,14 +220,14 @@ internal fun DateTimeCard(
     Spacer(Modifier.height(8.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       PickerButton(
-        icon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = TossBlue, modifier = Modifier.size(18.dp)) },
+        icon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(18.dp)) },
         text = Formatters.formatDayHeader(timestamp),
         onClickLabel = "날짜 선택",
         onClick = onPickDate,
         modifier = Modifier.weight(1.4f).testTag("open_date_picker_button")
       )
       PickerButton(
-        icon = { Icon(Icons.Default.AccessTime, contentDescription = null, tint = TossBlue, modifier = Modifier.size(18.dp)) },
+        icon = { Icon(Icons.Default.AccessTime, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(18.dp)) },
         text = Formatters.formatTime(timestamp),
         onClickLabel = "시간 선택",
         onClick = onPickTime,

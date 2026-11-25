@@ -103,7 +103,7 @@ fun DeviceLockScreen(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Box(Modifier.size(72.dp).background(TossBlueContainer, CircleShape), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.Lock, contentDescription = null, tint = TossBlue, modifier = Modifier.size(36.dp))
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(36.dp))
       }
       Spacer(Modifier.height(16.dp))
       Text("머니플로우가 잠겨 있어요", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gray900, textAlign = TextAlign.Center)

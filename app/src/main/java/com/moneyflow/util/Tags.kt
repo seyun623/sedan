@@ -2,6 +2,7 @@ package com.moneyflow.util
 
 import com.moneyflow.data.model.TransactionEntity
 import com.moneyflow.data.model.TransactionType
+import com.moneyflow.data.model.spending
 
 /** Spending of one #tag. */
 data class TagSpend(val tag: String, val expense: Long, val income: Long, val transactions: List<TransactionEntity>)
@@ -20,7 +21,7 @@ object Tags {
       .map { (tag, list) ->
         TagSpend(
           tag,
-          list.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+          list.sumOf { it.spending }.coerceAtLeast(0),
           list.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
           list.sortedByDescending { it.timestamp }
         )

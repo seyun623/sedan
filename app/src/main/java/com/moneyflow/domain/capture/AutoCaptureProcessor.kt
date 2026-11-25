@@ -88,8 +88,30 @@ class AutoCaptureProcessor @Inject constructor(
         if ((minute - 3..minute + 3).any { cancelKey(it) in s.sentCardAlerts }) {
           return@withTransaction CaptureOutcome.Skipped("이미 처리한 취소")
         }
-        val outcome = cancelOriginal(payment, timestamp)
-        if (outcome is CaptureOutcome.CancelledOriginal) settings.markAlertsSent(listOf(cancelKey(minute)))
+        var outcome = cancelOriginal(payment, timestamp)
+        // No matching purchase in the ledger (bought before the app, or entered differently):
+        // keep the money as a refund so spending still goes down.
+        if (outcome is CaptureOutcome.Skipped && payment.merchant != UNKNOWN_MERCHANT) {
+          val account = pickAccount(payment, s.autoCaptureDefaultAccountId)
+          if (account != null) {
+            val refund = TransactionEntity(
+              type = TransactionType.REFUND,
+              amount = payment.amount,
+              category = CategoryRules.categoryFor(rules, TransactionType.EXPENSE, payment.merchant)
+                ?: db.transactionDao().lastCategoryFor(TransactionType.EXPENSE, payment.merchant)
+                  ?.takeIf { it in com.moneyflow.data.model.FinanceCategories.categoriesFor(TransactionType.EXPENSE) }
+                ?: payment.category,
+              accountId = account.id,
+              timestamp = timestamp,
+              memo = "${payment.merchant} (승인취소)",
+              paymentMethod = if (account.accountType == AccountType.CREDIT_CARD) "카드" else "계좌이체",
+              source = if (channel == CaptureChannel.SMS) TransactionSource.SMS else TransactionSource.NOTIFICATION,
+              dedupKey = "refund|" + cancelKey(minute)
+            )
+            outcome = CaptureOutcome.Recorded(ledger.insertWithEffects(refund), payment, account)
+          }
+        }
+        if (outcome !is CaptureOutcome.Skipped) settings.markAlertsSent(listOf(cancelKey(minute)))
         return@withTransaction outcome
       }
 

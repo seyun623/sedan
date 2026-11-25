@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import com.moneyflow.data.model.spending
 
 @Composable
 fun LedgerScreen(
@@ -230,11 +231,11 @@ private fun LedgerHeader(
           Icon(
             imageVector = if (state.filters.isCalendarView) Icons.AutoMirrored.Filled.FormatListBulleted else Icons.Default.CalendarMonth,
             contentDescription = if (state.filters.isCalendarView) "목록으로 보기" else "달력으로 보기",
-            tint = TossBlue
+            tint = com.moneyflow.ui.theme.TossBlueText
           )
         }
         IconButton(onClick = onExportCsv, modifier = Modifier.testTag("ledger_export_csv_button")) {
-          Icon(Icons.Default.FileDownload, contentDescription = "CSV로 내보내기", tint = TossBlue)
+          Icon(Icons.Default.FileDownload, contentDescription = "CSV로 내보내기", tint = com.moneyflow.ui.theme.TossBlueText)
         }
       }
 
@@ -277,7 +278,7 @@ private fun LedgerHeader(
 
 @Composable
 private fun DayHeader(dayTxs: List<TransactionEntity>) {
-  val dayExpense = dayTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+  val dayExpense = dayTxs.sumOf { it.spending }.coerceAtLeast(0)
   val dayIncome = dayTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
   Row(
     modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 2.dp),

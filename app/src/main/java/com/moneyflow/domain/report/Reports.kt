@@ -60,7 +60,7 @@ object NetWorthHistory {
     debt[tx.accountId]?.let { isDebt ->
       val delta = when (tx.type) {
         TransactionType.EXPENSE, TransactionType.TRANSFER -> if (isDebt) a else -a
-        TransactionType.INCOME -> if (isDebt) -a else a
+        TransactionType.INCOME, TransactionType.REFUND -> if (isDebt) -a else a
       }
       balance[tx.accountId] = balance.getValue(tx.accountId) - delta
     }

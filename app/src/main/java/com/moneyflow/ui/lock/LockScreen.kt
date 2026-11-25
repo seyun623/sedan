@@ -179,7 +179,7 @@ fun LockScreen(
       Box(
         Modifier.size(72.dp).background(TossBlueContainer, CircleShape),
         contentAlignment = Alignment.Center
-      ) { Icon(Icons.Filled.Lock, contentDescription = null, tint = TossBlue, modifier = Modifier.size(36.dp)) }
+      ) { Icon(Icons.Filled.Lock, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(36.dp)) }
       Spacer(Modifier.height(16.dp))
       Text("머니플로우 잠금", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Gray900)
       Spacer(Modifier.height(6.dp))
@@ -238,8 +238,8 @@ fun LockScreen(
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (canUseBiometric) {
           TextButton(onClick = ::promptBiometric, modifier = Modifier.testTag("lock_biometric_button")) {
-            Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = TossBlue)
-            Text(" 생체 인증", color = TossBlue, fontWeight = FontWeight.Bold)
+            Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText)
+            Text(" 생체 인증", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
           }
         }
         TextButton(

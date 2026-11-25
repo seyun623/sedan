@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.moneyflow.data.model.spending
 
 /** Works out which budget / summary / backup reminders are due now. */
 @Singleton
@@ -44,10 +45,10 @@ class ReminderChecker @Inject constructor(
 
     if (s.budgetAlertsEnabled) {
       val txs = dao.getBetween(MonthKeys.startMillis(month, zone), MonthKeys.endMillis(month, zone))
-      val budgetTxs = txs.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }
+      val budgetTxs = txs.filter { it.type.isSpending && !it.isExcludedFromBudget }
       out += BudgetReminders.due(
-        month, budgets.observeBudget(month).first(), budgetTxs.sumOf { it.amount },
-        budgetTxs.groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.amount } }, sent
+        month, budgets.observeBudget(month).first(), stats.budgetExpense(txs),
+        budgetTxs.groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.spending }.coerceAtLeast(0) }, sent
       )
     }
     if (s.monthlySummaryEnabled) {

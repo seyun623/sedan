@@ -106,6 +106,14 @@ class BackupRepository @Inject constructor(
     return bytes
   }
 
+  /**
+   * Name of the family member whose phone made this backup, when it is one of the family copies
+   * loaded on this phone (restoring it would replace my records with theirs).
+   */
+  suspend fun familyMemberOf(content: BackupContent): String? =
+    content.deviceId.takeIf { it.isNotEmpty() && it != settings.installId() }
+      ?.let { db.familyDao().byDevice(it)?.name }
+
   /** Decrypts and validates a backup file. Throws WrongPasswordException / NotABackupFileException / BackupFormatException. */
   fun readBackup(file: ByteArray, password: CharArray): BackupContent {
     val text = BackupCrypto.decrypt(file, password).toString(Charsets.UTF_8)

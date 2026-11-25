@@ -392,7 +392,7 @@ private fun SharedGoalRow(g: com.moneyflow.data.repository.SharedGoal) {
   Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("shared_goal")) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(g.title, fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-      Text("${(g.progress * 100).toInt()}%", fontWeight = FontWeight.Bold, color = TossBlue)
+      Text("${(g.progress * 100).toInt()}%", fontWeight = FontWeight.Bold, color = com.moneyflow.ui.theme.TossBlueText)
     }
     LinearProgressIndicator(progress = { g.progress }, color = TossBlue, trackColor = Gray200, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
     Text(

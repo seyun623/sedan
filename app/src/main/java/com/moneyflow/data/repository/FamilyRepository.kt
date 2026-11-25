@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import java.time.YearMonth
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.moneyflow.data.model.spending
 
 class FamilyImportException(message: String) : Exception(message)
 
@@ -176,7 +177,7 @@ class FamilyRepository @Inject constructor(
       val me = FamilyPersonTotal(
         null, "나",
         mine.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
-        mine.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+        mine.sumOf { it.spending }.coerceAtLeast(0),
         null
       )
       val others = members.map { m ->
@@ -184,22 +185,22 @@ class FamilyRepository @Inject constructor(
         FamilyPersonTotal(
           m.id, m.name,
           list.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
-          list.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+          list.sumOf { it.spending }.coerceAtLeast(0),
           m.backupCreatedAt
         )
       }
       val names = members.associate { it.id to it.name }
       // (category, person, amount) for every expense of everyone.
-      val rows = mine.filter { it.type == TransactionType.EXPENSE }.map { Triple(it.category, "나", it.amount) } +
-        family.filter { it.type == TransactionType.EXPENSE }.map { Triple(it.category, names[it.memberId] ?: "가족", it.amount) }
+      val rows = mine.filter { it.type.isSpending }.map { Triple(it.category, "나", it.spending) } +
+        family.filter { it.type.isSpending }.map { Triple(it.category, names[it.memberId] ?: "가족", it.spending) }
       val categories = rows.groupBy { it.first }.map { (c, list) ->
         FamilyCategory(
           c, list.sumOf { it.third },
-          list.groupBy { it.second }.map { (p, l) -> p to l.sumOf { it.third } }.sortedByDescending { it.second }
+          list.groupBy { it.second }.map { (p, l) -> p to l.sumOf { it.third } }.filter { it.second > 0 }.sortedByDescending { it.second }
         )
-      }.sortedByDescending { it.total }
-      val budgetExpense = mine.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }.sumOf { it.amount } +
-        family.filter { it.type == TransactionType.EXPENSE && !it.isExcludedFromBudget }.sumOf { it.amount }
+      }.filter { it.total > 0 }.sortedByDescending { it.total }
+      val budgetExpense = (mine.filter { !it.isExcludedFromBudget }.sumOf { it.spending } +
+        family.filter { !it.isExcludedFromBudget }.sumOf { it.spending }).coerceAtLeast(0)
       FamilyMonth(month, listOf(me) + others, categories, s.familyBudget, budgetExpense)
     }
   }

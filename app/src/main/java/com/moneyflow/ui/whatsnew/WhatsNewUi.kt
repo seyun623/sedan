@@ -36,7 +36,7 @@ fun WhatsNewDialog(notes: List<ReleaseNote>, onDismiss: () -> Unit) {
         notes.forEachIndexed { i, note ->
           if (notes.size > 1) {
             if (i > 0) Spacer(Modifier.height(12.dp))
-            Text(note.version, fontWeight = FontWeight.Bold, color = TossBlue)
+            Text(note.version, fontWeight = FontWeight.Bold, color = com.moneyflow.ui.theme.TossBlueText)
           }
           NoteItems(note)
         }

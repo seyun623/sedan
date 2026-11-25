@@ -291,6 +291,7 @@ fun BackupScreen(
     )
   }
 
+  val restoreOwner by viewModel.pendingRestoreOwner.collectAsStateWithLifecycle()
   pending?.let { content ->
     val s = content.summary
     if (!confirmRestore) {
@@ -302,6 +303,13 @@ fun BackupScreen(
             Text("만든 날짜: ${Formatters.formatDateTime(s.createdAt)}")
             Text("계좌 ${s.accountCount}개 · 거래 ${s.transactionCount}건")
             Text("저축 목표 ${s.goalCount}개 · 고정 거래 ${s.recurringCount}개")
+            restoreOwner?.let { owner ->
+              Text(
+                "⚠ 이 파일은 가족 '$owner'님의 휴대폰에서 만든 백업이에요. 복원하면 이 휴대폰의 기록이 $owner 님의 기록으로 바뀌어요. 가족 기록을 보려는 거라면 '가족 가계부 보기'를 써 주세요.",
+                color = com.moneyflow.ui.theme.AccentRedText, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp).testTag("restore_other_person_warning")
+              )
+            }
           }
         },
         confirmButton = { TextButton(onClick = { confirmRestore = true }) { Text("복원하기", fontWeight = FontWeight.Bold) } },

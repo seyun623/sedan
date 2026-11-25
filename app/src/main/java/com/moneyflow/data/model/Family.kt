@@ -48,3 +48,11 @@ data class FamilyGoalEntity(
   val currentAmount: Long,
   val targetDate: Long
 )
+
+/** Same as [TransactionEntity.spending] for a family member's copy. */
+val FamilyTransactionEntity.spending: Long
+  get() = when (type) {
+    TransactionType.EXPENSE -> amount
+    TransactionType.REFUND -> -amount
+    else -> 0L
+  }

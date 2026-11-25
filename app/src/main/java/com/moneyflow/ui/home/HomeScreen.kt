@@ -110,7 +110,7 @@ fun HomeScreen(
               modifier = Modifier.testTag("home_onboarding")
             )
             TextButton(onClick = onOpenBackup, modifier = Modifier.testTag("home_restore_backup")) {
-              Text("백업 파일에서 복원하기", color = TossBlue, fontWeight = FontWeight.SemiBold)
+              Text("백업 파일에서 복원하기", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.SemiBold)
             }
             TextButton(onClick = viewModel::loadSampleData, modifier = Modifier.testTag("home_load_sample")) {
               Text("샘플 데이터로 둘러보기", color = Gray600, fontWeight = FontWeight.SemiBold)
@@ -178,7 +178,7 @@ fun HomeScreen(
           modifier = Modifier.weight(1f)
         )
         TextButton(onClick = onNavigateToLedger, modifier = Modifier.testTag("home_view_all_transactions")) {
-          Text("전체 보기", color = TossBlue, fontWeight = FontWeight.Bold)
+          Text("전체 보기", color = com.moneyflow.ui.theme.TossBlueText, fontWeight = FontWeight.Bold)
         }
       }
     }

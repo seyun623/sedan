@@ -165,7 +165,8 @@ internal fun LedgerFilterBar(
           null to "전체",
           TransactionType.EXPENSE to "지출",
           TransactionType.INCOME to "수입",
-          TransactionType.TRANSFER to "이체"
+          TransactionType.TRANSFER to "이체",
+          TransactionType.REFUND to "환불"
         )
         options.forEach { (type, label) ->
           val selected = filters.type == type
@@ -173,6 +174,7 @@ internal fun LedgerFilterBar(
             TransactionType.EXPENSE -> AccentRed
             TransactionType.INCOME -> AccentGreen
             TransactionType.TRANSFER -> TossBlue
+            TransactionType.REFUND -> AccentGreen
             null -> Gray900
           }
           Surface(
@@ -335,14 +337,14 @@ internal fun LedgerFilterBar(
             .testTag("filter_summary_banner"),
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Icon(Icons.Default.FilterAlt, contentDescription = null, tint = TossBlue, modifier = Modifier.size(16.dp))
+          Icon(Icons.Default.FilterAlt, contentDescription = null, tint = com.moneyflow.ui.theme.TossBlueText, modifier = Modifier.size(16.dp))
           Spacer(Modifier.width(6.dp))
           Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
             Text(
               "검색 결과 ${state.transactions.size}건 · ${state.dateRangeLabel}",
               style = MaterialTheme.typography.labelLarge,
               fontWeight = FontWeight.Bold,
-              color = TossBlue,
+              color = com.moneyflow.ui.theme.TossBlueText,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis
             )

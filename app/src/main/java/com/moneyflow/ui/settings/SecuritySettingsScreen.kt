@@ -332,7 +332,7 @@ private fun PinFlowDialog(
         Icon(
           if (flow == PinFlow.DISABLE) Icons.Filled.LockOpen else Icons.Filled.Lock,
           contentDescription = null,
-          tint = TossBlue
+          tint = com.moneyflow.ui.theme.TossBlueText
         )
         Spacer(Modifier.height(12.dp))
         Text(prompt, style = MaterialTheme.typography.titleMedium, color = Gray900, textAlign = TextAlign.Center)

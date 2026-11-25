@@ -88,12 +88,45 @@ object TableFileReader {
   // ---- HTML table ("xls" saved by many Korean sites) -----------------------------------------
 
   private val ROW = Regex("<tr[^>]*>(.*?)</tr>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-  private val CELL = Regex("<t[dh][^>]*>(.*?)</t[dh]>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+  private val CELL = Regex("<t[dh]([^>]*)>(.*?)</t[dh]>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
   private val TAG = Regex("<[^>]+>")
   private val BR = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
+  private val ROWSPAN = Regex("rowspan\\s*=\\s*[\"']?(\\d+)", RegexOption.IGNORE_CASE)
+  private val COLSPAN = Regex("colspan\\s*=\\s*[\"']?(\\d+)", RegexOption.IGNORE_CASE)
 
-  internal fun readHtml(html: String): List<List<String>> =
-    ROW.findAll(html).map { r -> CELL.findAll(r.groupValues[1]).map { c -> htmlText(c.groupValues[1]) }.toList() }.toList()
+  /**
+   * Rows of an HTML table as a grid. Merged cells are repeated in every row / column they cover
+   * (e.g. one date cell with rowspan=3 spans three purchases), so each row has its own date.
+   */
+  internal fun readHtml(html: String): List<List<String>> {
+    // Cells carried down from a rowspan above: column -> (text, rows left).
+    val carry = sortedMapOf<Int, Pair<String, Int>>()
+    val out = mutableListOf<List<String>>()
+    for (r in ROW.findAll(html)) {
+      val row = mutableListOf<String>()
+      fun fillCarried() {
+        while (true) {
+          val c = carry[row.size] ?: break
+          row += c.first
+          if (c.second <= 1) carry.remove(row.size - 1) else carry[row.size - 1] = c.first to c.second - 1
+        }
+      }
+      for (c in CELL.findAll(r.groupValues[1])) {
+        fillCarried()
+        val attrs = c.groupValues[1]
+        val text = htmlText(c.groupValues[2])
+        val cols = COLSPAN.find(attrs)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 50) ?: 1
+        val rows = ROWSPAN.find(attrs)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 500) ?: 1
+        repeat(cols) {
+          if (rows > 1) carry[row.size] = text to rows - 1
+          row += text
+        }
+      }
+      fillCarried()
+      out += row
+    }
+    return out
+  }
 
   private fun htmlText(s: String): String = unescape(TAG.replace(BR.replace(s, " "), "")).replace(Regex("\\s+"), " ").trim()
 
