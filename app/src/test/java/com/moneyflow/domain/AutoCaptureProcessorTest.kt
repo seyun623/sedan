@@ -133,6 +133,22 @@ class AutoCaptureProcessorTest {
     assertEquals(1, db.accountDao().getAll().count { it.name == "삼성카드" })
   }
 
+  @Test fun paymentWithoutCompanyGoesToCatchAllAccount() = runBlocking {
+    // 2.14.5: "결제수단 없으면 등록 안 됨" → kept in '기타 결제수단' instead of being lost.
+    val outcome = processor.process(
+      CaptureChannel.NOTIFICATION, "com.nhn.android.search", "네이버", "네이버 결제",
+      "결제 완료 23,000원 무신사", clock.nowMillis()
+    )
+    if (outcome is CaptureOutcome.Recorded) {
+      assertTrue(outcome.account.name == "네이버페이" || outcome.account.name == "기타 결제수단")
+    }
+    val pay = processor.process(
+      CaptureChannel.NOTIFICATION, "com.kakaopay.app", "카카오페이", "카카오페이",
+      "카카오페이머니 결제 12,000원 스타벅스", clock.nowMillis()
+    )
+    assertTrue(pay.toString(), pay is CaptureOutcome.Recorded && pay.account.name == "카카오페이")
+  }
+
   @Test fun bankAppNameGivesTheBank() = runBlocking {
     val outcome = processor.process(
       CaptureChannel.NOTIFICATION, "com.wooribank.smart.npib", "우리WON뱅킹", "우리WON뱅킹 입출금알림",

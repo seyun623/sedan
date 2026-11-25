@@ -380,6 +380,16 @@ class AutoCaptureProcessor @Inject constructor(
       return fresh.copy(id = id)
     }
     s.autoCaptureDefaultAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { return it } }
+    // No card company / bank in the message and no default account: keep it in one catch-all
+    // account rather than losing the payment (the user can move it later).
+    if (s.autoCreateCaptureAccounts) {
+      accounts.firstOrNull { it.name == OTHER_ACCOUNT }?.let { return it }
+      val fresh = AccountEntity(name = OTHER_ACCOUNT, bankName = "자동 등록", accountType = AccountType.CASH, balance = 0)
+      if (dryRun) return fresh
+      val id = db.accountDao().insert(fresh)
+      lastCreatedId = id
+      return fresh.copy(id = id)
+    }
     return null
   }
 
@@ -387,6 +397,10 @@ class AutoCaptureProcessor @Inject constructor(
   private fun newAccountType(provider: String): AccountType? = when {
     provider.endsWith("카드") -> AccountType.CREDIT_CARD
     provider.endsWith("은행") || provider.endsWith("뱅크") || provider in setOf("새마을금고", "신협", "우체국", "농협", "수협") -> AccountType.BANK
+    // 카카오페이·네이버페이 머니 etc.: a wallet with its own balance.
+    // (삼성페이 only passes a card payment through: the card's own alert records it.)
+    provider == "삼성페이" -> null
+    provider.endsWith("페이") || provider == "토스" -> AccountType.BANK
     else -> null
   }
 
@@ -404,6 +418,7 @@ class AutoCaptureProcessor @Inject constructor(
     private const val DAY_MS = 24 * 60 * 60_000L
     private const val UNKNOWN_MERCHANT = "알 수 없는 가맹점"
     private val PAY_SERVICE = Regex("페이|PAY|Pay|pay")
+    const val OTHER_ACCOUNT = "기타 결제수단"
     const val NO_ACCOUNT = "등록할 계좌가 없음 (자동 등록 설정 → 기본 등록 계좌를 골라 주세요)"
   }
 }

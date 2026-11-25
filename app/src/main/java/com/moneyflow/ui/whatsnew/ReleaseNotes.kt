@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.14.5", "2026.11",
+      listOf(
+        "자동 등록판: 카드사·은행을 알 수 없는 결제도 버리지 않고 '기타 결제수단' 계좌에 기록해요 (나중에 내역에서 계좌를 바꿀 수 있어요)",
+        "자동 등록판: 카카오페이·네이버페이 머니 결제는 '카카오페이' 같은 페이 계좌를 만들어 기록해요"
+      )
+    ),
+    ReleaseNote(
       "2.14.4", "2026.11",
       listOf(
         "카드사 가져오기: 로그인 화면 위에 카드사별로 가장 편한 로그인 방법을 알려 줘요 (현대·롯데·삼성·신한은 앱 7자리 코드, 하나는 토스·네이버 간편인증 등)",
