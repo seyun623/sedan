@@ -30,6 +30,7 @@ object Routes {
   const val CLEANUP = "settings/cleanup"
   const val YEARLY = "analytics/yearly"
   const val REPORT = "settings/report"
+  const val FEATURE_CHECK = "settings/feature-check"
   const val CARD_IMPORT = "card-import"
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"

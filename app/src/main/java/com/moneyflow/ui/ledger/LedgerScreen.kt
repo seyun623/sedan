@@ -317,7 +317,7 @@ private fun DayHeader(dayTxs: List<TransactionEntity>) {
 
 /** A transaction card that can be swiped right-to-left to delete, after a confirmation (the VM also offers undo). */
 @Composable
-private fun SwipeToDeleteRow(
+internal fun SwipeToDeleteRow(
   transaction: TransactionEntity,
   onClick: () -> Unit,
   onDelete: () -> kotlinx.coroutines.Deferred<Boolean>

@@ -44,6 +44,7 @@ fun SettingsScreen(
   onOpenDrive: () -> Unit = {},
   onOpenCleanup: () -> Unit = {},
   onOpenReport: () -> Unit = {},
+  onOpenFeatureCheck: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -291,6 +292,12 @@ fun SettingsScreen(
     }
 
     SettingsSection("앱 정보") {
+      SettingsItem(
+        title = "새 기능 확인하기",
+        subtitle = "확인이 필요한 기능을 시험하고, 결과를 복사해 보낼 수 있어요",
+        onClick = onOpenFeatureCheck,
+        modifier = Modifier.testTag("settings_feature_check")
+      )
       SettingsItem(
         title = "버전",
         icon = Icons.Filled.Info,

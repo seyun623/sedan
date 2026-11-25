@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.14.2", "2026.11",
+      listOf(
+        "설정 → 앱 정보 → '새 기능 확인하기': 확인이 필요한 기능을 차례로 시험하고 ✅/⚠를 눌러 결과를 복사해 보낼 수 있어요",
+        "결제일 알림을 결제일까지 기다리지 않고 바로 시험해 볼 수 있어요. 밀어서 삭제도 시험용 내역으로 해 볼 수 있어요"
+      )
+    ),
+    ReleaseNote(
       "2.14.1", "2026.11",
       listOf(
         "자동 분류 규칙을 저장하면 이미 기록된 그 가게의 내역도 바로 그 카테고리로 바뀌어요 (직접 고른 카테고리는 그대로 둬요, 기타는 바꿔요)"

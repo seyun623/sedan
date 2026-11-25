@@ -206,10 +206,31 @@ fun MoneyFlowNavHost(
           onOpenFamily = { navController.navigate(Routes.FAMILY) },
           onOpenDrive = { navController.navigate(Routes.DRIVE) },
           onOpenCleanup = { navController.navigate(Routes.CLEANUP) },
-          onOpenReport = { navController.navigate(Routes.REPORT) }
+          onOpenReport = { navController.navigate(Routes.REPORT) },
+          onOpenFeatureCheck = { navController.navigate(Routes.FEATURE_CHECK) }
         )
       }
       composable(Routes.CLEANUP) { com.moneyflow.ui.settings.CleanupScreen(onBack = { navController.popBackStack() }) }
+      composable(Routes.FEATURE_CHECK) {
+        com.moneyflow.ui.settings.FeatureCheckScreen(
+          onBack = { navController.popBackStack() },
+          onOpen = { target ->
+            when (target) {
+              com.moneyflow.ui.settings.CheckTarget.ANALYTICS -> openTab(TopLevelTab.ANALYTICS)
+              com.moneyflow.ui.settings.CheckTarget.SETTINGS -> navController.popBackStack()
+              else -> navController.navigate(
+                when (target) {
+                  com.moneyflow.ui.settings.CheckTarget.AUTO_CAPTURE -> Routes.AUTO_CAPTURE
+                  com.moneyflow.ui.settings.CheckTarget.YEARLY -> Routes.YEARLY
+                  com.moneyflow.ui.settings.CheckTarget.DRIVE -> Routes.DRIVE
+                  com.moneyflow.ui.settings.CheckTarget.CARD_IMPORT -> Routes.CARD_IMPORT
+                  else -> Routes.RULES
+                }
+              )
+            }
+          }
+        )
+      }
       composable(Routes.REPORT) { com.moneyflow.ui.settings.ProblemReportScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.DRIVE) { com.moneyflow.ui.settings.DriveSettingsScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.FAMILY) {
