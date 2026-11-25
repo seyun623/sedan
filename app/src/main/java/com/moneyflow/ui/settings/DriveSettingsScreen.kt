@@ -73,6 +73,9 @@ class DriveSettingsViewModel @Inject constructor(
   @ApplicationContext private val context: Context,
   private val drive: DriveRepository,
   private val familySync: com.moneyflow.data.repository.FamilySyncRepository,
+  private val backups: com.moneyflow.data.repository.BackupRepository,
+  private val autoBackup: com.moneyflow.data.repository.AutoBackupRepository,
+  private val recurring: com.moneyflow.data.repository.RecurringRepository,
   private val settingsRepo: SettingsRepository,
   private val messages: UserMessageBus,
   private val clock: com.moneyflow.domain.AppClock
@@ -160,6 +163,44 @@ class DriveSettingsViewModel @Inject constructor(
     })
   }
 
+  // ---- Restore this phone from a family file in Drive ----
+
+  private val _restoreFiles = MutableStateFlow<List<DriveFile>?>(null)
+  /** Family files to choose from (dialog open while non-null). */
+  val restoreFiles: StateFlow<List<DriveFile>?> = _restoreFiles.asStateFlow()
+  private val _restorePreview = MutableStateFlow<Pair<DriveFile, com.moneyflow.data.repository.BackupContent>?>(null)
+  /** An opened family file waiting for the final confirmation. */
+  val restorePreview: StateFlow<Pair<DriveFile, com.moneyflow.data.repository.BackupContent>?> = _restorePreview.asStateFlow()
+  private var restorePassword: String? = null
+
+  fun findRestoreFiles() = run {
+    val list = familySync.familyFiles()
+    if (list.isEmpty()) error("폴더에 가족 파일이 없어요. 예전 휴대폰에서 '내 가족 파일 만들기'를 한 적이 있는지 확인해 주세요.")
+    _restoreFiles.value = list
+  }
+
+  fun dismissRestore() { _restoreFiles.value = null; _restorePreview.value = null; restorePassword = null }
+
+  fun openRestoreFile(file: DriveFile, password: String) = run {
+    val content = familySync.openFamilyFile(file, password)
+    restorePassword = password
+    _restoreFiles.value = null
+    _restorePreview.value = file to content
+  }
+
+  /** Replaces this phone's records with the opened family file and keeps syncing to that file. */
+  fun confirmRestore() = run {
+    val (file, content) = _restorePreview.value ?: return@run
+    val password = restorePassword ?: return@run
+    autoBackup.saveBeforeRestore()
+    backups.restore(content)
+    familySync.adoptRestoredFile(file, password)
+    recurring.applyDue()
+    dismissRestore()
+    com.moneyflow.work.FamilySyncWorker.runSoon(context, delaySeconds = 30)
+    messages.show("드라이브의 가족 파일로 복원했어요. 가족 자동 합산도 이어서 돼요.")
+  }
+
   fun turnOffFamily() = run {
     familySync.turnOff()
     messages.show("가족 자동 합산을 껐어요. 받은 가족 기록과 드라이브 파일은 그대로예요.")
@@ -187,6 +228,9 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
   var familyDialog by rememberSaveable { mutableStateOf(false) }
   var confirmFamilyOff by rememberSaveable { mutableStateOf(false) }
   val createFamily = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri -> uri?.let(viewModel::writeFamilyFile) }
+  val saveToGoogle = rememberGooglePasswordSaver()
+  val restoreFiles by viewModel.restoreFiles.collectAsStateWithLifecycle()
+  val restorePreview by viewModel.restorePreview.collectAsStateWithLifecycle()
   val createTest = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let(viewModel::writeTestFile) }
   LaunchedEffect(viewModel) { viewModel.errors.collect { error = it } }
 
@@ -266,13 +310,13 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
         var showFamilyPassword by rememberSaveable { mutableStateOf(false) }
         SettingsItem(
           title = "가족 비밀번호 보기",
-          subtitle = "새 가족 폰을 연결할 때 필요해요 (앱 잠금 PIN 확인)",
+          subtitle = "새 가족 폰을 연결할 때 필요해요 (앱 잠금 확인 후 표시)",
           icon = Icons.Filled.Key,
           showChevron = false,
           onClick = { showFamilyPassword = true },
           modifier = Modifier.testTag("family_show_password")
         )
-        if (showFamilyPassword) SavedPasswordDialog(SavedPassword.FAMILY, settings.isLockEnabled, onDismiss = { showFamilyPassword = false })
+        if (showFamilyPassword) SavedPasswordDialog(SavedPassword.FAMILY, onDismiss = { showFamilyPassword = false })
         SettingsItem(
           title = "지금 합산하기",
           subtitle = "내 기록을 올리고 가족 기록을 받아요 (평소에는 자동)",
@@ -291,6 +335,17 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
           onClick = { confirmFamilyOff = true }
         )
       }
+    }
+    SettingsSection("새 휴대폰 · 분실했을 때") {
+      SettingsItem(
+        title = "드라이브의 내 가족 파일로 복원",
+        subtitle = "예전 휴대폰에서 마지막으로 올라간 기록을 이 휴대폰으로 가져와요 (①, ②를 먼저 해 주세요)",
+        icon = Icons.Filled.CloudDone,
+        enabled = !busy && hasKey && settings.driveFolderId != null,
+        showChevron = false,
+        onClick = viewModel::findRestoreFiles,
+        modifier = Modifier.testTag("family_restore")
+      )
     }
     SettingsSection("문제가 있을 때 (연결 시험)") {
       SettingsItem(
@@ -364,7 +419,32 @@ fun DriveSettingsScreen(onBack: () -> Unit, viewModel: DriveSettingsViewModel = 
     FamilySyncDialog(
       initialName = s?.familySyncName.orEmpty(),
       onDismiss = { familyDialog = false },
-      onSave = { name, pw -> familyDialog = false; viewModel.setupFamily(name, pw) }
+      onSave = { name, pw ->
+        familyDialog = false
+        viewModel.setupFamily(name, pw)
+        // Offer to keep it in Google Password Manager, so it can be found again on any phone.
+        saveToGoogle(com.moneyflow.util.GooglePasswords.FAMILY, pw)
+      }
+    )
+  }
+  restoreFiles?.let { files ->
+    RestoreFromFamilyFileDialog(
+      files = files,
+      suggestedName = s?.familySyncFileName,
+      onDismiss = viewModel::dismissRestore,
+      onOpen = viewModel::openRestoreFile
+    )
+  }
+  restorePreview?.let { (file, content) ->
+    val sum = content.summary
+    ConfirmDialog(
+      title = "이 기록으로 바꿀까요?",
+      message = "${file.name}\n${com.moneyflow.util.Formatters.formatDateTime(sum.createdAt)}에 올라간 기록이에요.\n" +
+        "계좌 ${sum.accountCount}개 · 내역 ${sum.transactionCount}건 · 저축 목표 ${sum.goalCount}개\n\n" +
+        "이 휴대폰에 지금 있는 기록은 모두 이 내용으로 바뀌어요. (잘못 골랐다면 백업 및 복원 → '복원 전으로 되돌리기'로 돌아갈 수 있어요)",
+      confirmLabel = "복원하기",
+      onConfirm = viewModel::confirmRestore,
+      onDismiss = viewModel::dismissRestore
     )
   }
   if (confirmFamilyOff) {
@@ -428,9 +508,55 @@ private fun FamilySyncDialog(initialName: String, onDismiss: () -> Unit, onSave:
           keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
           modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("family_sync_pw2")
         )
+        GooglePasswordFetchButton(onPassword = { pw = it; pw2 = it })
       }
     },
     confirmButton = { TextButton(onClick = { onSave(name.trim(), pw) }, enabled = ok) { Text("저장") } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+  )
+}
+
+/** Pick one of the family files in the Drive folder and enter the family password to open it. */
+@Composable
+private fun RestoreFromFamilyFileDialog(
+  files: List<DriveFile>,
+  suggestedName: String?,
+  onDismiss: () -> Unit,
+  onOpen: (DriveFile, String) -> Unit
+) {
+  var selectedId by rememberSaveable { mutableStateOf((files.firstOrNull { it.name == suggestedName } ?: files.singleOrNull())?.id) }
+  var pw by remember { mutableStateOf("") }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("내 가족 파일로 복원", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(Modifier.verticalScroll(rememberScrollState())) {
+        Text("예전 휴대폰에서 쓰던 내 파일을 골라 주세요. 다른 가족의 파일을 고르면 그 사람의 기록이 들어와요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        files.forEach { f ->
+          SettingsRadioItem(
+            title = com.moneyflow.data.repository.FamilySyncRepository.memberName(f.name),
+            subtitle = f.name + (f.modifiedTime.take(10).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+            selected = f.id == selectedId,
+            onSelect = { selectedId = f.id }
+          )
+        }
+        androidx.compose.material3.OutlinedTextField(
+          value = pw, onValueChange = { pw = it }, label = { Text("가족 비밀번호") }, singleLine = true,
+          visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+          keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
+          modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("family_restore_pw")
+        )
+        GooglePasswordFetchButton(onPassword = { pw = it })
+        Text("기억나지 않으면 다른 가족 폰의 '가족 비밀번호 보기'에서 확인할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+      }
+    },
+    confirmButton = {
+      TextButton(
+        enabled = selectedId != null && pw.isNotEmpty(),
+        onClick = { files.firstOrNull { it.id == selectedId }?.let { onOpen(it, pw) } },
+        modifier = Modifier.testTag("family_restore_open")
+      ) { Text("열기", fontWeight = FontWeight.Bold) }
+    },
     dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
   )
 }

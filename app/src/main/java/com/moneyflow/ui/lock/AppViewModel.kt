@@ -58,6 +58,18 @@ class AppViewModel @Inject constructor(
 
   fun unlockWithBiometric() = lock.unlockWithBiometric()
 
+  fun unlockWithDeviceLock() = lock.unlockWithDeviceCredential()
+
+  /** The phone's screen lock was removed: the app opens, and the user is told why it isn't protected. */
+  fun deviceLockMissing() {
+    lock.unlockWithDeviceCredential()
+    viewModelScope.launch {
+      // The message area appears together with the app content.
+      kotlinx.coroutines.delay(800)
+      messages.show("휴대폰 화면 잠금이 꺼져 있어 앱 잠금이 동작하지 않아요. 휴대폰 설정에서 화면 잠금을 켜 주세요.")
+    }
+  }
+
   fun recover(code: String, onResult: (PinCheckResult) -> Unit) = viewModelScope.launch {
     onResult(lock.recoverWithCode(code))
   }

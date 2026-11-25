@@ -82,6 +82,16 @@ class AppLockManager @Inject constructor(
     scope.launch { if (settings.current().isLockEnabled) _locked.value = true }
   }
 
+  /** Switches to the phone-lock mode (call after the phone's own lock was confirmed). */
+  suspend fun enableDeviceLock() {
+    settings.setDeviceLock(true)
+    lockedUntilElapsed = 0L
+    _locked.value = false
+  }
+
+  /** The phone's lock was confirmed on the lock screen (or the phone has no screen lock any more). */
+  fun unlockWithDeviceCredential() = unlockWithBiometric()
+
   fun unlockWithBiometric() {
     scope.launch {
       settings.resetPinFailures()
@@ -92,6 +102,8 @@ class AppLockManager @Inject constructor(
 
   /** Unlock attempt from the lock screen. */
   suspend fun verifyPin(pin: String): PinCheckResult {
+    // In phone-lock mode there is no PIN: nothing typed here may open the app.
+    if (!settings.current().usesPinLock && settings.current().deviceLockEnabled) return PinCheckResult.Wrong(0)
     val result = checkWithRateLimit(pin)
     if (result == PinCheckResult.Success) _locked.value = false
     return result

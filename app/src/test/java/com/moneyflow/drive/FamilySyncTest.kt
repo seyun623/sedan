@@ -218,6 +218,34 @@ class FamilySyncTest {
     assertEquals(30_000L, me.familyExpense())
   }
 
+  @Test fun aNewPhoneIsRestoredFromItsFamilyFileAndKeepsSyncing() = runBlocking {
+    me.spend(30_000, "점심")
+    val myFile = me.createFile()
+    wife.createFile()
+    me.sync.sync(forceUpload = true)
+
+    // The phone is lost; a new one connects to the same folder.
+    val newPhone = Phone("새폰")
+    val file = newPhone.sync.familyFiles().single { it.name == myFile }
+    try { newPhone.sync.openFamilyFile(file, "wrong-password"); throw AssertionError("expected wrong password") } catch (e: com.moneyflow.domain.backup.WrongPasswordException) { }
+    val content = newPhone.sync.openFamilyFile(file, "family12")
+    assertTrue(content.transactions.any { it.memo == "점심" })
+    newPhone.backups.restore(content)
+    newPhone.sync.adoptRestoredFile(file, "family12")
+
+    // It is "me" again: same install id, same file, and the wife's records load as before.
+    assertEquals(me.settings.installId(), newPhone.settings.installId())
+    assertEquals(myFile, newPhone.settings.current().familySyncFileName)
+    assertEquals("세윤", newPhone.settings.current().familySyncName)
+    val r = newPhone.sync.sync()!!
+    assertEquals(listOf("아내"), r.loaded)
+    assertTrue(r.problems.isEmpty())
+    newPhone.spend(5_000, "새 폰에서")
+    assertTrue(newPhone.sync.sync()!!.uploaded)
+    assertTrue(wife.sync.sync()!!.loaded.contains("세윤"))
+    newPhone.db.close()
+  }
+
   @Test fun memberNamesComeFromFileNames() {
     assertEquals("moneyflow-family-엄마.mfbackup", FamilySyncRepository.fileNameFor(" 엄마 "))
     assertEquals("엄마", FamilySyncRepository.memberName("moneyflow-family-엄마 (1).mfbackup"))

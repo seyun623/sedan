@@ -45,6 +45,10 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(s?.secureScreen) { s?.let { applySecureScreen(it.secureScreen) } }
         when {
           s == null -> Box(Modifier.fillMaxSize().background(Gray100))
+          s.usesDeviceLock && locked -> com.moneyflow.ui.lock.DeviceLockScreen(
+            onUnlocked = appViewModel::unlockWithDeviceLock,
+            onNoDeviceLock = appViewModel::deviceLockMissing
+          )
           s.isLockEnabled && locked -> LockScreen(
             settings = s,
             onVerifyPin = appViewModel::verifyPin,

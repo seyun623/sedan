@@ -50,6 +50,18 @@ class SettingsViewModel @Inject constructor(
   /** A just-made recovery code to show once (null = no dialog). */
   val recoveryCode: StateFlow<String?> = _recoveryCode
 
+  /** Switches to the phone-lock mode; call only after the phone's own lock was confirmed. */
+  fun enableDeviceLock() = viewModelScope.launch {
+    lock.enableDeviceLock()
+    messages.show("이제 휴대폰 잠금으로 앱을 열어요.")
+  }
+
+  /** Turns the phone-lock mode off; call only after the phone's own lock was confirmed. */
+  fun disableDeviceLock() = viewModelScope.launch {
+    lock.disableLock()
+    messages.show("앱 잠금을 껐어요.")
+  }
+
   fun newRecoveryCode() = viewModelScope.launch { _recoveryCode.value = lock.createRecoveryCode() }
   fun recoveryCodeShown() { _recoveryCode.value = null }
 

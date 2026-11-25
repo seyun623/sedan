@@ -61,6 +61,27 @@ class FamilySyncRepository @Inject constructor(
 
   suspend fun turnOff() = settings.clearFamilySync()
 
+  /** Family files in the shared folder, newest first (to restore this phone from one of them). */
+  suspend fun familyFiles(): List<com.moneyflow.drive.DriveFile> {
+    drive.checkFolderAccess()
+    return drive.folderFiles().filter { isFamilyFile(it.name) }.sortedByDescending { it.modifiedTime }
+  }
+
+  /** Downloads and opens a family file with the family password (it is a full backup of that phone). */
+  suspend fun openFamilyFile(file: com.moneyflow.drive.DriveFile, password: String): BackupContent =
+    backups.readBackup(drive.download(file.id), password.toCharArray())
+
+  /**
+   * After this phone was restored from [file]: keep using that file as this phone's family file,
+   * with the same name and password, so the family's combined view simply continues.
+   */
+  suspend fun adoptRestoredFile(file: com.moneyflow.drive.DriveFile, password: String) {
+    settings.setFamilySync(memberName(file.name), secrets.encrypt(password))
+    settings.setFamilySyncFile(file.name, clock.nowMillis(), settings.familySyncGenerations().first)
+    // The restored copy came from this file, so it is not another member's file.
+    settings.setFamilySyncSeen(settings.familySyncSeen() - file.id)
+  }
+
   suspend fun markDirty() = settings.markFamilyDataChanged()
 
   /**

@@ -97,7 +97,7 @@ internal fun LockTipCard(onOpenSecurity: () -> Unit, onDismiss: () -> Unit) {
       Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
         Text("앱 잠금을 켜 보세요", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleSmall)
         Text(
-          "PIN이나 생체 인증으로 내 금융 기록을 보호할 수 있어요.",
+          "휴대폰을 여는 지문·얼굴·패턴으로 가계부도 잠글 수 있어요. 따로 외울 비밀번호가 없어요.",
           color = Gray700,
           style = MaterialTheme.typography.bodySmall
         )

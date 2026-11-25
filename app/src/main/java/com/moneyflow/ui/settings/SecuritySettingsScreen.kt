@@ -76,18 +76,49 @@ fun SecuritySettingsScreen(
   val context = LocalContext.current
   val biometricStatus = remember { BiometricAuthHelper.checkBiometricAvailability(context) }
   var flow by rememberSaveable { mutableStateOf<PinFlow?>(null) }
+  var notice by rememberSaveable { mutableStateOf<String?>(null) }
 
   SettingsScaffold(title = "보안", onBack = onBack) {
     SettingsSection("앱 잠금") {
-      SettingsSwitchItem(
-        title = "앱 잠금",
-        subtitle = if (settings.isLockEnabled) "앱을 열 때 PIN을 확인해요" else "숫자 4~6자리 PIN으로 앱을 잠가요",
-        icon = Icons.Filled.Lock,
-        checked = settings.isLockEnabled,
-        onCheckedChange = { on -> flow = if (on) PinFlow.SETUP else PinFlow.DISABLE },
-        modifier = Modifier.testTag("security_lock_switch")
+      val activity = context as? androidx.fragment.app.FragmentActivity
+      // Changing the lock always needs the current lock first (phone lock or app PIN).
+      fun confirmPhoneLock(then: () -> Unit) {
+        val act = activity ?: return
+        if (!BiometricAuthHelper.isDeviceSecure(act)) {
+          notice = "휴대폰에 화면 잠금이 없어요. 휴대폰 설정 → 잠금화면에서 패턴·PIN·지문 중 하나를 먼저 켜 주세요."
+          return
+        }
+        BiometricAuthHelper.showDeviceLockPrompt(act, title = "휴대폰 잠금 확인", onSuccess = then, onError = { _, _ -> })
+      }
+      SettingsRadioItem(
+        title = "휴대폰 잠금으로 열기 (추천)",
+        subtitle = "지문·얼굴·패턴처럼 휴대폰을 여는 방법으로 앱도 열어요. 따로 외울 비밀번호가 없어요",
+        selected = settings.usesDeviceLock,
+        onSelect = { if (!settings.usesDeviceLock) confirmPhoneLock { viewModel.enableDeviceLock() } }
       )
-      if (settings.isLockEnabled) {
+      SettingsRadioItem(
+        title = "앱 전용 PIN",
+        subtitle = "숫자 4~6자리를 따로 정해요. 휴대폰 비밀번호를 가족과 같이 쓸 때 골라 주세요",
+        selected = settings.usesPinLock,
+        onSelect = {
+          when {
+            settings.usesPinLock -> Unit
+            settings.usesDeviceLock -> confirmPhoneLock { flow = PinFlow.SETUP }
+            else -> flow = PinFlow.SETUP
+          }
+        }
+      )
+      SettingsRadioItem(
+        title = "잠그지 않기",
+        selected = !settings.isLockEnabled,
+        onSelect = {
+          when {
+            settings.usesPinLock -> flow = PinFlow.DISABLE
+            settings.usesDeviceLock -> confirmPhoneLock { viewModel.disableDeviceLock() }
+          }
+        }
+      )
+      if (settings.usesPinLock) {
         SettingsItem(
           title = "PIN 변경",
           icon = Icons.Filled.Password,
@@ -176,6 +207,14 @@ fun SecuritySettingsScreen(
     Spacer(Modifier.height(24.dp))
   }
 
+  notice?.let { msg ->
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { notice = null },
+      title = { Text("확인이 필요해요", fontWeight = FontWeight.Bold) },
+      text = { Text(msg) },
+      confirmButton = { TextButton(onClick = { notice = null }) { Text("확인") } }
+    )
+  }
   val recoveryCode by viewModel.recoveryCode.collectAsStateWithLifecycle()
   recoveryCode?.let { code ->
     RecoveryCodeShownDialog(code, onDone = viewModel::recoveryCodeShown)

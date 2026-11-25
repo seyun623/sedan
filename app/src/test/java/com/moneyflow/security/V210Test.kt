@@ -82,3 +82,29 @@ class V210Test {
     assertEquals(0L, calc.usage(benefit, listOf(part(2)), 0).earned)
   }
 }
+
+@RunWith(RobolectricTestRunner::class)
+class V211LockModeTest {
+  @Test fun phoneLockModeHasNoPinAndNothingTypedOpensIt() = runBlocking {
+    val settings = testSettingsRepository()
+    val lock = AppLockManager(settings, FakeClock())
+    lock.setPin("1234")
+    lock.createRecoveryCode()
+    lock.enableDeviceLock()
+    val s = settings.current()
+    assertTrue(s.isLockEnabled && s.usesDeviceLock)
+    assertFalse(s.usesPinLock || s.hasRecoveryCode || s.biometricEnabled)
+    // The old PIN, an empty PIN and recovery codes no longer open anything.
+    lock.lockNow()
+    assertTrue(lock.verifyPin("1234") is PinCheckResult.Wrong)
+    assertTrue(lock.verifyPin("") is PinCheckResult.Wrong)
+    assertTrue(lock.recoverWithCode("AAAA-BBBB-CCCC-DDDD") is PinCheckResult.Wrong)
+
+    // Choosing an app PIN again leaves the phone-lock mode.
+    lock.setPin("5678")
+    assertTrue(settings.current().usesPinLock)
+    assertFalse(settings.current().usesDeviceLock)
+    lock.disableLock()
+    assertFalse(settings.current().isLockEnabled)
+  }
+}

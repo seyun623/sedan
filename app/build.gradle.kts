@@ -93,6 +93,9 @@ dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.biometric)
+  // Google Password Manager (save / fetch the family and backup passwords).
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play)
   implementation(libs.androidx.fragment.ktx)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)

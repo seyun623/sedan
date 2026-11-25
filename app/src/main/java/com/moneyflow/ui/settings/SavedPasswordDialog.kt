@@ -30,7 +30,10 @@ import com.moneyflow.security.PinCheckResult
 import com.moneyflow.security.SecretStore
 import com.moneyflow.ui.theme.Gray600
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import javax.inject.Inject
 
 /** Passwords the app keeps (encrypted with the phone's secure key) and can show again. */
@@ -48,9 +51,16 @@ class SavedPasswordViewModel @Inject constructor(
   private val secrets: SecretStore
 ) : ViewModel() {
   /** Checks the app PIN (when the lock is on) and returns the saved password. */
-  fun reveal(kind: SavedPassword, pin: String?, onResult: (RevealResult) -> Unit) = viewModelScope.launch {
+  /** null until loaded: "none", "pin" or "device". */
+  val lockKind: kotlinx.coroutines.flow.StateFlow<String?> = settings.settings
+    .map { if (it.usesPinLock) "pin" else if (it.usesDeviceLock) "device" else "none" }
+    .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), null)
+
+  /** [deviceVerified]: the phone's own lock was just confirmed (phone-lock mode). */
+  fun reveal(kind: SavedPassword, pin: String?, deviceVerified: Boolean = false, onResult: (RevealResult) -> Unit) = viewModelScope.launch {
     val s = settings.current()
-    if (s.isLockEnabled) {
+    if (s.usesDeviceLock && !deviceVerified) { onResult(RevealResult.Failed("휴대폰 잠금 확인이 필요해요.")); return@launch }
+    if (s.usesPinLock) {
       when (val r = lock.checkPin(pin.orEmpty())) {
         PinCheckResult.Success -> Unit
         is PinCheckResult.Wrong -> { onResult(RevealResult.Failed("PIN이 맞지 않아요.")); return@launch }
@@ -65,12 +75,14 @@ class SavedPasswordViewModel @Inject constructor(
     onResult(if (pw != null) RevealResult.Shown(pw) else RevealResult.Failed("저장된 비밀번호가 없어요."))
   }
 
-  fun lockEnabled(onResult: (Boolean) -> Unit) = viewModelScope.launch { onResult(settings.current().isLockEnabled) }
 }
 
 /** Shows a saved password after the app PIN is entered (if the app lock is on). */
 @Composable
-fun SavedPasswordDialog(kind: SavedPassword, lockEnabled: Boolean, onDismiss: () -> Unit, viewModel: SavedPasswordViewModel = hiltViewModel()) {
+fun SavedPasswordDialog(kind: SavedPassword, onDismiss: () -> Unit, viewModel: SavedPasswordViewModel = hiltViewModel()) {
+  val lockKind by viewModel.lockKind.collectAsStateWithLifecycle()
+  val lockEnabled = lockKind == "pin"
+  val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
   var pin by remember { mutableStateOf("") }
   var shown by remember { mutableStateOf<String?>(null) }
   var error by remember { mutableStateOf<String?>(null) }
@@ -93,6 +105,9 @@ fun SavedPasswordDialog(kind: SavedPassword, lockEnabled: Boolean, onDismiss: ()
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("saved_password_pin")
           )
+        } else if (lockKind == "device") {
+          Text("휴대폰 잠금(지문·얼굴·패턴)으로 확인한 뒤 보여 드려요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+          error?.let { Text(it, color = com.moneyflow.ui.theme.AccentRedText) }
         } else {
           Text("앱 잠금이 꺼져 있어요. 비밀번호를 화면에 보여 드릴까요?", style = MaterialTheme.typography.bodySmall, color = Gray600)
           error?.let { Text(it, color = com.moneyflow.ui.theme.AccentRedText) }
@@ -101,13 +116,19 @@ fun SavedPasswordDialog(kind: SavedPassword, lockEnabled: Boolean, onDismiss: ()
     },
     confirmButton = {
       if (shown == null) {
-        TextButton(enabled = !lockEnabled || pin.length >= 4, onClick = {
-          viewModel.reveal(kind, pin) { r ->
-            when (r) {
-              is RevealResult.Shown -> shown = r.password
-              is RevealResult.Failed -> error = r.message
+        TextButton(enabled = lockKind != null && (!lockEnabled || pin.length >= 4), onClick = {
+          val show = { verified: Boolean ->
+            viewModel.reveal(kind, pin, deviceVerified = verified) { r ->
+              when (r) {
+                is RevealResult.Shown -> shown = r.password
+                is RevealResult.Failed -> error = r.message
+              }
             }
+            Unit
           }
+          if (lockKind == "device") {
+            activity?.let { com.moneyflow.util.BiometricAuthHelper.showDeviceLockPrompt(it, title = "휴대폰 잠금 확인", onSuccess = { show(true) }, onError = { _, _ -> }) }
+          } else show(false)
         }, modifier = Modifier.testTag("saved_password_show")) { Text("보기", fontWeight = FontWeight.Bold) }
       } else {
         TextButton(onClick = onDismiss) { Text("닫기") }

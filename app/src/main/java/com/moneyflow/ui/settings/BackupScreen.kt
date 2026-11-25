@@ -71,6 +71,7 @@ fun BackupScreen(
 
   val fileName = remember { "moneyflow-backup-${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.${BackupRepository.FILE_EXTENSION}" }
 
+  val saveToGoogle = rememberGooglePasswordSaver()
   val createDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
     val pw = heldPassword
     heldPassword = null
@@ -84,6 +85,7 @@ fun BackupScreen(
     if (uri == null) return@rememberLauncherForActivityResult
     if (pw == null) { errorMessage = "다시 시도해 주세요."; return@rememberLauncherForActivityResult }
     viewModel.enableAutoBackup(uri, pw, intervalDays = 7)
+    saveToGoogle(com.moneyflow.util.GooglePasswords.BACKUP, pw)
   }
   val createDriveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
     val pw = heldPassword
@@ -91,6 +93,7 @@ fun BackupScreen(
     if (uri == null) return@rememberLauncherForActivityResult
     if (pw == null) { errorMessage = "다시 시도해 주세요."; return@rememberLauncherForActivityResult }
     viewModel.enableDriveAutoBackup(uri, pw)
+    saveToGoogle(com.moneyflow.util.GooglePasswords.BACKUP, pw)
   }
   val openDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     if (uri != null) {
@@ -188,13 +191,13 @@ fun BackupScreen(
         var showPassword by rememberSaveable { mutableStateOf(false) }
         SettingsItem(
           title = "자동 백업 비밀번호 보기",
-          subtitle = "잊었을 때: 앱 잠금 PIN을 넣으면 보여 드려요",
+          subtitle = "잊었을 때: 앱 잠금을 확인한 뒤 보여 드려요",
           icon = Icons.Filled.Backup,
           showChevron = false,
           onClick = { showPassword = true },
           modifier = Modifier.testTag("auto_backup_show_password")
         )
-        if (showPassword) SavedPasswordDialog(SavedPassword.AUTO_BACKUP, auto.lockEnabled, onDismiss = { showPassword = false })
+        if (showPassword) SavedPasswordDialog(SavedPassword.AUTO_BACKUP, onDismiss = { showPassword = false })
         SettingsItem(
           title = "지금 자동 백업",
           subtitle = if (auto.toDrive) "드라이브 백업 파일을 바로 덮어써요" else "자동 백업 폴더에 바로 저장해요",
@@ -345,7 +348,7 @@ private fun BackupPasswordDialog(
     text = {
       Column {
         if (confirm) {
-          Text("복원할 때 이 비밀번호가 필요해요. 잊으면 백업을 열 수 없어요.", style = MaterialTheme.typography.bodySmall, color = AccentRed)
+          Text("복원할 때 이 비밀번호가 필요해요. 직접 저장하는 백업 파일의 비밀번호는 잊으면 찾을 수 없어요. (자동 백업 비밀번호는 구글 비밀번호 관리자에 저장할 수 있어요)", style = MaterialTheme.typography.bodySmall, color = AccentRed)
           note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(top = 4.dp)) }
           Spacer(Modifier.height(8.dp))
         }
@@ -358,6 +361,7 @@ private fun BackupPasswordDialog(
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
           modifier = Modifier.fillMaxWidth().testTag("backup_password")
         )
+        if (!confirm) GooglePasswordFetchButton(onPassword = { pw = it })
         if (confirm) {
           Spacer(Modifier.height(8.dp))
           OutlinedTextField(

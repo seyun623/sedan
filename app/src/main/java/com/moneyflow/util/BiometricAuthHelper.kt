@@ -70,4 +70,37 @@ object BiometricAuthHelper {
 
     biometricPrompt.authenticate(promptInfo)
   }
+
+  /** The phone has a screen lock (pattern, PIN, password; fingerprints and faces need one too). */
+  fun isDeviceSecure(context: Context): Boolean =
+    context.getSystemService(android.app.KeyguardManager::class.java)?.isDeviceSecure == true
+
+  /**
+   * Asks for the phone's own lock: fingerprint / face when registered, otherwise (or by choice)
+   * the phone's pattern, PIN or password. No app-specific secret is involved.
+   */
+  fun showDeviceLockPrompt(
+    activity: FragmentActivity,
+    title: String = "머니플로우 열기",
+    subtitle: String = "휴대폰 잠금(지문·얼굴·패턴·PIN)으로 확인해요",
+    onSuccess: () -> Unit,
+    onError: (errorCode: Int, message: CharSequence) -> Unit
+  ) {
+    val callback = object : BiometricPrompt.AuthenticationCallback() {
+      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
+      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onError(errorCode, errString)
+    }
+    val info = BiometricPrompt.PromptInfo.Builder()
+      .setTitle(title)
+      .setSubtitle(subtitle)
+      .setConfirmationRequired(false)
+      // WEAK + DEVICE_CREDENTIAL works on every supported Android version; no negative button allowed.
+      .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+      .build()
+    try {
+      BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)
+    } catch (e: Exception) {
+      onError(BiometricPrompt.ERROR_HW_UNAVAILABLE, "휴대폰 잠금 확인을 열 수 없어요.")
+    }
+  }
 }

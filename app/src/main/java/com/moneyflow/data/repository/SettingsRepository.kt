@@ -34,6 +34,7 @@ data class AppSettings(
   /** Lockout end on the monotonic clock, valid only within boot [pinLockBoot]. */
   val pinLockedUntilElapsed: Long = 0L,
   val pinLockBoot: String = "",
+  val deviceLockEnabled: Boolean = false,
   /** A recovery code was made for the PIN (only its hash is kept). */
   val hasRecoveryCode: Boolean = false,
   val recoveryHash: String? = null,
@@ -123,7 +124,11 @@ data class AppSettings(
     get() = aiEnabled && hasAiKey && aiModel.isNotBlank() &&
       (aiProvider != AiProvider.CUSTOM || aiCustomBaseUrl.startsWith("https://"))
 
-  val isLockEnabled: Boolean get() = pinHash != null && pinSalt != null
+  /** App lock with its own PIN. */
+  val usesPinLock: Boolean get() = pinHash != null && pinSalt != null
+  /** App lock that asks for the phone's own screen lock (fingerprint, face, pattern, phone PIN). */
+  val usesDeviceLock: Boolean get() = deviceLockEnabled && !usesPinLock
+  val isLockEnabled: Boolean get() = usesPinLock || deviceLockEnabled
 }
 
 val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -141,6 +146,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val LAST_FAILURE = longPreferencesKey("pin_last_failure_at")
     val LOCKED_UNTIL_ELAPSED = longPreferencesKey("pin_locked_until_elapsed")
     val LOCK_BOOT = stringPreferencesKey("pin_lock_boot_id")
+    val DEVICE_LOCK = booleanPreferencesKey("device_lock_enabled")
     val RECOVERY_HASH = stringPreferencesKey("pin_recovery_hash")
     val RECOVERY_SALT = stringPreferencesKey("pin_recovery_salt")
     val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
@@ -214,6 +220,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       pinLastFailureAt = p[Keys.LAST_FAILURE] ?: 0L,
       pinLockedUntilElapsed = p[Keys.LOCKED_UNTIL_ELAPSED] ?: 0L,
       pinLockBoot = p[Keys.LOCK_BOOT] ?: "",
+      deviceLockEnabled = p[Keys.DEVICE_LOCK] ?: false,
       hasRecoveryCode = p[Keys.RECOVERY_HASH] != null,
       recoveryHash = p[Keys.RECOVERY_HASH],
       recoverySalt = p[Keys.RECOVERY_SALT],
@@ -275,8 +282,20 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setPin(hash: String, salt: String) = store.edit {
     it[Keys.PIN_HASH] = hash
     it[Keys.PIN_SALT] = salt
+    it[Keys.DEVICE_LOCK] = false
     it[Keys.FAILED] = 0
     it[Keys.LOCKED_UNTIL] = 0L
+  }
+
+  /** Turns the phone-lock mode on (removing any app PIN) or off. */
+  suspend fun setDeviceLock(enabled: Boolean) = store.edit {
+    it[Keys.DEVICE_LOCK] = enabled
+    if (enabled) {
+      listOf(Keys.PIN_HASH, Keys.PIN_SALT, Keys.RECOVERY_HASH, Keys.RECOVERY_SALT).forEach { k -> it.remove(k) }
+      it[Keys.BIOMETRIC] = false
+      it[Keys.FAILED] = 0
+      it[Keys.LOCKED_UNTIL] = 0L
+    }
   }
 
   suspend fun setRecoveryCode(hash: String, salt: String) = store.edit {
@@ -285,6 +304,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   }
 
   suspend fun clearPin() = store.edit {
+    it[Keys.DEVICE_LOCK] = false
     it.remove(Keys.PIN_HASH)
     it.remove(Keys.PIN_SALT)
     it.remove(Keys.RECOVERY_HASH)

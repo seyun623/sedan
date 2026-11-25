@@ -56,9 +56,11 @@ fun SettingsScreen(
     SettingsSection("보안") {
       SettingsItem(
         title = "앱 잠금 및 보안",
-        subtitle = if (settings.isLockEnabled) {
-          if (settings.biometricEnabled) "PIN · 생체 인증 사용 중" else "PIN 잠금 사용 중"
-        } else "잠금이 꺼져 있어요",
+        subtitle = when {
+          settings.usesDeviceLock -> "휴대폰 잠금으로 여는 중"
+          settings.isLockEnabled -> if (settings.biometricEnabled) "PIN · 생체 인증 사용 중" else "PIN 잠금 사용 중"
+          else -> "잠금이 꺼져 있어요"
+        },
         icon = Icons.Filled.Lock,
         onClick = onOpenSecurity,
         modifier = Modifier.testTag("settings_security")
