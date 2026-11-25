@@ -80,7 +80,7 @@ fun SecuritySettingsScreen(
 
   SettingsScaffold(title = "보안", onBack = onBack) {
     SettingsSection("앱 잠금") {
-      val activity = context as? androidx.fragment.app.FragmentActivity
+      val activity = androidx.activity.compose.LocalActivity.current as? androidx.fragment.app.FragmentActivity
       // Changing the lock always needs the current lock first (phone lock or app PIN).
       fun confirmPhoneLock(then: () -> Unit) {
         val act = activity ?: return

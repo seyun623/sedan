@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import com.moneyflow.ui.theme.Gray600
 import com.moneyflow.util.GooglePasswords
@@ -19,7 +18,7 @@ import kotlinx.coroutines.launch
 /** "구글에 저장된 비밀번호 불러오기": lets the user pick a password saved for this app in Google Password Manager. */
 @Composable
 fun GooglePasswordFetchButton(onPassword: (String) -> Unit, modifier: Modifier = Modifier) {
-  val activity = LocalContext.current as? android.app.Activity ?: return
+  val activity = androidx.activity.compose.LocalActivity.current ?: return
   val scope = rememberCoroutineScope()
   var note by remember { mutableStateOf<String?>(null) }
   TextButton(
@@ -41,7 +40,7 @@ fun GooglePasswordFetchButton(onPassword: (String) -> Unit, modifier: Modifier =
 /** Returns a function that offers to save [password] under [name] in Google Password Manager. */
 @Composable
 fun rememberGooglePasswordSaver(onUnavailable: (String) -> Unit = {}): (name: String, password: String) -> Unit {
-  val activity = LocalContext.current as? android.app.Activity
+  val activity = androidx.activity.compose.LocalActivity.current
   val scope = rememberCoroutineScope()
   return remember(activity) {
     { name, password ->

@@ -39,6 +39,12 @@ android {
     }
   }
 
+  lint {
+    // Passwords are saved for this app only (no website to share them with), so there is no
+    // Digital Asset Links file to declare. See docs/roadmap.md if saving turns out to need one.
+    disable += "CredManMissingDal"
+  }
+
   buildTypes {
     release {
       isCrunchPngs = false

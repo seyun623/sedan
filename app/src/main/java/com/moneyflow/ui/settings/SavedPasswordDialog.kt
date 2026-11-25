@@ -82,7 +82,7 @@ class SavedPasswordViewModel @Inject constructor(
 fun SavedPasswordDialog(kind: SavedPassword, onDismiss: () -> Unit, viewModel: SavedPasswordViewModel = hiltViewModel()) {
   val lockKind by viewModel.lockKind.collectAsStateWithLifecycle()
   val lockEnabled = lockKind == "pin"
-  val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
+  val activity = androidx.activity.compose.LocalActivity.current as? androidx.fragment.app.FragmentActivity
   var pin by remember { mutableStateOf("") }
   var shown by remember { mutableStateOf<String?>(null) }
   var error by remember { mutableStateOf<String?>(null) }
