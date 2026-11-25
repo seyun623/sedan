@@ -51,6 +51,7 @@ import com.moneyflow.util.Formatters
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -63,6 +64,39 @@ class CaptureDiagnosticsViewModel @Inject constructor(
   val entries: StateFlow<List<CaptureLogEntry>> = log.entries
 
   fun clear() = log.clear()
+
+  private val _testState = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+  /** What happened to the last test notification (shown under the button). */
+  val testState: StateFlow<String?> = _testState
+
+  /**
+   * Sends the test notification and waits a few seconds for the listener to read it. The answer
+   * tells the user directly whether the phone lets the app read notifications.
+   */
+  fun runNotificationTest(accessGranted: Boolean) = viewModelScope.launch {
+    if (!accessGranted) { _testState.value = "⚠ 먼저 위 '알림 접근 허용'을 해 주세요."; return@launch }
+    val sentAt = System.currentTimeMillis()
+    if (!sendTestNotification()) {
+      _testState.value = "⚠ 알림을 보낼 수 없어요. 휴대폰 설정 → 애플리케이션 → 머니플로우 → 알림을 켜 주세요."
+      return@launch
+    }
+    _testState.value = "시험 알림을 보냈어요. 앱이 읽는지 확인하는 중…"
+    val seen = kotlinx.coroutines.withTimeoutOrNull(10_000) {
+      log.entries.first { list -> list.any { it.channel == "시험" && it.time >= sentAt - 1_000 } }
+    }
+    _testState.value = if (seen != null) {
+      val e = seen.first { it.channel == "시험" && it.time >= sentAt - 1_000 }
+      if (e.recorded) "✅ 정상이에요. 앱이 알림을 읽었어요. 이제 카드를 쓰면 자동으로 기록돼요. (시험이라 실제로 기록되지는 않아요)"
+      else "⚠ 알림은 읽었지만 기록할 수 없어요: ${e.result.removePrefix("건너뜀 · ")}"
+    } else {
+      "⚠ 10초 안에 알림을 읽지 못했어요. 휴대폰이 알림 읽기를 막고 있어요.\n" +
+        "① 위 '알림 접근 허용'에서 머니플로우를 껐다가 다시 켜 주세요.\n" +
+        "② 배터리 사용을 '제한 없음'으로 바꿔 주세요.\n" +
+        "③ 그래도 안 되면 휴대폰을 다시 시작한 뒤 한 번 더 시험해 주세요."
+    }
+    // The listener's own answer: whether it is connected right now.
+    com.moneyflow.service.FinanceNotificationListenerService.rebind(context)
+  }
 
   /** Runs pasted text through every real check (switches excluded) without saving. */
   fun tryText(text: String, onResult: (CaptureOutcome) -> Unit) = viewModelScope.launch {
@@ -83,10 +117,19 @@ class CaptureDiagnosticsViewModel @Inject constructor(
     val n = NotificationCompat.Builder(context, TEST_CHANNEL)
       .setSmallIcon(com.moneyflow.R.mipmap.ic_launcher)
       .setContentTitle("신한카드")
-      .setContentText(SAMPLE)
       .setStyle(NotificationCompat.BigTextStyle().bigText(SAMPLE))
       .setTimeoutAfter(60_000)
       .setAutoCancel(true)
+      // Tapping it opens the app (the test result is shown on the auto-capture screen).
+      .setContentIntent(
+        android.app.PendingIntent.getActivity(
+          context, TEST_ID,
+          Intent(context, com.moneyflow.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+          android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+      )
+      .setContentText("머니플로우 자동 등록 시험이에요. 눌러서 결과를 확인하세요.")
+      .setSubText("자동 등록 시험")
       .addExtras(android.os.Bundle().apply { putBoolean(NotificationText.TEST_MARKER, true) })
       .build()
     return try {

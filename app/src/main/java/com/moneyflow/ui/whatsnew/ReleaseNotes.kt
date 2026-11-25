@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.13.1", "2026.11",
+      listOf(
+        "자동 등록판: '시험 알림 보내기'를 누르면 10초 안에 앱이 알림을 읽었는지 화면에 바로 알려 줘요 (✅ 정상 / ⚠ 고칠 방법)",
+        "시험 알림을 누르면 머니플로우가 열려요"
+      )
+    ),
+    ReleaseNote(
       "2.13.0", "2026.11",
       listOf(
         "자동 등록판: 카카오톡 알림톡(신한·KB국민·현대·삼성카드 등 카드사·은행 채널)의 결제 알림을 기록해요. 친구와의 대화는 읽지 않아요",

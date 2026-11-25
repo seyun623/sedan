@@ -97,7 +97,6 @@ fun AutoCaptureSettingsScreen(
   var listenerConnected by remember { mutableStateOf(false) }
   var batteryOk by remember { mutableStateOf(true) }
   var restrictedHelp by rememberSaveable { mutableStateOf(false) }
-  var testNote by rememberSaveable { mutableStateOf<String?>(null) }
   var realResult by remember { mutableStateOf<String?>(null) }
   val settings = state.settings
   val context = LocalContext.current
@@ -204,15 +203,18 @@ fun AutoCaptureSettingsScreen(
 
     SettingsSection("최근 받은 결제 알림") {
       CaptureLogList(logEntries, onClear = diagnostics::clear)
+      val testState by diagnostics.testState.collectAsStateWithLifecycle()
       OutlinedButton(
-        onClick = {
-          testNote = if (!notificationAccess) "먼저 알림 접근을 허용해 주세요."
-          else if (diagnostics.sendTestNotification()) "시험 알림을 보냈어요. 몇 초 뒤 위 목록에 '시험 성공'이 보이면 정상이에요. (아무것도 기록되지 않아요)"
-          else "알림을 보낼 수 없어요. 휴대폰 설정에서 머니플로우 알림을 켜 주세요."
-        },
+        onClick = { diagnostics.runNotificationTest(notificationAccess) },
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("capture_send_test")
       ) { Text("시험 알림 보내기") }
-      testNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+      testState?.let {
+        Text(
+          it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+          color = if (it.startsWith("✅")) com.moneyflow.ui.theme.AccentGreenText else if (it.startsWith("⚠")) com.moneyflow.ui.theme.AccentRedText else Gray900,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("capture_test_state")
+        )
+      }
     }
 
     SettingsSection("알림") {
