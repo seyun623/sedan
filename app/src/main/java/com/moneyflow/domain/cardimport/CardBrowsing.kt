@@ -103,6 +103,26 @@ object CardBrowsing {
 })()
 """
 
+  private val CODE_WORD = Regex("코드|인증\\s*번호|숫자|번호")
+  private val CODE = Regex("(?<![\\d\\-.,:])(\\d{3}\\s?\\d{4}|\\d(?:\\s\\d){6})(?![\\d\\-.,:]|\\s\\d)")
+  private val NOT_CODE = Regex("고객센터|전화|상담|☎|TEL|Tel|문의")
+
+  /**
+   * The 7-digit login code a card site shows for its app ("현대카드 앱에 아래 숫자를 입력하세요
+   * 123 4567"), or null. Only near words like 코드 / 인증번호, and not phone numbers.
+   */
+  fun findAppCode(text: String): String? {
+    if (!text.contains("앱")) return null
+    for (kw in CODE_WORD.findAll(text)) {
+      val from = (kw.range.first - 20).coerceAtLeast(0)
+      val to = (kw.range.last + 80).coerceAtMost(text.length)
+      val window = text.substring(from, to)
+      if (NOT_CODE.containsMatchIn(window)) continue
+      CODE.find(window)?.let { return it.value.filter(Char::isDigit) }
+    }
+    return null
+  }
+
   /** "browser_fallback_url" of an intent:// link (the web page to show instead of the app), if it is https. */
   fun fallbackUrl(url: String): String? {
     if (!url.startsWith("intent:")) return null

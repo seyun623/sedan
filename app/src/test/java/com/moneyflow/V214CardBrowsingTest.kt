@@ -49,6 +49,24 @@ class V214CardBrowsingTest {
     assertEquals("", merged.first().id)
   }
 
+  @Test fun appLoginCode() {
+    assertEquals("1234567", CardBrowsing.findAppCode("현대카드 앱에서 아래 인증번호를 입력해 주세요\n123 4567\n남은 시간 2:58"))
+    assertEquals("7654321", CardBrowsing.findAppCode("모니모 앱 실행 후 결제코드 7654321 을 입력하세요"))
+    assertEquals("1234567", CardBrowsing.findAppCode("SOL페이 앱에 코드를 입력하세요 1 2 3 4 5 6 7"))
+    // Phone numbers, amounts and plain text are not codes.
+    assertNull(CardBrowsing.findAppCode("앱 설치 문의 고객센터 번호 1588 8100"))
+    assertNull(CardBrowsing.findAppCode("앱카드 이용금액 1,234,567원"))
+    assertNull(CardBrowsing.findAppCode("코드 1234567"))
+    assertNull(CardBrowsing.findAppCode("앱으로 로그인 번호 12345678"))
+  }
+
+  @Test fun loginAdviceFollowsTheSiteCheck() {
+    // PC page by default where it logs in more easily (app code / 간편인증); 우리·KB stay on the phone page.
+    assertEquals(setOf("hyundai", "lotte", "hana"), CardSites.all.filter { it.desktopDefault }.map { it.id }.toSet())
+    assertTrue(CardSites.byId("woori")!!.loginTip!!.contains("보안프로그램"))
+    assertTrue(CardSites.all.filter { it.loginTip != null }.all { it.appNames.isNotEmpty() })
+  }
+
   @Test fun intentFallbackUrl() {
     val url = "intent://open#Intent;scheme=hanacard;package=com.hana;S.browser_fallback_url=https%3A%2F%2Fm.hanacard.co.kr%2Fweb;end"
     assertEquals("https://m.hanacard.co.kr/web", CardBrowsing.fallbackUrl(url))
@@ -84,6 +102,6 @@ class V214CardBrowsingTest {
 
   @Test fun hyundaiOpensAsPcPage() {
     assertTrue(CardSites.byId("hyundai")!!.desktopDefault)
-    assertTrue(CardSites.all.filter { it.id != "hyundai" }.none { it.desktopDefault && it.guide == null })
+    assertTrue(CardSites.all.none { it.desktopDefault && it.loginTip == null })
   }
 }

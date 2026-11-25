@@ -168,6 +168,8 @@ fun CardBrowserScreen(
   val blockedApp by web.blockedApp.collectAsStateWithLifecycle()
   val pageCheck by viewModel.pageCheck.collectAsStateWithLifecycle()
   val found by viewModel.found.collectAsStateWithLifecycle()
+  val appCode by viewModel.appCode.collectAsStateWithLifecycle()
+  var tipClosed by rememberSaveable { mutableStateOf(false) }
   var pendingText by remember { mutableStateOf<String?>(null) }
   var error by rememberSaveable { mutableStateOf<String?>(null) }
   var aiConsent by remember { mutableStateOf<String?>(null) }
@@ -185,6 +187,7 @@ fun CardBrowserScreen(
   val imeVisible = WindowInsets.isImeVisible
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   val context = androidx.compose.ui.platform.LocalContext.current
+  val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
   LaunchedEffect(viewModel) {
     viewModel.events.collect { e ->
@@ -382,6 +385,35 @@ fun CardBrowserScreen(
         }
       }
       if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = TossBlue)
+      Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val code = appCode
+        if (code != null && popups.isEmpty()) {
+          Surface(color = TossBlue, shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth().testTag("card_app_code")) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)) {
+              Column(Modifier.weight(1f)) {
+                Text("앱에 입력할 코드", style = MaterialTheme.typography.labelSmall, color = OnBrand)
+                Text(code.chunked(if (code.length == 7) 3 else 4).joinToString(" "), color = OnBrand, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+              }
+              TextButton(onClick = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(code))
+                if (!openCardApp(context, site.appNames)) {
+                  error = "코드를 복사했어요. ${site.appNames.first()} 앱을 직접 열어 붙여 넣은 뒤 머니플로우로 돌아오세요. 이 화면은 그대로 있어요."
+                }
+              }) { Text("복사하고 앱 열기", color = OnBrand, fontWeight = FontWeight.Bold) }
+            }
+          }
+        }
+        val tip = site.loginTip
+        val check = pageCheck
+        if (tip != null && !tipClosed && code == null && (check == null || check.items == 0) && popups.isEmpty()) {
+          Surface(color = CardSurface, shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth().testTag("card_login_tip")) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)) {
+              Text("💡 $tip", style = MaterialTheme.typography.bodySmall, color = Gray900, modifier = Modifier.weight(1f))
+              IconButton(onClick = { tipClosed = true }) { Icon(Icons.Filled.Close, contentDescription = "안내 닫기", tint = Gray600) }
+            }
+          }
+        }
+      }
       if (folded && !imeVisible) {
         androidx.compose.material3.SmallFloatingActionButton(
           onClick = { folded = false },
@@ -536,6 +568,21 @@ fun CardBrowserScreen(
       confirmButton = { TextButton(onClick = { error = null }) { Text("확인") } }
     )
   }
+}
+
+/** Opens the card company's app (found by its name among installed apps); false when none is installed. */
+private fun openCardApp(context: android.content.Context, names: List<String>): Boolean {
+  val pm = context.packageManager
+  val launchers = runCatching {
+    pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+  }.getOrDefault(emptyList())
+  fun norm(s: String) = s.replace(" ", "").lowercase()
+  val pick = names.firstNotNullOfOrNull { name ->
+    launchers.firstOrNull { norm(it.loadLabel(pm).toString()).contains(norm(name)) }
+  } ?: return false
+  return runCatching {
+    context.startActivity(pm.getLaunchIntentForPackage(pick.activityInfo.packageName) ?: return false)
+  }.isSuccess
 }
 
 // ---------------------------------------------------------------------------------------------

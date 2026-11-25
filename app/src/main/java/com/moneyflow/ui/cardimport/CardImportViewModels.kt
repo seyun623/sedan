@@ -71,6 +71,10 @@ class CardBrowserViewModel @Inject constructor(
   val pageCheck: StateFlow<PageCheck?> = _pageCheck.asStateFlow()
   private var probeJob: kotlinx.coroutines.Job? = null
 
+  private val _appCode = MutableStateFlow<String?>(null)
+  /** The 7-digit login code the site shows for its app (copied and typed into the app). */
+  val appCode: StateFlow<String?> = _appCode.asStateFlow()
+
   private val _found = MutableStateFlow<List<com.moneyflow.domain.cardimport.CardBrowsing.FoundLink>?>(null)
   /** Menu links to usage / statement pages found on the page ("내역 화면 찾기"). */
   val found: StateFlow<List<com.moneyflow.domain.cardimport.CardBrowsing.FoundLink>?> = _found.asStateFlow()
@@ -93,6 +97,15 @@ class CardBrowserViewModel @Inject constructor(
       _desktop.value = d
     }
     viewModelScope.launch { web.pageLoads.collect { if (it > 0) probePage() } }
+    // The code appears when the user picks "앱으로 로그인" on the page (no new page load): look every few seconds.
+    if (site.appNames.isNotEmpty()) viewModelScope.launch {
+      while (true) {
+        kotlinx.coroutines.delay(2_500)
+        if ((_pageCheck.value?.items ?: 0) > 0) { _appCode.value = null; continue }
+        val text = web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.READ_TEXT_JS)
+        _appCode.value = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.CardBrowsing.findAppCode(text) }
+      }
+    }
     viewModelScope.launch {
       web.download.collect { d -> if (d != null) { web.downloadHandled(); importDownload(d) } }
     }

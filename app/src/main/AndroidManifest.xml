@@ -11,6 +11,14 @@
          Android's enhanced fraud protection blocks sideloading apps that request them,
          so the "basic" flavor leaves them out. -->
 
+    <!-- Card import opens the card company's app ("코드 복사하고 앱 열기"); the app is found by its name. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MoneyFlowApplication"
         android:allowBackup="false"
