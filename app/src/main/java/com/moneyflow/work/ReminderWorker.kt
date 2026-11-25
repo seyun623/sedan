@@ -63,7 +63,7 @@ class ReminderChecker @Inject constructor(
       )?.let { out += it }
     }
     if (s.billRemindersEnabled) {
-      out += com.moneyflow.domain.alerts.BillReminders.due(today, db.accountDao().getAll(), db.recurringTransactionDao().getActive(), sent)
+      out += com.moneyflow.domain.alerts.BillReminders.due(today, db.accountDao().getAll(), db.recurringTransactionDao().getActive(), sent, s.cardBills)
     }
     if (s.backupReminderEnabled) {
       val lastBackup = s.lastBackupAt.takeIf { it > 0 }?.let { MonthKeys.toLocalDate(it, zone) }

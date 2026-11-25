@@ -67,10 +67,22 @@ internal fun CardSection(
   onAddBenefit: () -> Unit,
   onAddBenefitWithAi: () -> Unit,
   onEditBenefit: (CardBenefitEntity) -> Unit,
-  onOpenCardImport: () -> Unit
+  onOpenCardImport: () -> Unit,
+  bill: com.moneyflow.domain.card.CardBill? = null
 ) {
   Surface(shape = RoundedCornerShape(16.dp), color = CardSurface, modifier = Modifier.fillMaxWidth().testTag("card_section")) {
     Column(Modifier.padding(16.dp)) {
+      if (bill != null) {
+        Text("다음 결제", fontWeight = FontWeight.Bold, color = Gray900)
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 4.dp).testTag("card_bill")) {
+          Text(Formatters.formatCurrency(bill.amount), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gray900)
+          bill.dueDate?.let { Text("  ${it.monthValue}/${it.dayOfMonth} 결제", color = Gray600, modifier = Modifier.padding(bottom = 2.dp)) }
+        }
+        Text(
+          "${bill.source} 기준 (${Formatters.formatFullDate(bill.fetchedAt)})",
+          style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(bottom = 12.dp)
+        )
+      }
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text("카드 실적", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
         TextButton(onClick = onEditProfile) { Text(if (profile == null) "실적 조건 설정" else "조건 수정") }

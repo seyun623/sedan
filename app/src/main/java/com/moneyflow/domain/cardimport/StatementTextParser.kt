@@ -17,7 +17,10 @@ class StatementTextParser(private val today: LocalDate) {
     val lines = text.split('\n').map { it.replace('\u00A0', ' ').trim() }.filter { it.isNotEmpty() }
     val dated = lines.indices.mapNotNull { i -> findDate(lines[i])?.let { i to it } }
     val items = if (merchantBeforeDate(lines, dated.map { it.first })) parseMerchantFirst(lines, dated) else parseDateFirst(lines, dated)
-    return StatementExtraction(items.filterNot { SUMMARY.containsMatchIn(it.merchant) }, findPerformance(lines), READ_LOCAL)
+    return StatementExtraction(
+      items.filterNot { SUMMARY.containsMatchIn(it.merchant) }, findPerformance(lines), READ_LOCAL,
+      bill = com.moneyflow.domain.card.BillText.find(text, today)
+    )
   }
 
   /** "11.21 / 스타벅스 / 5,600원": each date starts a window of following lines. */

@@ -159,6 +159,7 @@ fun AccountDetailScreen(
             profile = state.cardProfile,
             benefits = state.cardBenefits,
             imported = state.cardPerformance,
+            bill = state.cardBill,
             onEditProfile = { showProfileDialog = true },
             onAddBenefit = { editingBenefitId = 0L },
             onAddBenefitWithAi = { showBenefitPaste = true },

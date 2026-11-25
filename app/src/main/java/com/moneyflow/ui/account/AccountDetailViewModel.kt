@@ -31,6 +31,8 @@ data class AccountDetailUiState(
   val otherAccounts: List<AccountEntity> = emptyList(),
   /** Last "실적" read from the card company's site (card accounts). */
   val cardPerformance: com.moneyflow.data.repository.CardPerformance? = null,
+  /** Next bill read from the card company's screen or its 청구 안내 message. */
+  val cardBill: com.moneyflow.domain.card.CardBill? = null,
   val cardProfile: com.moneyflow.data.model.CardProfileEntity? = null,
   val cardBenefits: List<com.moneyflow.data.model.CardBenefitEntity> = emptyList(),
   val cardStatus: com.moneyflow.domain.card.CardStatus? = null,
@@ -74,6 +76,7 @@ class AccountDetailViewModel @Inject constructor(
   ) { account, txs, all, s, card ->
     AccountDetailUiState(
       account, txs, all.filter { it.id != accountId }, s.cardPerformance[accountId],
+      cardBill = s.cardBills[accountId],
       cardProfile = card.first, cardBenefits = card.second, cardStatus = card.third, isLoading = false
     )
   }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountDetailUiState())

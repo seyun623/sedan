@@ -83,6 +83,19 @@ object FeatureChecks {
       CheckTarget.AUTO_CAPTURE, fullOnly = true
     ),
     FeatureCheck(
+      "next_bill", "다음 결제 금액 (청구 안내)", "2.15",
+      listOf(
+        "카드사에서 '결제 예정 금액 안내' 카톡·문자가 오면 (보통 결제일 1~2주 전) 결제 알림 자동 등록 화면의 목록에 '청구 안내 · … 저장'이 뜨는지 봐 주세요.",
+        "자산 탭 → 그 카드를 열면 맨 위 '다음 결제'에 금액과 결제일이 보이는지 봐 주세요."
+      ),
+      CheckTarget.AUTO_CAPTURE, fullOnly = true
+    ),
+    FeatureCheck(
+      "card_needed_only", "필요한 것만 가져오기", "2.15",
+      listOf("카드사 가져오기 → KB국민·하나(휴대폰 화면)·BC 중 하나에 로그인 → 아래 '필요한 것만 가져오기' → 미리보기에 이용내역·결제 예정 금액이 나오는지 봐 주세요."),
+      CheckTarget.CARD_IMPORT
+    ),
+    FeatureCheck(
       "bill", "카드 결제일 미리 알림", "2.6",
       listOf(
         "자산 탭에서 카드를 열어 '결제일'이 입력돼 있는지 확인해 주세요.",

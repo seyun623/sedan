@@ -149,6 +149,19 @@ class AutoCaptureProcessorTest {
     assertTrue(pay.toString(), pay is CaptureOutcome.Recorded && pay.account.name == "카카오페이")
   }
 
+  @Test fun billNoticeIsKeptNotRecorded() = runBlocking {
+    // 2.15: the monthly 결제 예정 금액 message fills the card's next bill, not the ledger.
+    val msg = "[Web발신]\n[신한카드] 황*윤님 12월 결제예정금액 523,000원 결제일 12/14"
+    val out = processor.process(CaptureChannel.SMS, "15447200", null, "", msg, clock.nowMillis())
+    assertTrue(out.toString(), out is CaptureOutcome.BillNoticed)
+    assertTrue(txs().isEmpty())
+    val card = db.accountDao().getAll().single { it.name.contains("신한") && it.accountType == com.moneyflow.data.model.AccountType.CREDIT_CARD }
+    val bill = settings.current().cardBills[card.id]!!
+    assertEquals(523_000L, bill.amount)
+    assertEquals(14, bill.dueDate?.dayOfMonth)
+    assertEquals(14, db.accountDao().getById(card.id)!!.paymentDay)
+  }
+
   @Test fun bankAppNameGivesTheBank() = runBlocking {
     val outcome = processor.process(
       CaptureChannel.NOTIFICATION, "com.wooribank.smart.npib", "우리WON뱅킹", "우리WON뱅킹 입출금알림",

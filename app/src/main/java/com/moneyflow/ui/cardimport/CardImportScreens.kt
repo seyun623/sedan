@@ -174,6 +174,11 @@ fun CardBrowserScreen(
   var error by rememberSaveable { mutableStateOf<String?>(null) }
   var aiConsent by remember { mutableStateOf<String?>(null) }
   val savedPages by viewModel.savedPages.collectAsStateWithLifecycle()
+  /** "필요한 것만 가져오기": the site's known pages (phone page) and the pages the user remembered. */
+  val tourPages = remember(savedPages, desktop) {
+    val known = if (desktop == true) emptyList() else site.pages.map { (title, url) -> com.moneyflow.domain.cardimport.SavedPage(url, title, 0L) }
+    (known + savedPages).distinctBy { it.url }
+  }
   /** Asking how to read the remembered pages (device / AI). */
   var autoAsk by remember { mutableStateOf(false) }
   var autoAiConsent by remember { mutableStateOf(false) }
@@ -207,7 +212,7 @@ fun CardBrowserScreen(
 
   /** Opens every remembered page in turn, reads it, then hands all texts to the view model. */
   fun runSavedPages(useAi: Boolean) {
-    val pages = savedPages
+    val pages = tourPages
     autoJob = scope.launch {
       val texts = mutableListOf<Pair<com.moneyflow.domain.cardimport.SavedPage, String>>()
       try {
@@ -321,8 +326,26 @@ fun CardBrowserScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               when {
                 progress != null -> {
-                  Text("기억한 화면 읽는 중 (${progress.first}/${progress.second})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                  Text("필요한 화면 읽는 중 (${progress.first}/${progress.second})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                   TextButton(onClick = { autoJob?.cancel() }) { Text("멈추기") }
+                }
+                tourPages.isNotEmpty() -> {
+                  // Log in, then one tap: 이용내역 · 결제 예정 금액 · 실적 pages are read in turn.
+                  Button(
+                    onClick = { autoAsk = true },
+                    enabled = !busy && !loading,
+                    modifier = Modifier.weight(1f).height(48.dp).testTag("card_auto_read_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+                    shape = RoundedCornerShape(14.dp)
+                  ) { Text("필요한 것만 가져오기", fontWeight = FontWeight.Bold, maxLines = 1) }
+                  OutlinedButton(
+                    onClick = readThisPage,
+                    enabled = !busy && !loading,
+                    modifier = Modifier.height(48.dp).testTag("card_read_button")
+                  ) { Text("이 화면") }
+                  IconButton(onClick = { folded = true }, modifier = Modifier.testTag("card_fold_bar")) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "버튼 접기")
+                  }
                 }
                 else -> {
                   Button(
@@ -332,13 +355,7 @@ fun CardBrowserScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
                     shape = RoundedCornerShape(14.dp)
                   ) { Text("이 화면 가져오기", fontWeight = FontWeight.Bold) }
-                  if (savedPages.isNotEmpty()) {
-                    OutlinedButton(
-                      onClick = { autoAsk = true },
-                      enabled = !busy && !loading,
-                      modifier = Modifier.height(48.dp).testTag("card_auto_read_button")
-                    ) { Text("기억한 ${savedPages.size}개") }
-                  } else {
+                  run {
                     OutlinedButton(
                       onClick = { viewModel.findLinks() },
                       enabled = !busy && !loading,
@@ -511,10 +528,11 @@ fun CardBrowserScreen(
   if (autoAsk) {
     AlertDialog(
       onDismissRequest = { autoAsk = false },
-      title = { Text("기억한 화면 ${savedPages.size}개를 읽을까요?", fontWeight = FontWeight.Bold) },
+      title = { Text("필요한 화면 ${tourPages.size}개를 읽을까요?", fontWeight = FontWeight.Bold) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("로그인한 상태에서 기억한 화면을 차례로 열어 읽고, 한 번에 미리보기로 보여 드려요.", style = MaterialTheme.typography.bodySmall)
+          Text("로그인한 상태에서 아래 화면을 차례로 열어 이용내역·결제 예정 금액·실적만 읽고, 한 번에 미리보기로 보여 드려요.", style = MaterialTheme.typography.bodySmall)
+          Text(tourPages.joinToString(" · ") { it.title }, style = MaterialTheme.typography.bodySmall, color = Gray900, fontWeight = FontWeight.SemiBold)
           Text(
             if (aiLabel != null) "AI로 읽기: 각 화면의 글자를 ${aiLabel}(으)로 보내 정확하게 읽어요."
             else "AI로 읽기는 설정 → AI 설정에서 AI를 켜면 쓸 수 있어요.",
@@ -531,7 +549,7 @@ fun CardBrowserScreen(
     AlertDialog(
       onDismissRequest = { autoAiConsent = false },
       title = { Text("카드 이용내역을 AI로 보낼까요?", fontWeight = FontWeight.Bold) },
-      text = { Text("기억한 화면 ${savedPages.size}개의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요.") },
+      text = { Text("화면 ${tourPages.size}개의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요.") },
       confirmButton = { TextButton(onClick = { autoAiConsent = false; runSavedPages(useAi = true) }) { Text("보내고 읽기", fontWeight = FontWeight.Bold) } },
       dismissButton = { TextButton(onClick = { autoAiConsent = false }) { Text("취소") } }
     )
@@ -677,6 +695,24 @@ fun CardImportPreviewScreen(
               Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Text("이 카드 계좌에 실적 저장", modifier = Modifier.weight(1f), color = Gray900)
                 Switch(checked = s.savePerformance, onCheckedChange = viewModel::setSavePerformance)
+              }
+            }
+          }
+        }
+      }
+
+      extraction.bill?.let { bill ->
+        item(key = "bill") {
+          Surface(shape = RoundedCornerShape(16.dp), color = CardSurface, modifier = Modifier.fillMaxWidth().testTag("preview_bill")) {
+            Column(Modifier.padding(16.dp)) {
+              Text("결제 예정 금액", fontWeight = FontWeight.Bold, color = Gray900)
+              Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Text(bill.dueDate?.let { "${it.monthValue}/${it.dayOfMonth} 결제" } ?: bill.label, color = Gray600, modifier = Modifier.weight(1f))
+                Text(Formatters.formatCurrency(bill.amount), fontWeight = FontWeight.Bold, color = Gray900)
+              }
+              Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Text("이 카드 계좌에 저장 (결제일 알림에 금액 표시)", modifier = Modifier.weight(1f), color = Gray900)
+                Switch(checked = s.saveBill, onCheckedChange = viewModel::setSaveBill)
               }
             }
           }

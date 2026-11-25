@@ -169,6 +169,9 @@ class CardImportRepository @Inject constructor(
     return ImportResult(added, cancelled, skipped)
   }
 
+  suspend fun saveBill(accountId: Long, info: com.moneyflow.domain.card.BillInfo) =
+    CardBills.save(db, settings, accountId, info, "카드사 화면", clock.nowMillis())
+
   suspend fun savePerformance(accountId: Long, info: PerformanceInfo) =
     settings.setCardPerformance(accountId, CardPerformance(info.label, info.amount, clock.nowMillis()))
 

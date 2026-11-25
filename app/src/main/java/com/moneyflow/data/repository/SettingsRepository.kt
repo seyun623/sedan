@@ -65,6 +65,8 @@ data class AppSettings(
   val sentCardAlerts: Set<String> = emptySet(),
   /** Last "실적" figure read from each card company screen, by account id. */
   val cardPerformance: Map<Long, CardPerformance> = emptyMap(),
+  /** Next bill of each card account (from the card company's screen or its 청구 안내). */
+  val cardBills: Map<Long, com.moneyflow.domain.card.CardBill> = emptyMap(),
   /** Auto backup: folder picked with the system file picker (tree URI). */
   val autoBackupFolder: String? = null,
   /** Auto backup password, encrypted with the Android Keystore. */
@@ -163,6 +165,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val LAST_BACKUP = longPreferencesKey("last_backup_at")
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
     val CARD_PERFORMANCE = stringPreferencesKey("card_performance_json")
+    val CARD_BILLS = stringPreferencesKey("card_bills_json")
     val CARD_ALERTS = booleanPreferencesKey("card_alerts_enabled")
     val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
     val SENT_CARD_ALERTS = androidx.datastore.preferences.core.stringSetPreferencesKey("sent_card_alerts")
@@ -248,6 +251,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       }.toMap(),
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
+      cardBills = parseBills(p[Keys.CARD_BILLS]),
       cardAlertsEnabled = p[Keys.CARD_ALERTS] ?: false,
       lastSeenVersion = p[Keys.LAST_SEEN_VERSION],
       sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet(),
@@ -363,6 +367,24 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     }
     it[Keys.CARD_PERFORMANCE] = json.toString()
   }
+
+  suspend fun setCardBill(accountId: Long, bill: com.moneyflow.domain.card.CardBill) = store.edit {
+    val map = parseBills(it[Keys.CARD_BILLS]).toMutableMap()
+    map[accountId] = bill
+    val json = org.json.JSONObject()
+    map.forEach { (id, b) ->
+      json.put(id.toString(), org.json.JSONObject().put("amount", b.amount).put("due", b.dueEpochDay ?: -1).put("src", b.source).put("at", b.fetchedAt))
+    }
+    it[Keys.CARD_BILLS] = json.toString()
+  }
+
+  private fun parseBills(raw: String?): Map<Long, com.moneyflow.domain.card.CardBill> = runCatching {
+    val json = org.json.JSONObject(raw ?: return emptyMap())
+    json.keys().asSequence().associate { k ->
+      val o = json.getJSONObject(k)
+      k.toLong() to com.moneyflow.domain.card.CardBill(o.optLong("amount"), o.optLong("due", -1).takeIf { it >= 0 }, o.optString("src"), o.optLong("at"))
+    }
+  }.getOrDefault(emptyMap())
 
   private fun parsePerformance(raw: String?): Map<Long, CardPerformance> = runCatching {
     val json = org.json.JSONObject(raw ?: return emptyMap())

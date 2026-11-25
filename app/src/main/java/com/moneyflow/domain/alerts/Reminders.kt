@@ -102,18 +102,26 @@ object BillReminders {
     today: LocalDate,
     accounts: List<com.moneyflow.data.model.AccountEntity>,
     recurring: List<com.moneyflow.data.model.RecurringTransactionEntity>,
-    sent: Set<String>
+    sent: Set<String>,
+    /** Bills read from the card company (amount and date to pay). */
+    bills: Map<Long, com.moneyflow.domain.card.CardBill> = emptyMap()
   ): List<Reminder> {
     val out = mutableListOf<Reminder>()
-    accounts.filter { it.paymentDay in 1..31 }.forEach { a ->
-      val date = nextDate(today, a.paymentDay)
+    accounts.forEach { a ->
+      val bill = bills[a.id]?.takeIf { b -> b.dueDate?.let { !it.isBefore(today) } == true }
+      // The card company's own date wins over the day typed in (it moves on weekends and holidays).
+      val date = bill?.dueDate ?: a.paymentDay.takeIf { it in 1..31 }?.let { nextDate(today, it) } ?: return@forEach
       val days = ChronoUnit.DAYS.between(today, date)
       val key = "bill|card|${a.id}|$date"
       if (days in 0..CARD_DAYS_BEFORE && key !in sent) {
         val label = if (a.accountType == com.moneyflow.data.model.AccountType.LOAN) "상환일" else "결제일"
         val whenText = if (days == 0L) "오늘" else "${days}일 뒤(${date.monthValue}/${date.dayOfMonth})"
         out += Reminder(key, ReminderChannel.BILL, "${a.name} $label${if (days == 0L) "이에요" else "이 다가와요"}",
-          "$whenText ${label}이에요." + (if (a.isDebt && a.balance > 0) " 지금까지 ${if (label == "상환일") "남은 금액" else "카드 사용 잔액(할부 포함)"} ${Formatters.formatCurrency(a.balance)}" else ""))
+          "$whenText ${label}이에요." + when {
+            bill != null -> " 결제하실 금액 ${Formatters.formatCurrency(bill.amount)} (${bill.source} 기준). 통장 잔액을 확인해 주세요."
+            a.isDebt && a.balance > 0 -> " 지금까지 ${if (label == "상환일") "남은 금액" else "카드 사용 잔액(할부 포함)"} ${Formatters.formatCurrency(a.balance)}"
+            else -> ""
+          })
       }
     }
     recurring.filter { it.isActive && it.type != com.moneyflow.data.model.TransactionType.INCOME }.forEach { r ->

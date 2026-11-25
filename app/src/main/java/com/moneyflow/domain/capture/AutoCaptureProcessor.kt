@@ -28,6 +28,8 @@ sealed interface CaptureOutcome {
   /** Foreign-currency payment: the user was asked to enter the KRW amount. */
   data class NeedsKrwAmount(val prompt: ForeignPaymentPrompt) : CaptureOutcome
   data class Skipped(val reason: String) : CaptureOutcome
+  /** A card company's monthly "결제 예정 금액" notice: kept on the card account (not a payment). */
+  data class BillNoticed(val account: AccountEntity, val bill: com.moneyflow.domain.card.BillInfo) : CaptureOutcome
   /** Test run: this is what would be recorded. */
   data class WouldRecord(val payment: ParsedPayment, val account: AccountEntity, val newAccount: Boolean = false) : CaptureOutcome
 }
@@ -136,6 +138,10 @@ class AutoCaptureProcessor @Inject constructor(
     CategoryRules.ignores(rules, title, body)?.let { return CaptureOutcome.Skipped("무시 규칙: ${it.keyword}") }
 
     val result = parser.parse(title, body, receivedAt)
+    // A bill notice is all "footer" lines (명세서, 결제 예정) to the payment parser.
+    if (result is ParseResult.Ignored && (result.reason == "광고·안내 메시지" || result.reason == "빈 메시지")) {
+      billNotice(gate, originLabel, title, body, s, dryRun)?.let { return it }
+    }
     val parsed = when (result) {
       is ParseResult.Ignored -> return CaptureOutcome.Skipped(result.reason)
       is ParseResult.Success -> result.payment
@@ -337,6 +343,31 @@ class AutoCaptureProcessor @Inject constructor(
     val a = memo.replace(" ", "")
     val b = merchant.replace(" ", "")
     return a.isNotEmpty() && b.isNotEmpty() && (a.contains(b) || b.contains(a.take(b.length)))
+  }
+
+  /**
+   * "[신한카드] 12월 결제 예정 금액 523,000원 (결제일 12/14)": keeps the bill on that card's account
+   * so the payment-day reminder can show it. Null when the message isn't a bill notice.
+   */
+  private suspend fun billNotice(
+    gate: FinancialApps.Gate,
+    originLabel: String?,
+    title: String,
+    body: String,
+    s: com.moneyflow.data.repository.AppSettings,
+    dryRun: Boolean
+  ): CaptureOutcome? {
+    val text = "$title\n$body"
+    val bill = com.moneyflow.domain.card.BillText.find(text, clock.today(), message = true) ?: return null
+    val provider = parser.detectProvider(text) ?: originLabel?.let { parser.detectProvider(it) } ?: return null
+    if (!provider.endsWith("카드")) return null
+    if (gate == FinancialApps.Gate.KAKAO_CHANNEL && !FinancialApps.sameCompany(title, provider)) return null
+    val asPayment = ParsedPayment(PaymentKind.PAYMENT, TransactionType.EXPENSE, bill.amount, "", "", provider, null, null, null)
+    val account = db.withTransaction { pickAccount(asPayment, s, dryRun) }
+      ?.takeIf { it.accountType == AccountType.CREDIT_CARD }
+      ?: return CaptureOutcome.Skipped("청구 안내: $provider 카드 계좌가 없음")
+    if (!dryRun) com.moneyflow.data.repository.CardBills.save(db, settings, account.id, bill, "카드사 안내", clock.nowMillis())
+    return CaptureOutcome.BillNoticed(account, bill)
   }
 
   /** Id of the account the last [pickAccount] call created (to say so in the log). */

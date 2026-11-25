@@ -75,6 +75,9 @@ class CaptureLog @Inject constructor(@ApplicationContext private val context: Co
       is CaptureOutcome.NeedsKrwAmount -> true to "해외 결제 · 원화 금액 입력 알림 보냄"
       is CaptureOutcome.WouldRecord -> true to "시험 성공 · ${outcome.account.name}${if (outcome.newAccount) "(새로 만들 계좌)" else ""}에 ${com.moneyflow.util.Formatters.formatCurrency(outcome.payment.amount)} ${outcome.payment.type.title}으로 기록돼요"
       is CaptureOutcome.Skipped -> false to "건너뜀 · ${outcome.reason}"
+      is CaptureOutcome.BillNoticed -> true to "청구 안내 · ${outcome.account.name} " +
+        (outcome.bill.dueDate?.let { "${it.monthValue}/${it.dayOfMonth} " } ?: "") +
+        "결제 ${com.moneyflow.util.Formatters.formatCurrency(outcome.bill.amount)} 저장 (가계부에는 기록하지 않아요)"
     }
 
     internal fun encode(list: List<CaptureLogEntry>): String = JSONArray(list.map {
