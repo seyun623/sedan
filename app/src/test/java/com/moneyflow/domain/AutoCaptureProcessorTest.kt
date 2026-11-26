@@ -210,6 +210,37 @@ class AutoCaptureProcessorTest {
     assertEquals(2, txs().count { it.amount == 4_500L })
   }
 
+  // ---- 2.17: 지역화폐·온누리상품권 ----
+
+  @Test fun localCurrencyAppPaymentGoesToItsOwnWallet() = runBlocking {
+    val out = processor.process(
+      CaptureChannel.NOTIFICATION, "gov.gyeonggi.localpay", "경기지역화폐", "경기지역화폐",
+      "결제 완료 12,000원 행복마트", clock.nowMillis()
+    )
+    assertTrue(out.toString(), out is CaptureOutcome.Recorded)
+    val acc = (out as CaptureOutcome.Recorded).account
+    assertEquals("경기지역화폐", acc.name)
+    assertEquals(com.moneyflow.data.model.AccountType.CASH, acc.accountType)
+    assertEquals("지역화폐", txs().single().paymentMethod)
+  }
+
+  @Test fun onnuriSmsIsRecordedAsOnnuri() = runBlocking {
+    val out = processor.process(CaptureChannel.SMS, "15881234", null, "", "[Web발신] [온누리상품권] 결제 8,500원 남대문시장 순대국", clock.nowMillis())
+    assertTrue(out.toString(), out is CaptureOutcome.Recorded)
+    assertEquals("온누리상품권", txs().single().paymentMethod)
+  }
+
+  @Test fun appsTheUserAddedAreRead() {
+    assertEquals(com.moneyflow.domain.capture.FinancialApps.Gate.BLOCKED, com.moneyflow.domain.capture.FinancialApps.gate("kr.city.pay", "우리동네 앱"))
+    com.moneyflow.domain.capture.FinancialApps.extraPackages = setOf("kr.city.pay")
+    try {
+      assertEquals(com.moneyflow.domain.capture.FinancialApps.Gate.ALLOWED, com.moneyflow.domain.capture.FinancialApps.gate("kr.city.pay", "우리동네 앱"))
+    } finally {
+      com.moneyflow.domain.capture.FinancialApps.extraPackages = emptySet()
+    }
+    assertEquals(com.moneyflow.domain.capture.FinancialApps.Gate.ALLOWED, com.moneyflow.domain.capture.FinancialApps.gate("kr.incheon.eum", "인천e음"))
+  }
+
   @Test fun bankAppNameGivesTheBank() = runBlocking {
     val outcome = processor.process(
       CaptureChannel.NOTIFICATION, "com.wooribank.smart.npib", "우리WON뱅킹", "우리WON뱅킹 입출금알림",

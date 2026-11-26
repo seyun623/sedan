@@ -1,5 +1,7 @@
 package com.moneyflow.ui.settings
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.heightIn
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -267,6 +269,10 @@ fun AutoCaptureSettingsScreen(
       }
     }
 
+    SettingsSection("추가로 읽을 앱") {
+      ExtraAppsSection()
+    }
+
     SettingsSection("기록할 계좌") {
       SettingsSwitchItem(
         title = "처음 보는 카드·은행은 계좌 만들기",
@@ -444,6 +450,73 @@ private fun ResultLine(label: String, value: String) {
       fontWeight = FontWeight.SemiBold,
       maxLines = 2,
       overflow = TextOverflow.Ellipsis
+    )
+  }
+}
+
+/** One installed app (launcher entry) for "추가로 읽을 앱". */
+private data class InstalledApp(val packageName: String, val label: String)
+
+/**
+ * Apps the app doesn't know by name (a city's 지역화폐 app, a small bank) can be added here; their
+ * notifications are then read like card alerts. Messengers are never offered.
+ */
+@Composable
+private fun ExtraAppsSection() {
+  val context = LocalContext.current
+  var chosen by remember { mutableStateOf(com.moneyflow.domain.capture.CaptureExtraApps.load(context)) }
+  var picking by remember { mutableStateOf(false) }
+  val pm = context.packageManager
+  val chosenLabels = chosen.map { p -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(p, 0)).toString() }.getOrDefault(p) }
+  SettingsItem(
+    title = if (chosen.isEmpty()) "앱 고르기" else "고른 앱 ${chosen.size}개",
+    subtitle = if (chosen.isEmpty()) "지역화폐·온누리 앱처럼 결제 알림이 오는데 기록되지 않는 앱을 골라 주세요. (경기지역화폐·인천e음·동백전·chak·온누리 등은 이미 읽어요)"
+      else chosenLabels.joinToString(", "),
+    icon = Icons.Filled.Notifications,
+    onClick = { picking = true },
+    modifier = Modifier.testTag("capture_extra_apps")
+  )
+  if (picking) {
+    val apps = remember {
+      runCatching {
+        pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0)
+          .map { InstalledApp(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+          .filter { it.packageName != context.packageName && it.packageName != com.moneyflow.domain.capture.FinancialApps.KAKAO && it.packageName !in com.moneyflow.domain.capture.FinancialApps.SMS_APPS }
+          .distinctBy { it.packageName }
+          .sortedBy { it.label }
+      }.getOrDefault(emptyList())
+    }
+    var selection by remember { mutableStateOf(chosen) }
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { picking = false },
+      title = { Text("추가로 읽을 앱", fontWeight = FontWeight.Bold) },
+      text = {
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+          items(apps.size) { i ->
+            val app = apps[i]
+            val on = app.packageName in selection
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.fillMaxWidth()
+                .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Checkbox) {
+                  selection = if (on) selection - app.packageName else selection + app.packageName
+                }
+                .padding(vertical = 2.dp)
+            ) {
+              androidx.compose.material3.Checkbox(checked = on, onCheckedChange = null)
+              Text(app.label, modifier = Modifier.padding(start = 8.dp))
+            }
+          }
+        }
+      },
+      confirmButton = {
+        androidx.compose.material3.TextButton(onClick = {
+          com.moneyflow.domain.capture.CaptureExtraApps.save(context, selection)
+          chosen = selection
+          picking = false
+        }) { Text("저장", fontWeight = FontWeight.Bold) }
+      },
+      dismissButton = { androidx.compose.material3.TextButton(onClick = { picking = false }) { Text("취소") } }
     )
   }
 }

@@ -335,7 +335,7 @@ internal fun SetBudgetDialog(
 // Recurring
 // ================================================================================================
 
-private val recurringPaymentMethods = listOf("계좌이체", "자동이체", "체크카드", "신용카드", "현금", "간편결제")
+private val recurringPaymentMethods = listOf("계좌이체", "자동이체", "체크카드", "신용카드", "현금", "간편결제", "지역화폐", "온누리상품권")
 
 /** Adds ([initial] == null) or edits a recurring transaction. */
 @Composable

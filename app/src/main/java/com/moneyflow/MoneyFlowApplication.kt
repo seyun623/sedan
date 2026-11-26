@@ -44,6 +44,7 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
   override fun onCreate() {
     super.onCreate()
     com.moneyflow.util.ProblemLog.install(this, BuildConfig.VERSION_NAME)
+    com.moneyflow.domain.capture.FinancialApps.extraPackages = com.moneyflow.domain.capture.CaptureExtraApps.load(this)
     appLockManager.initialize()
     ProcessLifecycleOwner.get().lifecycle.addObserver(appLockManager)
     RecurringWorker.schedule(this)

@@ -67,7 +67,7 @@ import com.moneyflow.ui.theme.OnBrand
 import com.moneyflow.ui.theme.TossBlue
 import com.moneyflow.util.Formatters
 
-internal val PAYMENT_METHODS = listOf("체크카드", "신용카드", "계좌이체", "현금", "간편결제")
+internal val PAYMENT_METHODS = listOf("체크카드", "신용카드", "계좌이체", "현금", "간편결제", "지역화폐", "온누리상품권")
 
 internal fun TransactionType.accentColor(): Color = when (this) {
   TransactionType.EXPENSE -> AccentRed

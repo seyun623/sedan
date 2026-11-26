@@ -285,6 +285,7 @@ class AutoCaptureProcessor @Inject constructor(
           timestamp = timestamp,
           memo = memo,
           paymentMethod = when {
+            Vouchers.isVoucher(payment.provider) || Vouchers.isVoucher(account.name) -> Vouchers.paymentMethod(payment.provider ?: account.name)
             account.accountType == AccountType.CREDIT_CARD -> "카드"
             payment.type == TransactionType.EXPENSE && payment.provider?.contains("페이") == true -> "간편결제"
             else -> "계좌이체"
@@ -484,6 +485,8 @@ class AutoCaptureProcessor @Inject constructor(
 
   /** A card company gets a card account, a bank a bank account; pay services get none (their card pays). */
   private fun newAccountType(provider: String): AccountType? = when {
+    // 지역화폐·온누리: prepaid money, like cash in a wallet.
+    Vouchers.isVoucher(provider) -> AccountType.CASH
     provider.endsWith("카드") -> AccountType.CREDIT_CARD
     provider.endsWith("은행") || provider.endsWith("뱅크") || provider in setOf("새마을금고", "신협", "우체국", "농협", "수협") -> AccountType.BANK
     // 카카오페이·네이버페이 머니 etc.: a wallet with its own balance.
@@ -558,10 +561,15 @@ object FinancialApps {
     return t.isNotEmpty() && KAKAO_CHANNELS.any { c -> t == c || (t.startsWith(c) && t.length <= c.length + 6) }
   }
 
+  /** Apps the user added to be read ([CaptureExtraApps]); set at app start and when changed. */
+  @Volatile var extraPackages: Set<String> = emptySet()
+
   fun gate(packageName: String, appLabel: String?, title: String? = null): Gate = when {
     packageName == KAKAO -> if (isKakaoChannel(title)) Gate.KAKAO_CHANNEL else Gate.BLOCKED
     packageName in SMS_APPS -> Gate.SMS_APP
     packageName in BLOCKED -> Gate.BLOCKED
+    packageName in extraPackages -> Gate.ALLOWED
+    appLabel != null && Vouchers.LABEL.containsMatchIn(appLabel) -> Gate.ALLOWED
     packageName in KNOWN || (appLabel != null && FINANCIAL_LABEL.containsMatchIn(appLabel)) -> Gate.ALLOWED
     else -> Gate.BLOCKED
   }
