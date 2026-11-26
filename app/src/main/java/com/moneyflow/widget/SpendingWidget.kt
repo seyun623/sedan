@@ -173,7 +173,7 @@ object SpendingWidget {
       context, 101,
       Intent(context, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        .also { PrefillIntents.put(it, FormPrefill()) },
+        .also { PrefillIntents.put(context, it, FormPrefill()) },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     if (size == WidgetSize.SMALL) {

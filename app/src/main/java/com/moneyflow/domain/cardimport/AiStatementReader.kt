@@ -47,6 +47,10 @@ class AiStatementReader @Inject constructor(private val ai: AiService) {
     private val PHONE = Regex("(?<![0-9])01[016789][- ]?[0-9*]{3,4}[- ]?[0-9]{4}(?![0-9])")
     private val EMAIL = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
     /** Account-number style "110-123-456789" (10+ digits; dates like 2026-11-21 have 8). */
+    /** 10–14 digits in a row: an account number (amounts have commas, dates are shorter). */
+    private val LONG_NUMBER = Regex("(?<![0-9,.])[0-9]{10,14}(?![0-9,.])")
+    /** "홍길동 님", "홍*동 고객님": the person's name before an honorific. */
+    private val NAME_HONORIFIC = Regex("(?<![가-힣])([가-힣*]{2,4})(\\s?(?:고객)?님)")
     private val ACCOUNT = Regex("(?<![0-9])[0-9*]{2,6}-[0-9*]{2,6}-[0-9*]{2,8}(?:-[0-9*]{1,4})?(?![0-9])")
 
     /** Masks card / resident / phone / account numbers and e-mail addresses. */
@@ -56,6 +60,9 @@ class AiStatementReader @Inject constructor(private val ai: AiService) {
       .replace(PHONE, "[전화번호]")
       .replace(EMAIL, "[이메일]")
       .replace(ACCOUNT) { m -> if (m.value.count { it.isDigit() || it == '*' } >= 10) "[계좌번호]" else m.value }
+      // Account numbers without dashes ("1002123456789") and "홍길동 님" style names.
+      .replace(LONG_NUMBER, "[계좌번호]")
+      .replace(NAME_HONORIFIC) { m -> "[이름]" + m.groupValues[2] }
 
     private const val MAX_ROWS = 500
     private const val MAX_AMOUNT = 100_000_000L

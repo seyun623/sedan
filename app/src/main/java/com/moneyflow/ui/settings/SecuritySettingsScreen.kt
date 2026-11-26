@@ -62,7 +62,7 @@ import com.moneyflow.ui.theme.TossBlue
 import com.moneyflow.util.BiometricAuthHelper
 import com.moneyflow.util.BiometricStatus
 
-private enum class PinFlow { SETUP, CHANGE, DISABLE }
+private enum class PinFlow { SETUP, CHANGE, DISABLE, VERIFY }
 
 private val TimeoutOptions = listOf(0 to "즉시", 30 to "30초", 60 to "1분", 300 to "5분")
 
@@ -76,6 +76,9 @@ fun SecuritySettingsScreen(
   val context = LocalContext.current
   val biometricStatus = remember { BiometricAuthHelper.checkBiometricAvailability(context) }
   var flow by rememberSaveable { mutableStateOf<PinFlow?>(null) }
+  /** What to do once the current PIN was confirmed ("현재 PIN 확인"). */
+  var afterVerify by remember { mutableStateOf<(() -> Unit)?>(null) }
+  fun verifyThen(action: () -> Unit) { afterVerify = action; flow = PinFlow.VERIFY }
   var notice by rememberSaveable { mutableStateOf<String?>(null) }
 
   SettingsScaffold(title = "보안", onBack = onBack) {
@@ -94,7 +97,13 @@ fun SecuritySettingsScreen(
         title = "휴대폰 잠금으로 열기 (추천)",
         subtitle = "지문·얼굴·패턴처럼 휴대폰을 여는 방법으로 앱도 열어요. 따로 외울 비밀번호가 없어요",
         selected = settings.usesDeviceLock,
-        onSelect = { if (!settings.usesDeviceLock) confirmPhoneLock { viewModel.enableDeviceLock() } }
+        onSelect = {
+          // From the app PIN: the PIN first (the phone lock may be known to the whole family).
+          if (!settings.usesDeviceLock) {
+            if (settings.usesPinLock) verifyThen { confirmPhoneLock { viewModel.enableDeviceLock() } }
+            else confirmPhoneLock { viewModel.enableDeviceLock() }
+          }
+        }
       )
       SettingsRadioItem(
         title = "앱 전용 PIN",
@@ -131,7 +140,7 @@ fun SecuritySettingsScreen(
             else "PIN을 잊었을 때 앱을 열 수 있는 코드를 만들어 두세요",
           icon = Icons.Filled.Password,
           showChevron = false,
-          onClick = viewModel::newRecoveryCode,
+          onClick = { verifyThen { viewModel.newRecoveryCode() } },
           modifier = Modifier.testTag("security_recovery_code")
         )
         if (biometricStatus == BiometricStatus.READY) {
@@ -140,7 +149,8 @@ fun SecuritySettingsScreen(
             subtitle = "지문이나 얼굴로 잠금을 해제해요",
             icon = Icons.Filled.Fingerprint,
             checked = settings.biometricEnabled,
-            onCheckedChange = viewModel::setBiometricEnabled,
+            // Turning fingerprints on lets every fingerprint on the phone open the app: PIN first.
+            onCheckedChange = { on -> if (on) verifyThen { viewModel.setBiometricEnabled(true) } else viewModel.setBiometricEnabled(false) },
             modifier = Modifier.testTag("security_biometric_switch")
           )
         } else {
@@ -226,7 +236,10 @@ fun SecuritySettingsScreen(
       onDismiss = { flow = null },
       onSetPin = { pin, done -> viewModel.setPin(pin) { ok -> done(ok, if (ok) null else "PIN은 숫자 4~6자리로 정해 주세요.") } },
       onChangePin = { old, new, done -> viewModel.changePin(old, new, done) },
-      onDisable = { pin, done -> viewModel.disableLock(pin, done) }
+      onDisable = { pin, done ->
+        if (current == PinFlow.VERIFY) viewModel.verifyPin(pin) { ok, msg -> done(ok, msg); if (ok) afterVerify?.invoke().also { afterVerify = null } }
+        else viewModel.disableLock(pin, done)
+      }
     )
   }
 }
@@ -272,7 +285,7 @@ private fun PinFlowDialog(
     when (step) {
       PinStep.CURRENT -> {
         if (pin.length < 4) return
-        if (flow == PinFlow.DISABLE) {
+        if (flow == PinFlow.DISABLE || flow == PinFlow.VERIFY) {
           busy = true
           onDisable(pin, ::finish)
         } else {
@@ -304,6 +317,7 @@ private fun PinFlowDialog(
     PinFlow.SETUP -> "앱 잠금 설정"
     PinFlow.CHANGE -> "PIN 변경"
     PinFlow.DISABLE -> "앱 잠금 끄기"
+    PinFlow.VERIFY -> "현재 PIN 확인"
   }
   val prompt = when (step) {
     PinStep.CURRENT -> "현재 PIN을 입력해 주세요"
@@ -368,7 +382,7 @@ private fun PinFlowDialog(
         if (step != PinStep.CONFIRM) {
           Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
             TextButton(onClick = ::advance, enabled = input.length >= 4 && !busy) {
-              Text(if (step == PinStep.CURRENT && flow == PinFlow.DISABLE) "확인" else "다음", fontWeight = FontWeight.Bold)
+              Text(if (step == PinStep.CURRENT && (flow == PinFlow.DISABLE || flow == PinFlow.VERIFY)) "확인" else "다음", fontWeight = FontWeight.Bold)
             }
           }
         }
@@ -387,7 +401,7 @@ private fun RecoveryCodeShownDialog(code: String, onDone: () -> Unit) {
     text = {
       androidx.compose.foundation.layout.Column {
         Text(
-          "PIN을 잊었을 때 잠금 화면의 'PIN을 잊었어요'에서 이 코드를 넣으면 앱이 열려요. 이 화면을 닫으면 다시 볼 수 없어요. 종이에 적거나 가족에게 보내 두세요.",
+          "PIN을 잊었을 때 잠금 화면의 'PIN을 잊었어요'에서 이 코드를 넣으면 앱이 열려요. 이 화면을 닫으면 다시 볼 수 없어요. 종이에 적어 안전한 곳에 두세요. (이 코드가 있으면 누구나 잠금을 풀 수 있어요)",
           style = MaterialTheme.typography.bodySmall, color = Gray600
         )
         Text(
@@ -398,7 +412,12 @@ private fun RecoveryCodeShownDialog(code: String, onDone: () -> Unit) {
         )
         androidx.compose.material3.OutlinedButton(onClick = {
           val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-          cm.setPrimaryClip(android.content.ClipData.newPlainText("복구 코드", code))
+          // Marked sensitive: keyboards don't keep it in their clipboard history or show it in previews.
+          cm.setPrimaryClip(android.content.ClipData.newPlainText("복구 코드", code).apply {
+            description.extras = android.os.PersistableBundle().apply {
+              putBoolean(if (android.os.Build.VERSION.SDK_INT >= 33) android.content.ClipDescription.EXTRA_IS_SENSITIVE else "android.content.extra.IS_SENSITIVE", true)
+            }
+          })
         }) { Text("복사하기") }
       }
     },

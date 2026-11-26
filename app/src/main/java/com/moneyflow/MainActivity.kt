@@ -32,7 +32,7 @@ class MainActivity : FragmentActivity() {
     enableEdgeToEdge()
     // Hide content in the recents screen until settings say otherwise.
     applySecureScreen(true)
-    com.moneyflow.work.PrefillIntents.take(intent)?.let(appViewModel.prefill::request)
+    com.moneyflow.work.PrefillIntents.take(this, intent)?.let(appViewModel.prefill::request)
     setContent {
       val settings by appViewModel.settings.collectAsStateWithLifecycle()
       val locked by appViewModel.locked.collectAsStateWithLifecycle()
@@ -42,7 +42,8 @@ class MainActivity : FragmentActivity() {
       val contentState = rememberSaveableStateHolder()
       val navController = rememberNavController()
       MoneyFlowTheme(themeMode = s?.themeMode ?: com.moneyflow.data.repository.ThemeMode.SYSTEM) {
-        LaunchedEffect(s?.secureScreen) { s?.let { applySecureScreen(it.secureScreen) } }
+        // With an app lock, the recents thumbnail (taken before the lock kicks in) must not show the ledger.
+        LaunchedEffect(s?.secureScreen, s?.isLockEnabled) { s?.let { applySecureScreen(it.secureScreen, hideRecents = it.isLockEnabled) } }
         when {
           s == null -> Box(Modifier.fillMaxSize().background(Gray100))
           s.usesDeviceLock && locked -> com.moneyflow.ui.lock.DeviceLockScreen(
@@ -74,12 +75,12 @@ class MainActivity : FragmentActivity() {
 
   override fun onNewIntent(intent: android.content.Intent) {
     super.onNewIntent(intent)
-    com.moneyflow.work.PrefillIntents.take(intent)?.let(appViewModel.prefill::request)
+    com.moneyflow.work.PrefillIntents.take(this, intent)?.let(appViewModel.prefill::request)
   }
 
-  private fun applySecureScreen(secure: Boolean) {
+  private fun applySecureScreen(secure: Boolean, hideRecents: Boolean = secure) {
     if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(!secure)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(!(secure || hideRecents))
   }
 }

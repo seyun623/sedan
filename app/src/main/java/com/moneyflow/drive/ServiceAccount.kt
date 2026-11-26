@@ -10,6 +10,8 @@ class DriveKeyException(message: String) : Exception(message)
 
 /** The bot (Google service account) key file the user imports once. */
 data class ServiceAccountKey(val clientEmail: String, val privateKeyPem: String, val tokenUri: String, val projectId: String) {
+  /** Never prints the private key (logs, error messages). */
+  override fun toString(): String = "ServiceAccountKey(clientEmail=$clientEmail, projectId=$projectId, privateKey=***)"
 
   companion object {
     const val DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"

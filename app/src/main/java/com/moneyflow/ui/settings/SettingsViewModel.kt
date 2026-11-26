@@ -83,6 +83,12 @@ class SettingsViewModel @Inject constructor(
     onDone(true, null)
   }
 
+  /** Checks the current PIN (same failure counter as the lock screen) before a security change. */
+  fun verifyPin(currentPin: String, onDone: (Boolean, String?) -> Unit) = viewModelScope.launch {
+    pinError(lock.checkPin(currentPin))?.let { onDone(false, it); return@launch }
+    onDone(true, null)
+  }
+
   fun disableLock(currentPin: String, onDone: (Boolean, String?) -> Unit) = viewModelScope.launch {
     pinError(lock.checkPin(currentPin))?.let { onDone(false, it); return@launch }
     lock.disableLock()

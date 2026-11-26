@@ -19,6 +19,11 @@ class FakeClock(start: LocalDateTime = LocalDateTime.of(2026, 11, 21, 12, 0)) : 
   /** Monotonic clock; advances with [set]/[advance] unless [setWallClockOnly] is used. */
   var elapsed: Long = 1_000_000L
   override fun elapsedRealtime(): Long = elapsed
+  /** Changes on a simulated reboot (see [reboot]). */
+  var boot: String = "boot-1"
+  override fun bootId(): String = boot
+  /** A reboot: the monotonic clock starts again. */
+  fun reboot() { boot = boot + "+"; elapsed = 5_000L }
   fun set(dateTime: LocalDateTime) {
     val next = dateTime.atZone(zone).toInstant()
     if (next.isAfter(instant)) elapsed += next.toEpochMilli() - instant.toEpochMilli()

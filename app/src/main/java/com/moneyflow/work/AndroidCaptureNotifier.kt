@@ -19,7 +19,7 @@ class AndroidCaptureNotifier(private val context: Context) : CaptureNotifier {
         "해외 결제 ${prompt.foreignAmount} · 원화 금액을 입력해 주세요",
         "${prompt.provider?.let { "$it · " } ?: ""}${prompt.merchant}\n카드사에서 원화 금액이 확정되면 눌러서 기록하세요."
       )
-    ) { PrefillIntents.put(this, prompt.prefill) }
+    ) { PrefillIntents.put(context, this, prompt.prefill) }
   }
 }
 
@@ -32,9 +32,23 @@ object PrefillIntents {
   private const val CATEGORY = "com.moneyflow.extra.CATEGORY"
   private const val ACCOUNT = "com.moneyflow.extra.ACCOUNT"
   private const val TIME = "com.moneyflow.extra.TIME"
+  private const val TOKEN = "com.moneyflow.extra.TOKEN"
 
-  fun put(intent: Intent, p: FormPrefill) {
-    intent.putExtra(OPEN_FORM, true).putExtra(TYPE, p.type.name).putExtra(MEMO, p.memo)
+  /**
+   * A random value only this app knows: MainActivity is exported (launcher), so another app could
+   * send it a made-up prefill; only intents made by our own notifications / widget carry it.
+   */
+  @Synchronized
+  internal fun token(context: Context): String {
+    val prefs = context.getSharedPreferences("prefill_intents", Context.MODE_PRIVATE)
+    prefs.getString("token", null)?.let { return it }
+    val fresh = java.util.UUID.randomUUID().toString()
+    prefs.edit().putString("token", fresh).apply()
+    return fresh
+  }
+
+  fun put(context: Context, intent: Intent, p: FormPrefill) {
+    intent.putExtra(OPEN_FORM, true).putExtra(TOKEN, token(context)).putExtra(TYPE, p.type.name).putExtra(MEMO, p.memo)
     p.amount?.let { intent.putExtra(AMOUNT, it) }
     p.category?.let { intent.putExtra(CATEGORY, it) }
     p.accountId?.let { intent.putExtra(ACCOUNT, it) }
@@ -42,8 +56,9 @@ object PrefillIntents {
   }
 
   /** The prefill in [intent] (removed from it so it's handled once), or null. */
-  fun take(intent: Intent?): FormPrefill? {
+  fun take(context: Context, intent: Intent?): FormPrefill? {
     if (intent?.getBooleanExtra(OPEN_FORM, false) != true) return null
+    if (intent.getStringExtra(TOKEN) != token(context)) { intent.removeExtra(OPEN_FORM); return null }
     val p = FormPrefill(
       type = runCatching { TransactionType.valueOf(intent.getStringExtra(TYPE) ?: "") }.getOrDefault(TransactionType.EXPENSE),
       amount = intent.getLongExtra(AMOUNT, 0L).takeIf { it > 0 },

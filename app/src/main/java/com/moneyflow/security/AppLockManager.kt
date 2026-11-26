@@ -172,8 +172,19 @@ class AppLockManager @Inject constructor(
   }
 
   /** Wall-clock end of the current lockout, or null if the PIN may be tried. */
-  private fun lockoutUntil(s: AppSettings, now: Long, elapsed: Long): Long? {
+  private suspend fun lockoutUntil(s: AppSettings, now: Long, elapsed: Long): Long? {
     if (elapsed < lockedUntilElapsed) return now + (lockedUntilElapsed - elapsed)
+    // A penalty from before a reboot: the monotonic clock restarted and the wall clock may have
+    // been moved forward. Start the same penalty again on this boot (only after 5+ wrong PINs).
+    val boot = clock.bootId()
+    if (s.failedPinAttempts >= FREE_ATTEMPTS && s.pinLockedUntil > 0 && s.pinLockBoot.isNotEmpty() && s.pinLockBoot != boot) {
+      val penalty = (s.pinLockedUntil - s.pinLastFailureAt).coerceIn(0L, MAX_PENALTY_MS)
+      if (penalty > 0) {
+        lockedUntilElapsed = elapsed + penalty
+        settings.recordPinFailure(s.failedPinAttempts, now + penalty, now, elapsed + penalty, boot)
+        return now + penalty
+      }
+    }
     if (s.pinLockBoot.isNotEmpty() && s.pinLockBoot == clock.bootId() && elapsed < s.pinLockedUntilElapsed) {
       return now + (s.pinLockedUntilElapsed - elapsed)
     }
@@ -202,5 +213,7 @@ class AppLockManager @Inject constructor(
 
   companion object {
     const val FREE_ATTEMPTS = 5
+    /** Longest penalty (30 s doubled 8 times ≈ 2 h). */
+    private const val MAX_PENALTY_MS = (30L shl 8) * 1000
   }
 }
