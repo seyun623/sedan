@@ -87,6 +87,6 @@ class RuleRepository @Inject constructor(private val db: AppDatabase) {
         }
 
     /** "스타벅스 강남점 (할부 3개월)" → "스타벅스 강남점". */
-    fun baseMerchant(memo: String): String = memo.substringBefore(" (").trim()
+    fun baseMerchant(memo: String): String = memo.substringBefore(" (").substringBefore(" · ").trim()
   }
 }

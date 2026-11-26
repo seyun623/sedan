@@ -22,7 +22,9 @@ data class CardSite(
   /** The PC page can't log in without Windows security programs: always use the phone page. */
   val pcBlocked: Boolean = false,
   /** What the website can't do (checked on a real phone); shown in the card company list. */
-  val webLimit: String? = null
+  val webLimit: String? = null,
+  /** A shopping site: its order list gives product names for card payments (2.16). */
+  val shop: Boolean = false
 )
 
 object CardSites {
@@ -113,5 +115,24 @@ object CardSites {
     loginTip = "위 검색에서 카드 이름을 찾아 카드 상세 화면을 연 뒤, 아래 '이 화면 가져오기' → 'AI로 읽기'를 누르세요"
   )
 
-  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id } ?: cardGorilla.takeIf { it.id == id }
+  /**
+   * Shopping sites: their order lists name what was bought, and the matching card payment (same
+   * amount, order day to 3 days later) gets the product names ("쿠팡 · 생수 외 1건").
+   */
+  val shops = listOf(
+    CardSite(
+      "coupang", "쿠팡", "https://mc.coupang.com/ssr/mobile/order/list", "쿠팡", shop = true,
+      loginTip = "로그인한 뒤 주문목록이 보이면 아래 '이 화면 가져오기'를 누르세요. 아래로 내려 더 많은 주문을 펼친 뒤 누르면 더 많이 읽어요"
+    ),
+    CardSite(
+      "naverpay", "네이버페이", "https://m.pay.naver.com/o/home", "네이버페이", shop = true,
+      loginTip = "로그인 → 결제내역(주문내역) 화면에서 '이 화면 가져오기'를 누르세요"
+    ),
+    CardSite("11st", "11번가", "https://m.11st.co.kr", "11번가", shop = true, loginTip = "로그인 → 나의 11번가 → 주문내역에서 '이 화면 가져오기'를 누르세요"),
+    CardSite("gmarket", "G마켓", "https://m.gmarket.co.kr", "G마켓", shop = true, loginTip = "로그인 → 나의 G마켓 → 주문내역에서 '이 화면 가져오기'를 누르세요"),
+    CardSite("ssg", "SSG.COM", "https://m.ssg.com", "SSG", shop = true, loginTip = "로그인 → MY SSG → 주문내역에서 '이 화면 가져오기'를 누르세요"),
+    CardSite("kurly", "컬리", "https://www.kurly.com/mypage/order", "컬리", shop = true, loginTip = "로그인한 뒤 주문 내역 화면에서 '이 화면 가져오기'를 누르세요")
+  )
+
+  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id } ?: shops.firstOrNull { it.id == id } ?: cardGorilla.takeIf { it.id == id }
 }

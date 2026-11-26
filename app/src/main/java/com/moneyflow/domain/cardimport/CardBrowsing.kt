@@ -135,7 +135,7 @@ object CardBrowsing {
   data class FoundLink(val text: String, val url: String, val id: String)
 
   private val LINK_WORDS = listOf(
-    Regex("(이용|승인|사용|결제)\\s*내역") to 0,
+    Regex("(이용|승인|사용|결제)\\s*내역|(주문|구매)\\s*(내역|목록|배송)") to 0,
     Regex("명세서|청구\\s*(내역|금액|서)") to 1,
     Regex("이용\\s*대금|결제\\s*(예정|금액)|결제하실\\s*금액") to 2,
     Regex("실적") to 3
@@ -171,7 +171,7 @@ object CardBrowsing {
    */
   const val FIND_LINKS_JS = """
 (function(){
-  var re=/(이용|승인|사용|결제)\s*내역|명세서|청구|이용\s*대금|결제\s*(예정|금액)|결제하실|실적/;
+  var re=/(이용|승인|사용|결제|주문|구매)\s*(내역|목록|배송)|명세서|청구|이용\s*대금|결제\s*(예정|금액)|결제하실|실적/;
   var out=[], n=0;
   function scan(d){ try{
     var els=d.querySelectorAll('a,button,[onclick],[role=button],[role=menuitem],[role=tab]');

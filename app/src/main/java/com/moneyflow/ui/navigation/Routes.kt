@@ -35,6 +35,7 @@ object Routes {
   const val CARD_BROWSER = "card-import/site/{siteId}"
   const val CARD_PREVIEW = "card-import/preview"
   const val FILE_IMPORT = "card-import/file"
+  const val ORDER_LINK = "card-import/orders"
   fun cardBrowser(siteId: String) = "card-import/site/$siteId"
 
   fun transaction(id: Long? = null) = if (id == null) "transaction" else "transaction?transactionId=$id"

@@ -42,6 +42,8 @@ private const val MAX_REDIRECTS = 5
 
 sealed interface BrowserEvent {
   data object OpenPreview : BrowserEvent
+  /** Orders were read from a shopping site: open the screen that links them to payments. */
+  data object OpenOrders : BrowserEvent
   data class Error(val message: String) : BrowserEvent
   data class Info(val message: String) : BrowserEvent
 }
@@ -54,7 +56,9 @@ class CardBrowserViewModel @Inject constructor(
   private val session: CardImportSession,
   private val clock: AppClock,
   private val settings: com.moneyflow.data.repository.SettingsRepository,
-  @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context
+  @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
+  private val orderSession: com.moneyflow.domain.cardimport.OrderSession,
+  private val aiOrders: com.moneyflow.domain.shop.AiOrderReader
 ) : ViewModel() {
   val site: CardSite = CardSites.byId(checkNotNull(savedState.get<String>(ARG_SITE_ID))) ?: CardSites.all.first()
 
@@ -146,6 +150,35 @@ class CardBrowserViewModel @Inject constructor(
         _pageCheck.value = PageCheck(login, r.items.size, r.performance.size)
         if (login || r.items.isNotEmpty()) break
       }
+    }
+  }
+
+  /** A shopping site's order list → orders → the screen that puts product names on payments. */
+  private suspend fun readOrders(screenText: String, useAi: Boolean) {
+    _busy.value = true
+    try {
+      val local = { com.moneyflow.domain.shop.OrderTextParser(clock.today(), site.provider).parse(screenText) }
+      val orders = if (useAi) {
+        try {
+          aiOrders.read(screenText, clock.today(), site.provider)
+        } catch (e: com.moneyflow.ai.AiRequestException) {
+          _events.send(BrowserEvent.Info("AI가 응답하지 않아 기기에서 읽었어요. (${e.message})"))
+          withContext(Dispatchers.Default) { local() }
+        }
+      } else withContext(Dispatchers.Default) { local() }
+      if (orders.isEmpty()) {
+        _events.send(BrowserEvent.Error(
+          "이 화면에서 주문을 찾지 못했어요. 주문내역(주문목록) 화면을 연 뒤 다시 눌러 주세요." +
+            if (!useAi) " 'AI로 읽기'가 더 정확해요." else ""
+        ))
+      } else {
+        orderSession.put(site, orders)
+        _events.send(BrowserEvent.OpenOrders)
+      }
+    } catch (e: Exception) {
+      _events.send(BrowserEvent.Error(com.moneyflow.util.UserErrors.message(e, "주문을 읽지 못했어요.")))
+    } finally {
+      _busy.value = false
     }
   }
 
@@ -306,6 +339,7 @@ class CardBrowserViewModel @Inject constructor(
 
   fun read(screenText: String, useAi: Boolean) = viewModelScope.launch {
     if (_busy.value) return@launch
+    if (site.shop) { readOrders(screenText, useAi); return@launch }
     _busy.value = true
     try {
       val result: StatementExtraction = if (useAi) {

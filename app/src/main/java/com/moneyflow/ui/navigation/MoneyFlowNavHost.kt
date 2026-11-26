@@ -254,7 +254,14 @@ fun MoneyFlowNavHost(
         )
       }
       composable(Routes.CARD_BROWSER, arguments = listOf(navArgument(ARG_SITE_ID) { type = NavType.StringType })) {
-        CardBrowserScreen(onClose = { navController.popBackStack() }, onOpenPreview = { navController.navigate(Routes.CARD_PREVIEW) })
+        CardBrowserScreen(
+          onClose = { navController.popBackStack() },
+          onOpenPreview = { navController.navigate(Routes.CARD_PREVIEW) },
+          onOpenOrders = { navController.navigate(Routes.ORDER_LINK) }
+        )
+      }
+      composable(Routes.ORDER_LINK) {
+        com.moneyflow.ui.cardimport.OrderLinkScreen(onBack = { navController.popBackStack() })
       }
       composable(Routes.CARD_PREVIEW) {
         // After importing, go back to the card site to read another month if needed.

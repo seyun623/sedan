@@ -130,7 +130,7 @@ interface TransactionDao {
   @Query(
     """
     SELECT category FROM transactions
-    WHERE type = :type AND (memo = :merchant OR memo LIKE :merchant || ' (%')
+    WHERE type = :type AND (memo = :merchant OR memo LIKE :merchant || ' (%' OR memo LIKE :merchant || ' · %')
     ORDER BY timestamp DESC, id DESC LIMIT 1
     """
   )

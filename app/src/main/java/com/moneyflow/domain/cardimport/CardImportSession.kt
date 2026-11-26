@@ -15,3 +15,13 @@ class CardImportSession @Inject constructor() {
   fun put(site: CardSite, extraction: StatementExtraction) { _current.value = site to extraction }
   fun clear() { _current.value = null }
 }
+
+/** Orders read from a shopping site, handed to the order-link screen (memory only). */
+@Singleton
+class OrderSession @Inject constructor() {
+  private val _current = MutableStateFlow<Pair<CardSite, List<com.moneyflow.domain.shop.ShopOrder>>?>(null)
+  val current: StateFlow<Pair<CardSite, List<com.moneyflow.domain.shop.ShopOrder>>?> = _current.asStateFlow()
+
+  fun put(site: CardSite, orders: List<com.moneyflow.domain.shop.ShopOrder>) { _current.value = site to orders }
+  fun clear() { _current.value = null }
+}

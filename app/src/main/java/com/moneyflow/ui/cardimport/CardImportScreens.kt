@@ -114,6 +114,21 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
         modifier = Modifier.testTag("card_import_file")
       )
     }
+    SettingsSection("쇼핑몰 주문내역 → 상품명 붙이기") {
+      Text(
+        "쇼핑몰 주문내역을 읽어, 같은 금액의 카드 결제에 산 물건 이름을 붙여요 (예: '쿠팡 · 생수 2L×12 외 1건').",
+        style = MaterialTheme.typography.bodySmall, color = Gray600,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+      )
+      CardSites.shops.forEach { shop ->
+        SettingsItem(
+          title = shop.name,
+          icon = Icons.Filled.CreditCard,
+          onClick = { onOpenSite(shop) },
+          modifier = Modifier.testTag("shop_site_${shop.id}")
+        )
+      }
+    }
     SettingsSection("카드 혜택 찾기 (로그인 없이)") {
       SettingsItem(
         title = CardSites.cardGorilla.name,
@@ -164,6 +179,7 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
 fun CardBrowserScreen(
   onClose: () -> Unit,
   onOpenPreview: () -> Unit,
+  onOpenOrders: () -> Unit = {},
   viewModel: CardBrowserViewModel = hiltViewModel()
 ) {
   val site = viewModel.site
@@ -208,6 +224,7 @@ fun CardBrowserScreen(
     viewModel.events.collect { e ->
       when (e) {
         BrowserEvent.OpenPreview -> onOpenPreview()
+        BrowserEvent.OpenOrders -> onOpenOrders()
         is BrowserEvent.Error -> error = e.message
         is BrowserEvent.Info -> error = e.message
       }
@@ -510,7 +527,8 @@ fun CardBrowserScreen(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text("기기에서 읽기: 화면 내용을 밖으로 보내지 않아요. 카드사 화면 모양에 따라 일부를 못 읽을 수 있어요.", style = MaterialTheme.typography.bodySmall)
           Text(
-            if (aiLabel != null) "AI로 읽기: 화면 글자(카드 이용내역·혜택)를 ${aiLabel}(으)로 보내 정확하게 읽어요. 혜택 화면은 AI로만 읽을 수 있어요."
+            if (aiLabel != null && site.shop) "AI로 읽기: 화면 글자(주문내역)를 ${aiLabel}(으)로 보내 정확하게 읽어요."
+            else if (aiLabel != null) "AI로 읽기: 화면 글자(카드 이용내역·혜택)를 ${aiLabel}(으)로 보내 정확하게 읽어요. 혜택 화면은 AI로만 읽을 수 있어요."
             else "AI로 읽기: 설정 → AI 설정에서 AI를 켜면 쓸 수 있어요.",
             style = MaterialTheme.typography.bodySmall,
             color = Gray600
