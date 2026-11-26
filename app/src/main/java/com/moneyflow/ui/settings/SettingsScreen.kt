@@ -54,181 +54,6 @@ fun SettingsScreen(
   var exporting by remember { mutableStateOf(false) }
 
   SettingsScaffold(title = "설정", onBack = onBack) {
-    SettingsSection("보안") {
-      SettingsItem(
-        title = "앱 잠금 및 보안",
-        subtitle = when {
-          settings.usesDeviceLock -> "휴대폰 잠금으로 여는 중"
-          settings.isLockEnabled -> if (settings.biometricEnabled) "PIN · 생체 인증 사용 중" else "PIN 잠금 사용 중"
-          else -> "잠금이 꺼져 있어요"
-        },
-        icon = Icons.Filled.Lock,
-        onClick = onOpenSecurity,
-        modifier = Modifier.testTag("settings_security")
-      )
-    }
-
-    SettingsSection("화면") {
-      SettingsSwitchItem(
-        title = "간단 모드",
-        subtitle = "글씨를 크게 하고, 첫 화면을 이번 달 쓴 돈과 큰 기록 버튼만으로 보여 줘요 (부모님용)",
-        icon = Icons.Filled.Info,
-        checked = settings.simpleMode,
-        onCheckedChange = viewModel::setSimpleMode,
-        modifier = Modifier.testTag("settings_simple_mode")
-      )
-      ThemeMode.entries.forEach { mode ->
-        SettingsRadioItem(
-          title = when (mode) {
-            ThemeMode.SYSTEM -> "시스템 설정 따르기"
-            ThemeMode.LIGHT -> "라이트"
-            ThemeMode.DARK -> "다크"
-          },
-          selected = settings.themeMode == mode,
-          onSelect = { viewModel.setThemeMode(mode) }
-        )
-      }
-    }
-
-    SettingsSection("백업·가족") {
-      val lastBackup = state.settings.lastBackupAt
-      SettingsItem(
-        title = "백업 및 복원",
-        subtitle = if (lastBackup > 0) "마지막 백업 ${Formatters.formatFullDate(lastBackup)}" else "아직 백업한 적이 없어요",
-        icon = Icons.Filled.Backup,
-        onClick = onOpenBackup,
-        modifier = Modifier.testTag("settings_backup")
-      )
-      SettingsItem(
-        title = "가족 가계부 보기",
-        subtitle = "가족이 함께 쓴 돈과 예산, 함께 모으는 목표를 봐요",
-        icon = Icons.Filled.FamilyRestroom,
-        onClick = onOpenFamily,
-        modifier = Modifier.testTag("settings_family")
-      )
-      SettingsItem(
-        title = "가족 자동 합산 설정 (구글 드라이브)",
-        subtitle = "처음 한 번만: 연결 파일 불러오기, 내 이름·가족 비밀번호 정하기",
-        icon = Icons.Filled.FamilyRestroom,
-        onClick = onOpenDrive,
-        modifier = Modifier.testTag("settings_drive")
-      )
-    }
-
-    if (com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE) SettingsSection("결제 알림 자동 등록") {
-      // Saved switches alone can say "사용 중" while Android has taken the access away: check it too.
-      val access = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-      val on = listOfNotNull(
-        "알림".takeIf { settings.notificationCaptureEnabled && access },
-        "문자".takeIf { settings.smsCaptureEnabled }
-      )
-      SettingsItem(
-        title = "카드·은행 알림으로 자동 기록",
-        subtitle = when {
-          settings.notificationCaptureEnabled && !access -> "⚠ 알림 접근 권한이 꺼져 있어요. 눌러서 점검해 주세요"
-          on.isEmpty() -> "꺼져 있어요"
-          else -> "${on.joinToString(", ")} 자동 등록 사용 중"
-        },
-        icon = Icons.Filled.NotificationsActive,
-        onClick = onOpenAutoCapture,
-        modifier = Modifier.testTag("settings_auto_capture")
-      )
-    }
-
-    SettingsSection("알림") {
-      val context = androidx.compose.ui.platform.LocalContext.current
-      val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> viewModel.setCardAlertsEnabled(granted) }
-      SettingsSwitchItem(
-        title = "카드 실적·혜택 알림",
-        subtitle = "실적 기간이 5일 남았는데 모자랄 때, 혜택 한도를 다 썼을 때 알려 드려요",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.cardAlertsEnabled,
-        onCheckedChange = { on ->
-          if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
-            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-          ) {
-            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-          } else {
-            viewModel.setCardAlertsEnabled(on)
-          }
-        },
-        modifier = Modifier.testTag("settings_card_alerts")
-      )
-      val budgetPermission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> if (granted) viewModel.setBudgetAlerts(true) }
-      val summaryPermission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> if (granted) viewModel.setMonthlySummary(true) }
-      val needsPermission = {
-        android.os.Build.VERSION.SDK_INT >= 33 &&
-          androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
-          android.content.pm.PackageManager.PERMISSION_GRANTED
-      }
-      SettingsSwitchItem(
-        title = "예산 알림",
-        subtitle = "이번 달 예산의 80%, 100%를 넘을 때와 카테고리 예산을 넘을 때 알려 드려요",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.budgetAlertsEnabled,
-        onCheckedChange = { on ->
-          if (on && needsPermission()) budgetPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBudgetAlerts(on)
-        },
-        modifier = Modifier.testTag("settings_budget_alerts")
-      )
-      SettingsSwitchItem(
-        title = "매월 1일 지난달 요약",
-        subtitle = "지난달 지출·수입, 예산 대비, 가장 많이 쓴 곳을 알려 드려요",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.monthlySummaryEnabled,
-        onCheckedChange = { on ->
-          if (on && needsPermission()) summaryPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setMonthlySummary(on)
-        },
-        modifier = Modifier.testTag("settings_monthly_summary")
-      )
-      val weeklyPermission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> if (granted) viewModel.setWeeklyReport(true) }
-      SettingsSwitchItem(
-        title = "매주 월요일 주간 소비 리포트",
-        subtitle = "지난주 쓴 돈을 최근 4주 평균과 비교하고, 가장 많이 쓴 곳과 가장 큰 지출을 알려 드려요",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.weeklyReportEnabled,
-        onCheckedChange = { on ->
-          if (on && needsPermission()) weeklyPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setWeeklyReport(on)
-        },
-        modifier = Modifier.testTag("settings_weekly_report")
-      )
-      val billPermission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> if (granted) viewModel.setBillReminders(true) }
-      SettingsSwitchItem(
-        title = "결제일 미리 알림",
-        subtitle = "카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 드려요 (결제일은 자산 탭 → 카드를 눌러 수정에서 넣어 주세요)",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.billRemindersEnabled,
-        onCheckedChange = { on ->
-          if (on && needsPermission()) billPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBillReminders(on)
-        },
-        modifier = Modifier.testTag("settings_bill_reminders")
-      )
-      val backupPermission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-      ) { granted -> if (granted) viewModel.setBackupReminder(true) }
-      SettingsSwitchItem(
-        title = "백업 알림",
-        subtitle = "2주 넘게 백업하지 않았거나 자동 백업이 실패하면 알려 드려요",
-        icon = Icons.Filled.NotificationsActive,
-        checked = settings.backupReminderEnabled,
-        onCheckedChange = { on ->
-          if (on && needsPermission()) backupPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBackupReminder(on)
-        },
-        modifier = Modifier.testTag("settings_backup_reminder")
-      )
-    }
-
     SettingsSection("기록 도구") {
       SettingsItem(
         title = "카드사에서 가져오기",
@@ -288,6 +113,196 @@ fun SettingsScreen(
           modifier = Modifier.testTag("settings_load_sample")
         )
       }
+    }
+
+    if (com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE) SettingsSection("결제 알림 자동 등록") {
+      // Saved switches alone can say "사용 중" while Android has taken the access away: check it too.
+      val access = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+      val on = listOfNotNull(
+        "알림".takeIf { settings.notificationCaptureEnabled && access },
+        "문자".takeIf { settings.smsCaptureEnabled }
+      )
+      SettingsItem(
+        title = "카드·은행 알림으로 자동 기록",
+        subtitle = when {
+          settings.notificationCaptureEnabled && !access -> "⚠ 알림 접근 권한이 꺼져 있어요. 눌러서 점검해 주세요"
+          on.isEmpty() -> "꺼져 있어요"
+          else -> "${on.joinToString(", ")} 자동 등록 사용 중"
+        },
+        icon = Icons.Filled.NotificationsActive,
+        onClick = onOpenAutoCapture,
+        modifier = Modifier.testTag("settings_auto_capture")
+      )
+    }
+
+    SettingsSection("백업·가족") {
+      val lastBackup = state.settings.lastBackupAt
+      SettingsItem(
+        title = "백업 및 복원",
+        subtitle = if (lastBackup > 0) "마지막 백업 ${Formatters.formatFullDate(lastBackup)}" else "아직 백업한 적이 없어요",
+        icon = Icons.Filled.Backup,
+        onClick = onOpenBackup,
+        modifier = Modifier.testTag("settings_backup")
+      )
+      SettingsItem(
+        title = "가족 가계부 보기",
+        subtitle = "가족이 함께 쓴 돈과 예산, 함께 모으는 목표를 봐요",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenFamily,
+        modifier = Modifier.testTag("settings_family")
+      )
+      SettingsItem(
+        title = "가족 자동 합산 설정 (구글 드라이브)",
+        subtitle = "처음 한 번만: 연결 파일 불러오기, 내 이름·가족 비밀번호 정하기",
+        icon = Icons.Filled.FamilyRestroom,
+        onClick = onOpenDrive,
+        modifier = Modifier.testTag("settings_drive")
+      )
+    }
+
+    SettingsSection("알림") {
+      var alertsOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+      val alertsOn = listOf(
+        settings.cardAlertsEnabled, settings.budgetAlertsEnabled, settings.monthlySummaryEnabled,
+        settings.weeklyReportEnabled, settings.billRemindersEnabled, settings.backupReminderEnabled
+      ).count { it }
+      SettingsItem(
+        title = if (alertsOpen) "알림 설정 접기" else "알림 설정",
+        subtitle = "6가지 중 ${alertsOn}가지 켜짐 · 예산, 주간 리포트, 결제일, 백업 등",
+        icon = Icons.Filled.NotificationsActive,
+        showChevron = false,
+        onClick = { alertsOpen = !alertsOpen },
+        modifier = Modifier.testTag("settings_alerts_toggle")
+      )
+      if (alertsOpen) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> viewModel.setCardAlertsEnabled(granted) }
+        SettingsSwitchItem(
+          title = "카드 실적·혜택 알림",
+          subtitle = "실적 기간이 5일 남았는데 모자랄 때, 혜택 한도를 다 썼을 때 알려 드려요",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.cardAlertsEnabled,
+          onCheckedChange = { on ->
+            if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
+              androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+              android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+              permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+              viewModel.setCardAlertsEnabled(on)
+            }
+          },
+          modifier = Modifier.testTag("settings_card_alerts")
+        )
+        val budgetPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> if (granted) viewModel.setBudgetAlerts(true) }
+        val summaryPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> if (granted) viewModel.setMonthlySummary(true) }
+        val needsPermission = {
+          android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        SettingsSwitchItem(
+          title = "예산 알림",
+          subtitle = "이번 달 예산의 80%, 100%를 넘을 때와 카테고리 예산을 넘을 때 알려 드려요",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.budgetAlertsEnabled,
+          onCheckedChange = { on ->
+            if (on && needsPermission()) budgetPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBudgetAlerts(on)
+          },
+          modifier = Modifier.testTag("settings_budget_alerts")
+        )
+        SettingsSwitchItem(
+          title = "매월 1일 지난달 요약",
+          subtitle = "지난달 지출·수입, 예산 대비, 가장 많이 쓴 곳을 알려 드려요",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.monthlySummaryEnabled,
+          onCheckedChange = { on ->
+            if (on && needsPermission()) summaryPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setMonthlySummary(on)
+          },
+          modifier = Modifier.testTag("settings_monthly_summary")
+        )
+        val weeklyPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> if (granted) viewModel.setWeeklyReport(true) }
+        SettingsSwitchItem(
+          title = "매주 월요일 주간 소비 리포트",
+          subtitle = "지난주 쓴 돈을 최근 4주 평균과 비교하고, 가장 많이 쓴 곳과 가장 큰 지출을 알려 드려요",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.weeklyReportEnabled,
+          onCheckedChange = { on ->
+            if (on && needsPermission()) weeklyPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setWeeklyReport(on)
+          },
+          modifier = Modifier.testTag("settings_weekly_report")
+        )
+        val billPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> if (granted) viewModel.setBillReminders(true) }
+        SettingsSwitchItem(
+          title = "결제일 미리 알림",
+          subtitle = "카드 결제일·대출 상환일 3일 전, 고정 지출 하루 전에 알려 드려요 (결제일은 자산 탭 → 카드를 눌러 수정에서 넣어 주세요)",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.billRemindersEnabled,
+          onCheckedChange = { on ->
+            if (on && needsPermission()) billPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBillReminders(on)
+          },
+          modifier = Modifier.testTag("settings_bill_reminders")
+        )
+        val backupPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+          androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted -> if (granted) viewModel.setBackupReminder(true) }
+        SettingsSwitchItem(
+          title = "백업 알림",
+          subtitle = "2주 넘게 백업하지 않았거나 자동 백업이 실패하면 알려 드려요",
+          icon = Icons.Filled.NotificationsActive,
+          checked = settings.backupReminderEnabled,
+          onCheckedChange = { on ->
+            if (on && needsPermission()) backupPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setBackupReminder(on)
+          },
+          modifier = Modifier.testTag("settings_backup_reminder")
+        )
+      }
+    }
+
+    SettingsSection("화면") {
+      SettingsSwitchItem(
+        title = "간단 모드",
+        subtitle = "글씨를 크게 하고, 첫 화면을 이번 달 쓴 돈과 큰 기록 버튼만으로 보여 줘요 (부모님용)",
+        icon = Icons.Filled.Info,
+        checked = settings.simpleMode,
+        onCheckedChange = viewModel::setSimpleMode,
+        modifier = Modifier.testTag("settings_simple_mode")
+      )
+      ThemeMode.entries.forEach { mode ->
+        SettingsRadioItem(
+          title = when (mode) {
+            ThemeMode.SYSTEM -> "시스템 설정 따르기"
+            ThemeMode.LIGHT -> "라이트"
+            ThemeMode.DARK -> "다크"
+          },
+          selected = settings.themeMode == mode,
+          onSelect = { viewModel.setThemeMode(mode) }
+        )
+      }
+    }
+
+    SettingsSection("보안") {
+      SettingsItem(
+        title = "앱 잠금 및 보안",
+        subtitle = when {
+          settings.usesDeviceLock -> "휴대폰 잠금으로 여는 중"
+          settings.isLockEnabled -> if (settings.biometricEnabled) "PIN · 생체 인증 사용 중" else "PIN 잠금 사용 중"
+          else -> "잠금이 꺼져 있어요"
+        },
+        icon = Icons.Filled.Lock,
+        onClick = onOpenSecurity,
+        modifier = Modifier.testTag("settings_security")
+      )
     }
 
     SettingsSection("AI") {

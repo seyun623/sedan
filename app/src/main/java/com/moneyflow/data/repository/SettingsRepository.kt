@@ -85,6 +85,8 @@ data class AppSettings(
   val monthlySummaryEnabled: Boolean = false,
   /** 2.19: every Monday, last week's spending against the usual. */
   val weeklyReportEnabled: Boolean = false,
+  /** 3.0: the home "시작하기" checklist was closed. */
+  val startGuideDismissed: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
   /** Google Drive bot (service account) key, encrypted with the Keystore. */
@@ -194,6 +196,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val BUDGET_ALERTS = booleanPreferencesKey("budget_alerts")
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
     val WEEKLY_REPORT = booleanPreferencesKey("weekly_report")
+    val START_GUIDE_DISMISSED = booleanPreferencesKey("start_guide_dismissed")
     val SETTLED_TRANSFERS = androidx.datastore.preferences.core.stringSetPreferencesKey("settled_transfers")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
@@ -282,6 +285,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       budgetAlertsEnabled = p[Keys.BUDGET_ALERTS] ?: false,
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
       weeklyReportEnabled = p[Keys.WEEKLY_REPORT] ?: false,
+      startGuideDismissed = p[Keys.START_GUIDE_DISMISSED] ?: false,
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
       cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
@@ -614,6 +618,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val recent = now.sorted().takeLast(200).toSet()
     it[Keys.SETTLED_TRANSFERS] = if (done) recent + key else recent - key
   }
+  suspend fun setStartGuideDismissed() = store.edit { it[Keys.START_GUIDE_DISMISSED] = true }
   suspend fun setWeeklyReport(enabled: Boolean) = store.edit { it[Keys.WEEKLY_REPORT] = enabled }
   suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
 

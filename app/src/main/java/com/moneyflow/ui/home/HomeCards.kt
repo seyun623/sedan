@@ -606,3 +606,37 @@ internal fun CardPointsCard(points: Map<Long, com.moneyflow.domain.card.CardPoin
     }
   }
 }
+
+/** 시작하기: what to set up first, ticked off as it gets done. */
+@Composable
+internal fun StartGuideCard(steps: List<com.moneyflow.domain.StartStep>, onOpen: (String) -> Unit, onClose: () -> Unit) {
+  androidx.compose.material3.Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    color = CardSurface,
+    modifier = Modifier.fillMaxWidth().testTag("home_start_guide")
+  ) {
+    Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+          Text("시작하기 ${steps.count { it.done }}/${steps.size}", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleMedium)
+          Text("이것만 해 두면 가계부가 거의 저절로 채워져요", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        }
+        androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.testTag("start_guide_close")) { Text("닫기", color = Gray600) }
+      }
+      steps.forEach { step ->
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth()
+            .clickable(enabled = !step.done, role = androidx.compose.ui.semantics.Role.Button) { onOpen(step.id) }
+            .padding(vertical = 8.dp).testTag("start_step_${step.id}")
+        ) {
+          Text(if (step.done) "✅" else "⬜", modifier = Modifier.padding(end = 10.dp))
+          Column(Modifier.weight(1f)) {
+            Text(step.title, fontWeight = FontWeight.SemiBold, color = if (step.done) Gray600 else Gray900)
+            if (!step.done) Text(step.hint, style = MaterialTheme.typography.labelSmall, color = Gray600)
+          }
+        }
+      }
+    }
+  }
+}

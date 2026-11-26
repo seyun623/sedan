@@ -63,6 +63,7 @@ fun HomeScreen(
   onNavigateToAnalytics: () -> Unit,
   onNavigateToBudget: () -> Unit,
   onOpenBackup: () -> Unit = {},
+  onOpenStartStep: (String) -> Unit = {},
   viewModel: HomeViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,6 +120,12 @@ fun HomeScreen(
         }
       }
       return@LazyColumn
+    }
+
+    if (state.startSteps.isNotEmpty()) {
+      item(key = "start_guide") {
+        StartGuideCard(state.startSteps, onOpen = onOpenStartStep, onClose = viewModel::dismissStartGuide)
+      }
     }
 
     item(key = "assets") {

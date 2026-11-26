@@ -72,8 +72,16 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.21.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.0.0. */
   val all = listOf(
+    FeatureCheck(
+      "start_guide", "홈 '시작하기'·설정 정리", "3.0",
+      listOf(
+        "홈 위쪽 '시작하기'에서 안 한 항목을 누르면 그 화면으로 가는지, '닫기'를 누르면 사라지는지 봐 주세요.",
+        "설정에서 '기록 도구'가 맨 위에 있고, '알림 설정'을 누르면 알림 6가지가 펼쳐지는지 봐 주세요."
+      ),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
     FeatureCheck(
       "family_more", "가족 정산 기록·가족 예산 알림", "2.21",
       listOf(

@@ -167,6 +167,15 @@ fun MoneyFlowNavHost(
           onOpenSettings = { navController.navigate(Routes.SETTINGS) },
           onOpenSecurity = { navController.navigate(Routes.SECURITY) },
           onOpenBackup = { navController.navigate(Routes.BACKUP) },
+          onOpenStartStep = { step ->
+            when (step) {
+              "capture" -> navController.navigate(Routes.AUTO_CAPTURE)
+              "budget" -> openTab(TopLevelTab.BUDGET)
+              "family" -> navController.navigate(Routes.DRIVE)
+              "backup" -> navController.navigate(Routes.BACKUP)
+              else -> {}
+            }
+          },
           onNavigateToLedger = { openTab(TopLevelTab.LEDGER) },
           onNavigateToAnalytics = { openTab(TopLevelTab.ANALYTICS) },
           onNavigateToBudget = { openTab(TopLevelTab.BUDGET) }

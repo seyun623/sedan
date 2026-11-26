@@ -60,7 +60,9 @@ data class HomeUiState(
   /** "어디서 어떤 카드?" rows from registered card benefits. */
   val cardGuide: List<com.moneyflow.domain.card.CardGuideRow> = emptyList(),
   /** 포인트 모아보기 (2.20): saved point balances of existing card accounts. */
-  val cardPoints: Map<Long, com.moneyflow.domain.card.CardPoint> = emptyMap()
+  val cardPoints: Map<Long, com.moneyflow.domain.card.CardPoint> = emptyMap(),
+  /** 시작하기 checklist (empty when finished or closed). */
+  val startSteps: List<com.moneyflow.domain.StartStep> = emptyList()
 ) {
   val hasNoAccounts: Boolean get() = !isLoading && accounts.isEmpty()
 }
@@ -121,9 +123,19 @@ class HomeViewModel @Inject constructor(
       isLockEnabled = s.isLockEnabled,
       cardStatuses = cardStatuses.filter { it.target > 0 },
       cardGuide = cardGuide,
+      startSteps = com.moneyflow.domain.StartGuide.steps(
+        hasAccounts = accounts.isNotEmpty(),
+        autoCaptureAvailable = com.moneyflow.BuildConfig.AUTO_CAPTURE_AVAILABLE,
+        hasAutoRecords = txs.any { it.source == com.moneyflow.data.model.TransactionSource.NOTIFICATION || it.source == com.moneyflow.data.model.TransactionSource.SMS },
+        budgetSet = budget.isSet,
+        familyOn = s.familySyncEnabled,
+        backupOn = s.autoBackupEnabled || s.lastBackupAt > 0
+      ).takeIf { com.moneyflow.domain.StartGuide.visible(it, s.startGuideDismissed) }.orEmpty(),
       cardPoints = s.cardPoints.filterKeys { id -> accounts.any { it.id == id } }.filterValues { it.amount > 0 }
     )
   }
+
+  fun dismissStartGuide() = viewModelScope.launch { settings.setStartGuideDismissed() }
 
   fun addAccount(
     name: String, bankName: String, type: AccountType, accountNumber: String,
