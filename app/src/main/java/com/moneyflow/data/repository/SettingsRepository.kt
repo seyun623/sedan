@@ -95,6 +95,8 @@ data class AppSettings(
   val familyBudget: Long = 0L,
   /** 총급여 (세전 연봉) for the 연말정산 카드 소득공제 미리보기; 0 = not entered. */
   val annualSalary: Long = 0L,
+  /** 2.18: last month's leftover (or overspending) is added to this month's budget. */
+  val budgetCarryOver: Boolean = false,
   val billRemindersEnabled: Boolean = true,
   /** When the safety copy made just before the last restore was taken (0 = none). */
   val preRestoreAt: Long = 0L,
@@ -191,6 +193,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val CARD_VIEW_MODES = androidx.datastore.preferences.core.stringSetPreferencesKey("card_view_modes")
     val FAMILY_BUDGET = longPreferencesKey("family_budget")
     val ANNUAL_SALARY = longPreferencesKey("annual_salary")
+    val BUDGET_CARRY_OVER = booleanPreferencesKey("budget_carry_over")
     val DRIVE_KEY = stringPreferencesKey("drive_bot_key_enc")
     val DRIVE_BOT_EMAIL = stringPreferencesKey("drive_bot_email")
     val DRIVE_FOLDER_ID = stringPreferencesKey("drive_folder_id")
@@ -277,6 +280,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       dismissedRecurringSuggestions = p[Keys.RECURRING_DISMISSED] ?: emptySet(),
       familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L,
       annualSalary = p[Keys.ANNUAL_SALARY] ?: 0L,
+      budgetCarryOver = p[Keys.BUDGET_CARRY_OVER] ?: false,
       driveKeyEncrypted = p[Keys.DRIVE_KEY],
       driveBotEmail = p[Keys.DRIVE_BOT_EMAIL],
       driveFolderId = p[Keys.DRIVE_FOLDER_ID],
@@ -455,6 +459,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   }
 
   /** Remembers whether a card site is shown as its PC page ("PC 화면으로 보기"). */
+  suspend fun setBudgetCarryOver(on: Boolean) = store.edit { it[Keys.BUDGET_CARRY_OVER] = on }
+
   suspend fun setAnnualSalary(amount: Long) = store.edit { it[Keys.ANNUAL_SALARY] = amount.coerceIn(0, 10_000_000_000) }
 
   suspend fun setCardDesktopMode(siteId: String, desktop: Boolean) = store.edit {

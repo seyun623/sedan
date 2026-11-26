@@ -123,6 +123,7 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.datastore.preferences)
   implementation(libs.sqlcipher.android)
+  implementation(libs.mlkit.text.korean)
   implementation(libs.androidx.sqlite.ktx)
   "ksp"(libs.hilt.compiler)
   "ksp"(libs.androidx.hilt.compiler)

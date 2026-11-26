@@ -88,7 +88,7 @@ class HomeViewModel @Inject constructor(
     ledger.accounts,
     ledger.transactions,
     ledger.goals,
-    budgets.observeBudget(month),
+    combine(budgets.observeBudget(month), settings.settings) { b, st -> budgets.withCarry(b, st.budgetCarryOver, clock.zone) },
     combine(settings.settings, cards.statuses, cards.guide) { s, c, g -> Triple(s, c, g) }
   ) { accounts, txs, goals, budget, (s, cardStatuses, cardGuide) ->
     val assets = accounts.filter { !it.isDebt }.sumOf { it.balance }

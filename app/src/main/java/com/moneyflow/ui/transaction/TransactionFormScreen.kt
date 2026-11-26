@@ -138,6 +138,7 @@ fun TransactionFormScreen(
   var closed by remember { mutableStateOf(false) }
 
   val snackbarHostState = remember { SnackbarHostState() }
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   val focusManager = LocalFocusManager.current
 
   fun close() {
@@ -327,6 +328,24 @@ fun TransactionFormScreen(
               val valid = FinanceCategories.categoriesFor(newType)
               if (category !in valid) category = valid.first()
             }
+          }
+
+          if (!isEditMode) {
+            ReceiptButtons(
+              onRead = { info ->
+                type = TransactionType.EXPENSE
+                amount = info.total.toString()
+                amountError = false
+                memo = info.memo
+                info.date?.let { d ->
+                  val zone = java.time.ZoneId.systemDefault()
+                  val time = java.time.Instant.ofEpochMilli(timestamp).atZone(zone).toLocalTime()
+                  timestamp = d.atTime(time).atZone(zone).toInstant().toEpochMilli()
+                }
+                if (info.merchant.isNotEmpty()) viewModel.suggestCategoryFromKeyword(info.memo, TransactionType.EXPENSE, 0L)
+              },
+              onMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+            )
           }
 
           if (!isEditMode) {
@@ -836,4 +855,58 @@ private fun AiSuggestionPanel(
       TextButton(onClick = onRetry) { Text("재시도", color = AccentRed, fontWeight = FontWeight.Bold) }
     }
   }
+}
+
+/** 영수증 사진으로 채우기: camera or gallery → text read on the phone → amount, shop, date, items. */
+@Composable
+private fun ReceiptButtons(onRead: (com.moneyflow.domain.receipt.ReceiptInfo) -> Unit, onMessage: (String) -> Unit) {
+  val context = androidx.compose.ui.platform.LocalContext.current
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
+  var busy by remember { mutableStateOf(false) }
+  var photoUri by rememberSaveable { mutableStateOf<String?>(null) }
+  fun readUri(uri: android.net.Uri) {
+    busy = true
+    scope.launch {
+      try {
+        val text = ReceiptScanner.read(context, uri)
+        val info = com.moneyflow.domain.receipt.ReceiptParser(java.time.LocalDate.now()).parse(text)
+        if (info == null) onMessage("영수증에서 금액을 찾지 못했어요. 밝은 곳에서 영수증 전체가 보이게 다시 찍어 주세요.")
+        else {
+          onRead(info)
+          onMessage("영수증을 읽었어요: ${com.moneyflow.util.Formatters.formatCurrency(info.total)}. 맞는지 확인하고 저장하세요.")
+        }
+      } catch (e: Exception) {
+        com.moneyflow.util.ProblemLog.record("영수증 읽기", e)
+        onMessage("영수증을 읽지 못했어요. 다시 시도해 주세요.")
+      } finally {
+        ReceiptScanner.clearPhotos(context)
+        busy = false
+      }
+    }
+  }
+  val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+    val uri = photoUri?.let(android.net.Uri::parse)
+    photoUri = null
+    if (ok && uri != null) readUri(uri) else ReceiptScanner.clearPhotos(context)
+  }
+  val gallery = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+    if (uri != null) readUri(uri)
+  }
+  Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    androidx.compose.material3.OutlinedButton(
+      onClick = {
+        val uri = ReceiptScanner.newPhotoUri(context)
+        photoUri = uri.toString()
+        try { camera.launch(uri) } catch (e: android.content.ActivityNotFoundException) { onMessage("카메라 앱을 찾지 못했어요. 앨범에서 골라 주세요.") }
+      },
+      enabled = !busy,
+      modifier = Modifier.weight(1f).testTag("receipt_camera")
+    ) { Text("📷 영수증 찍기") }
+    androidx.compose.material3.OutlinedButton(
+      onClick = { gallery.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+      enabled = !busy,
+      modifier = Modifier.weight(1f).testTag("receipt_gallery")
+    ) { Text("앨범에서 고르기") }
+  }
+  if (busy) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue)
 }

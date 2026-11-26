@@ -72,8 +72,29 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.17.1. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.18.0. */
   val all = listOf(
+    FeatureCheck(
+      "receipt", "영수증 사진으로 입력", "2.18",
+      listOf(
+        "+ 버튼(내역 추가) → '📷 영수증 찍기'로 영수증을 찍거나 '앨범에서 고르기'로 사진을 고르세요.",
+        "금액·날짜·메모(가게 · 품목)가 채워지는지 봐 주세요. 틀리면 어떤 영수증(마트·카페 등)이었는지 적어 주세요."
+      )
+    ),
+    FeatureCheck(
+      "budget_carry", "예산 이월", "2.18",
+      listOf("예산 탭 → 남은 예산 카드의 '남은 예산 다음 달로 넘기기'를 켜면, 지난달 남은(초과한) 금액이 이번 달 예산에 더해지고(빠지고) 아래에 '+ 지난달 남은 …'이 보이는지 봐 주세요. 지난달·이번 달 모두 예산이 있어야 해요.")
+    ),
+    FeatureCheck(
+      "family_settle", "가족 정산", "2.18",
+      listOf("같이 쓴 지출의 메모에 #공동 을 붙이고 (가족도 각자), 설정 → 가족 합산 → '가족 정산'에 누가 누구에게 얼마 보내면 되는지 나오는지 봐 주세요. '정산 내용 복사'로 카톡에 붙여 넣을 수 있어요."),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
+    FeatureCheck(
+      "bc_members", "우리·농협·IBK → BC카드로 가져오기", "2.17.2",
+      listOf("BC 마크가 있는 우리·농협·IBK 카드가 있으면: 카드사 가져오기 → '우리·농협·IBK 카드 (BC카드로)'에서 그 카드 → BC카드 로그인 → 카드 승인내역 → '이 화면 가져오기' → 그 카드 계좌에 기록되는지 봐 주세요."),
+      CheckTarget.CARD_IMPORT
+    ),
     FeatureCheck(
       "capture_no_account", "결제수단이 없는 결제 기록", "2.17.1",
       listOf(

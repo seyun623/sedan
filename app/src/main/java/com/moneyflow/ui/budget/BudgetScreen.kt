@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -119,6 +120,7 @@ fun BudgetScreen(
     onDeleteRecurring = { deleteRecurringId = it.id },
     onAcceptSuggestion = viewModel::acceptSuggestion,
     onDismissSuggestion = viewModel::dismissSuggestion,
+    onCarryOver = { viewModel.setCarryOver(it) },
     onAddGoal = { showAddGoal = true },
     onDepositGoal = { depositGoalId = it.id },
     onEditGoal = { editGoalId = it.id },
@@ -235,6 +237,7 @@ private fun BudgetContent(
   onDeleteRecurring: (RecurringTransactionEntity) -> Unit,
   onAcceptSuggestion: (com.moneyflow.domain.RecurringSuggestion) -> Unit = {},
   onDismissSuggestion: (com.moneyflow.domain.RecurringSuggestion) -> Unit = {},
+  onCarryOver: (Boolean) -> Unit = {},
   onAddGoal: () -> Unit,
   onDepositGoal: (SavingGoalEntity) -> Unit,
   onEditGoal: (SavingGoalEntity) -> Unit,
@@ -277,7 +280,7 @@ private fun BudgetContent(
       return@LazyColumn
     }
 
-    item(key = "budget_card") { BudgetCard(state, onEditBudget) }
+    item(key = "budget_card") { BudgetCard(state, onEditBudget, onCarryOver) }
 
     // ---- Category limits ----
     item(key = "category_header") {
@@ -390,7 +393,7 @@ private fun BudgetContent(
 // ================================================================================================
 
 @Composable
-private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
+private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit, onCarryOver: (Boolean) -> Unit = {}) {
   val budget = state.budget
   SectionCard(modifier = Modifier.testTag("total_budget_card")) {
     if (budget == null || !budget.isSet) {
@@ -426,7 +429,7 @@ private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
       ratio > 0.8f -> AccentOrange
       else -> AccentGreen
     }
-    val usedPct = if (budget.total > 0) (state.budgetExpense * 100 / budget.total) else 0L
+    val usedPct = if (state.effectiveBudget > 0) (state.budgetExpense * 100 / state.effectiveBudget) else 100L
 
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(
@@ -464,7 +467,7 @@ private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth()) {
       Text(
-        "예산 ${Formatters.formatCurrency(budget.total)}",
+        if (state.carryOver != 0L) "예산 ${Formatters.formatCurrency(state.effectiveBudget)}" else "예산 ${Formatters.formatCurrency(budget.total)}",
         style = MaterialTheme.typography.bodySmall,
         color = Gray600,
         modifier = Modifier.weight(1f),
@@ -477,6 +480,24 @@ private fun BudgetCard(state: BudgetUiState, onEdit: () -> Unit) {
         color = Gray900,
         maxLines = 1
       )
+    }
+    if (state.carryOver != 0L) {
+      Spacer(Modifier.height(6.dp))
+      Text(
+        "이번 달 ${Formatters.formatCurrency(budget.total)} " +
+          (if (state.carryOver > 0) "+ 지난달 남은 ${Formatters.formatCurrency(state.carryOver)}" else "− 지난달 초과 ${Formatters.formatCurrency(-state.carryOver)}"),
+        style = MaterialTheme.typography.labelSmall, color = if (state.carryOver > 0) AccentGreen else AccentRed,
+        modifier = Modifier.testTag("budget_carry_line")
+      )
+    }
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        .toggleable(value = state.carryOverEnabled, role = androidx.compose.ui.semantics.Role.Switch) { onCarryOver(it) }
+        .testTag("budget_carry_switch")
+    ) {
+      Text("남은 예산 다음 달로 넘기기", style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.weight(1f))
+      androidx.compose.material3.Switch(checked = state.carryOverEnabled, onCheckedChange = null)
     }
     budget.inheritedFrom?.let { from ->
       Spacer(Modifier.height(8.dp))

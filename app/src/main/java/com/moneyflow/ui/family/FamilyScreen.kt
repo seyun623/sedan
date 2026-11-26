@@ -175,6 +175,8 @@ fun FamilyScreen(onBack: () -> Unit, onOpenDrive: () -> Unit = {}, viewModel: Fa
     )
     summary?.let { s -> FamilySummary(s, onEditBudget = { editBudget = true }) }
 
+    if (members.isNotEmpty()) summary?.let { s -> FamilySettleSection(Formatters.formatMonth(month), s.sharedPaid) }
+
     if (members.isNotEmpty()) SettingsSection("함께 모으는 목표") {
       if (sharedGoals.isEmpty()) {
         Text(
@@ -401,5 +403,50 @@ private fun SharedGoalRow(g: com.moneyflow.data.repository.SharedGoal) {
       style = MaterialTheme.typography.bodySmall, color = Gray900
     )
     Text(g.byPerson.joinToString(" · ") { (p, a) -> "$p ${Formatters.formatCurrency(a)}" }, style = MaterialTheme.typography.labelSmall, color = Gray600)
+  }
+}
+
+/** 가족 정산: spending tagged #공동 split equally, with who sends whom how much. */
+@Composable
+private fun FamilySettleSection(monthLabel: String, sharedPaid: List<Pair<String, Long>>) {
+  val settlement = remember(sharedPaid) { com.moneyflow.domain.family.FamilySettlement.settle(sharedPaid) }
+  val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+  var copied by remember { mutableStateOf(false) }
+  SettingsSection("가족 정산") {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("family_settle")) {
+      if (settlement.isEmpty) {
+        Text(
+          "같이 쓴 돈의 메모에 #공동 을 붙이면 (예: '장보기 #공동'), 가족 수대로 똑같이 나눠 누가 누구에게 얼마를 보내면 되는지 알려 드려요. #같이, #더치 도 돼요.",
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
+        return@Column
+      }
+      Text(
+        "같이 쓴 돈 ${Formatters.formatCurrency(settlement.total)} · 1인당 ${Formatters.formatCurrency(settlement.share)}",
+        fontWeight = FontWeight.SemiBold, color = Gray900
+      )
+      settlement.paid.forEach { (name, amount) ->
+        Text("$name 낸 돈 ${Formatters.formatCurrency(amount)}", style = MaterialTheme.typography.bodySmall, color = Gray600)
+      }
+      if (settlement.transfers.isEmpty()) {
+        Text("주고받을 돈이 없어요.", color = AccentGreen, modifier = Modifier.padding(top = 6.dp))
+      }
+      settlement.transfers.forEach { t ->
+        Text(
+          "${t.from} → ${t.to}  ${Formatters.formatCurrency(t.amount)}",
+          fontWeight = FontWeight.Bold, color = TossBlue, modifier = Modifier.padding(top = 6.dp)
+        )
+      }
+      androidx.compose.material3.TextButton(
+        onClick = {
+          clipboard.setText(androidx.compose.ui.text.AnnotatedString(
+            com.moneyflow.domain.family.FamilySettlement.message(monthLabel, settlement, Formatters::formatCurrency)
+          ))
+          copied = true
+        },
+        modifier = Modifier.testTag("family_settle_copy")
+      ) { Text(if (copied) "복사했어요. 가족 대화방에 붙여 넣으세요" else "정산 내용 복사") }
+      Text("#공동 태그를 붙인 지출만 나눠요. 가족 기록은 마지막 합산 시점까지예요.", style = MaterialTheme.typography.labelSmall, color = Gray600)
+    }
   }
 }

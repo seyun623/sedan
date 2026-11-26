@@ -97,7 +97,8 @@ class SimpleHomeViewModel @Inject constructor(
   private val month = clock.todayFlow().map { java.time.YearMonth.from(it) }.distinctUntilChanged()
 
   val ui: StateFlow<SimpleHomeUi> = month.flatMapLatest { m ->
-    combine(ledger.transactions, ledger.accounts, budgets.observeBudget(m)) { all, accounts, b ->
+    combine(ledger.transactions, ledger.accounts, budgets.observeBudget(m)) { all, accounts, raw ->
+      val b = budgets.withCarry(raw, settings.current().budgetCarryOver, clock.zone)
       val txs = stats.inMonth(all, m)
       val now = clock.nowMillis()
       SimpleHomeUi(

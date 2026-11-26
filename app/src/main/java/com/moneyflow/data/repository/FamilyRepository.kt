@@ -39,7 +39,9 @@ data class FamilyMonth(
   /** Family monthly budget (0 = not set). */
   val budget: Long = 0,
   /** Everyone's spending that counts toward the budget ("예산 제외" left out). */
-  val budgetExpense: Long = 0
+  val budgetExpense: Long = 0,
+  /** 가족 정산: #공동 spending each person paid (this phone first). */
+  val sharedPaid: List<Pair<String, Long>> = emptyList()
 ) {
   val totalIncome: Long get() = people.sumOf { it.income }
   val totalExpense: Long get() = people.sumOf { it.expense }
@@ -201,7 +203,10 @@ class FamilyRepository @Inject constructor(
       }.filter { it.total > 0 }.sortedByDescending { it.total }
       val budgetExpense = (mine.filter { !it.isExcludedFromBudget }.sumOf { it.spending } +
         family.filter { !it.isExcludedFromBudget }.sumOf { it.spending }).coerceAtLeast(0)
-      FamilyMonth(month, listOf(me) + others, categories, s.familyBudget, budgetExpense)
+      val shared = com.moneyflow.domain.family.FamilySettlement
+      val sharedPaid = listOf("나" to mine.filter { shared.isShared(it.memo) }.sumOf { it.spending }) +
+        members.map { m -> m.name to family.filter { it.memberId == m.id && shared.isShared(it.memo) }.sumOf { it.spending } }
+      FamilyMonth(month, listOf(me) + others, categories, s.familyBudget, budgetExpense, sharedPaid)
     }
   }
 }

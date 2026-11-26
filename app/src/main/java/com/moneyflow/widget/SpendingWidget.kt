@@ -131,7 +131,7 @@ object SpendingWidget {
       WidgetContent(hidden = true)
     } else {
       val txs = ep.db().transactionDao().getBetween(MonthKeys.startMillis(month, clock.zone), MonthKeys.endMillis(month, clock.zone))
-      WidgetContent.of(txs, clock.today(), clock.zone, ep.budgets().observeBudget(month).first().total, hidden = false)
+      WidgetContent.of(txs, clock.today(), clock.zone, ep.budgets().withCarry(ep.budgets().observeBudget(month).first(), s.budgetCarryOver, clock.zone).total, hidden = false)
     }
     val manager = AppWidgetManager.getInstance(context)
     ids.forEach { id ->

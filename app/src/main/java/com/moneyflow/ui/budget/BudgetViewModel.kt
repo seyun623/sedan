@@ -36,6 +36,11 @@ data class BudgetUiState(
   val budget: MonthBudget? = null,
   /** Expenses counted against the budget (excludes "예산 제외" transactions). */
   val budgetExpense: Long = 0,
+  /** 예산 이월: last month's leftover added to this month (0 when off or nothing to carry). */
+  val carryOver: Long = 0,
+  val carryOverEnabled: Boolean = false,
+  /** This month's budget plus [carryOver]. */
+  val effectiveBudget: Long = 0,
   val budgetSpentRatio: Float = 0f,
   val remainingBudget: Long = 0,
   /** Remaining budget / remaining days (current month only, else null). */
@@ -68,17 +73,19 @@ class BudgetViewModel @Inject constructor(
   private val detector = com.moneyflow.domain.RecurringDetector(clock.zone)
 
   val uiState: StateFlow<BudgetUiState> = combine(
-    monthStore.month.flatMapLatest { m -> budgets.observeBudget(m) },
+    monthStore.month.flatMapLatest { m -> combine(budgets.observeBudget(m), budgets.observeBudget(m.minusMonths(1))) { a, b -> a to b } },
     ledger.transactions,
     ledger.goals,
     ledger.accounts,
-    combine(recurringRepo.items, settings.settings) { r, s -> r to s.dismissedRecurringSuggestions }
-  ) { budget, all, goals, accounts, (recurring, dismissed) ->
+    combine(recurringRepo.items, settings.settings) { r, s -> Triple(r, s.dismissedRecurringSuggestions, s.budgetCarryOver) }
+  ) { (budget, previous), all, goals, accounts, (recurring, dismissed, carryOn) ->
     val month = budget.month
     val today = clock.today()
     val monthTxs = stats.inMonth(all, month)
     val spent = stats.budgetExpense(monthTxs)
-    val remaining = budget.total - spent
+    val carry = if (carryOn) com.moneyflow.data.repository.BudgetCarry.amount(previous, stats.budgetExpense(stats.inMonth(all, previous.month)), budget) else 0L
+    val effective = (budget.total + carry).coerceAtLeast(0)
+    val remaining = effective - spent
     val isCurrent = month == clock.currentMonth()
     val daysLeft = if (isCurrent) month.lengthOfMonth() - today.dayOfMonth + 1 else 0
     BudgetUiState(
@@ -87,7 +94,10 @@ class BudgetViewModel @Inject constructor(
       isCurrentMonth = isCurrent,
       budget = budget,
       budgetExpense = spent,
-      budgetSpentRatio = if (budget.total > 0) (spent.toFloat() / budget.total).coerceIn(0f, 1f) else 0f,
+      carryOver = carry,
+      carryOverEnabled = carryOn,
+      effectiveBudget = effective,
+      budgetSpentRatio = if (effective > 0) (spent.toFloat() / effective).coerceIn(0f, 1f) else if (budget.isSet && spent > 0) 1f else 0f,
       remainingBudget = remaining,
       dailyAllowance = if (isCurrent && budget.isSet && daysLeft > 0) (remaining.coerceAtLeast(0) / daysLeft) else null,
       daysLeft = daysLeft,
@@ -111,6 +121,11 @@ class BudgetViewModel @Inject constructor(
   fun saveBudget(total: Long, categoryLimits: Map<String, Long>) = viewModelScope.launch {
     budgets.saveBudget(uiState.value.month, total, categoryLimits)
     messages.show("${Formatters.formatMonth(uiState.value.month)} 예산을 저장했어요.")
+  }
+
+  fun setCarryOver(on: Boolean) = viewModelScope.launch {
+    settings.setBudgetCarryOver(on)
+    messages.show(if (on) "지난달 남은 예산을 이번 달에 더해요. 초과한 금액은 빼요." else "예산 이월을 껐어요.")
   }
 
   // ---- Recurring ----

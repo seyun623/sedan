@@ -47,7 +47,7 @@ class ReminderChecker @Inject constructor(
       val txs = dao.getBetween(MonthKeys.startMillis(month, zone), MonthKeys.endMillis(month, zone))
       val budgetTxs = txs.filter { it.type.isSpending && !it.isExcludedFromBudget }
       out += BudgetReminders.due(
-        month, budgets.observeBudget(month).first(), stats.budgetExpense(txs),
+        month, budgets.withCarry(budgets.observeBudget(month).first(), s.budgetCarryOver, zone), stats.budgetExpense(txs),
         budgetTxs.groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.spending }.coerceAtLeast(0) }, sent
       )
     }
