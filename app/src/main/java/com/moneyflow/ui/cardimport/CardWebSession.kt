@@ -73,6 +73,9 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
   /** The main page view for the screen, created once and moved to the new screen afterwards. */
   fun mainView(screenContext: Context, startUrl: String): WebView {
     main?.let { wv -> attach(wv, screenContext); return wv }
+    // A previous visit may not have been wiped (the app was killed while the user was in the card
+    // company's app): start every card site without its old login, storage or cache.
+    wipeStoredData()
     val wv = newWebView(screenContext)
     main = wv
     wv.loadUrl(startUrl)
@@ -102,6 +105,8 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
     val top = _popups.value.lastOrNull() ?: return
     _popups.value = _popups.value.dropLast(1)
     top.destroyQuietly()
+    // The main page is in front again: check it anew (a closed login pop-up folded the buttons).
+    _pageLoads.value += 1
   }
 
   private fun closePopups() { while (_popups.value.isNotEmpty()) closeTopPopup() }
@@ -142,9 +147,15 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
       wv.destroy()
     }
     main = null
+    wipeStoredData()
+  }
+
+  private fun wipeStoredData() {
+    CookieManager.getInstance().removeSessionCookies(null)
     CookieManager.getInstance().removeAllCookies(null)
     CookieManager.getInstance().flush()
     WebStorage.getInstance().deleteAllData()
+    runCatching { android.webkit.WebViewDatabase.getInstance(appContext).clearHttpAuthUsernamePassword() }
   }
 
   private fun WebView.destroyQuietly() {
@@ -243,7 +254,8 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
     override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
       if (closed) return false
       val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-      val popup = newWebView((view.context as? MutableContextWrapper)?.baseContext ?: view.context)
+      // Made with the app context; showing it moves it to the screen (a pop-up never shown must not hold the Activity).
+      val popup = newWebView(appContext)
       transport.webView = popup
       resultMsg.sendToTarget()
       _popups.value = _popups.value + popup
@@ -254,6 +266,7 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
       if (window in _popups.value) {
         _popups.value = _popups.value - window
         window.destroyQuietly()
+        _pageLoads.value += 1
       }
     }
 
@@ -271,12 +284,15 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
   /** Runs [js] on the front page and returns its string result ("" on failure). */
   suspend fun evaluate(js: String): String {
     val wv = front ?: return ""
-    return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-      wv.evaluateJavascript(js) { raw ->
-        val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
-        if (cont.isActive) cont.resumeWith(Result.success(text))
+    // A view destroyed meanwhile (a pop-up closing) never answers: don't wait forever.
+    return kotlinx.coroutines.withTimeoutOrNull(EVALUATE_TIMEOUT_MS) {
+      kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        wv.evaluateJavascript(js) { raw ->
+          val text = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault("")
+          if (cont.isActive) cont.resumeWith(Result.success(text))
+        }
       }
-    }
+    } ?: ""
   }
 
   fun loadInFront(url: String) { front?.loadUrl(url) }
@@ -285,6 +301,8 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
   fun cookiesFor(url: String): String? = CookieManager.getInstance().getCookie(url)
 
   companion object {
+    private const val EVALUATE_TIMEOUT_MS = 5_000L
+
     /** Card sites hand off to their apps (approval, 간편인증) with intent:// or custom schemes. */
     fun openExternal(context: Context, url: String, view: WebView?) {
       try {

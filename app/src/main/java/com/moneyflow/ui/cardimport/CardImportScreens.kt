@@ -229,9 +229,10 @@ fun CardBrowserScreen(
         for ((n, page) in pages.withIndex()) {
           autoProgress = n + 1 to pages.size
           web.closeTopPopupsForTour()
+          // Wait for this page's own load to finish, not the previous page's.
+          val loadsBefore = web.pageLoads.value
           web.loadInFront(page.url)
-          kotlinx.coroutines.delay(300)
-          kotlinx.coroutines.withTimeoutOrNull(25_000) { web.loading.first { !it } }
+          kotlinx.coroutines.withTimeoutOrNull(25_000) { web.pageLoads.first { it > loadsBefore } }
           // Card sites fill their lists with scripts after the page has loaded.
           kotlinx.coroutines.delay(AUTO_SETTLE_MS)
           val o = runCatching { org.json.JSONObject(web.evaluate(CardBrowsing.READ_PAGE_JS)) }.getOrNull()

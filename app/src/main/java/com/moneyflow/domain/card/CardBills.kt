@@ -21,7 +21,8 @@ object BillText {
   private val WEAK = Regex("결제\\s*금액|이용\\s*대금|명세서\\s*금액")
   private val AMOUNT = Regex("(?<![0-9])([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,})\\s*원")
   /** Amounts that are not the bill even when next to it. */
-  private val NOT_BILL_BEFORE = Regex("(최소|일부|리볼빙|할부\\s*잔액|잔여|한도|포인트|캐시백|할인|적립|연체|이자)[가-힣\\s]{0,6}[:：]?\\s*$")
+  private val NOT_BILL_BEFORE = Regex("(최소|일부|리볼빙|할부|일시불|잔여|한도|포인트|캐시백|할인|적립|연체|이자|해외)[가-힣\\s]{0,6}[:：]?\\s*$")
+  private val TOTAL_AMOUNT = Regex("(?:합계|총\\s*(?:결제|청구)?\\s*금액|총액)\\s*[:：]?\\s*([0-9,]+\\s*원)")
   private val EVENT = Regex("이벤트|캐시백|추첨|응모|쿠폰|최대\\s*[0-9,]+\\s*원|혜택\\s*(받|드려)|\\(광고\\)")
   private val DUE_WORD = Regex("결제\\s*일|납부\\s*일|출금\\s*일|결제\\s*예정\\s*일|청구\\s*일|자동\\s*이체\\s*일")
   private val FULL_DATE = Regex("(?<![0-9])(20\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})")
@@ -37,7 +38,9 @@ object BillText {
     val words = STRONG.findAll(flat).toList().ifEmpty { if (message) emptyList() else WEAK.findAll(flat).toList() }
     for (w in words) {
       val window = flat.substring(w.range.first, (w.range.last + 80).coerceAtMost(flat.length))
-      val amount = AMOUNT.findAll(window).firstOrNull { m ->
+      // "일시불 400,000원 / 할부 123,000원 / 합계 523,000원": the total is the bill.
+      val total = TOTAL_AMOUNT.find(window)?.groupValues?.get(1)?.let { t -> AMOUNT.find(t) }
+      val amount = total ?: AMOUNT.findAll(window).firstOrNull { m ->
         !NOT_BILL_BEFORE.containsMatchIn(window.substring(0, m.range.first))
       } ?: continue
       val value = amount.groupValues[1].replace(",", "").toLongOrNull()?.takeIf { it in 1..100_000_000 } ?: continue

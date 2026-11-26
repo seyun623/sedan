@@ -46,10 +46,12 @@ class CardImportRepository @Inject constructor(
 
   /** An account named after the card company / bank (null when there is none). */
   fun namedAccount(provider: String, accounts: List<AccountEntity>): AccountEntity? {
-    val core = provider.removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크")
+    // "KB국민카드" ↔ an account named "국민카드", "NH농협카드" ↔ "농협카드".
+    fun norm(s: String) = s.replace(Regex("^(KB|NH|IBK|BC)|\\s|WON", RegexOption.IGNORE_CASE), "")
+    val core = norm(provider).removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크")
     if (core.length < 2) return null
     val isBank = provider.endsWith("은행") || provider.endsWith("뱅크")
-    val named = accounts.filter { it.bankName.contains(core) || it.name.contains(core) }
+    val named = accounts.filter { norm(it.bankName).contains(core) || norm(it.name).contains(core) }
     return named.firstOrNull { (it.accountType == AccountType.CREDIT_CARD) != isBank } ?: named.firstOrNull()
   }
 

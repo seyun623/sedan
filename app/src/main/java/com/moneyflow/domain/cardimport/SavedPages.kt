@@ -57,8 +57,17 @@ object SavedPages {
    * "이용내역 조회") is kept once; performance figures and benefits are de-duplicated too.
    */
   fun merge(readings: List<StatementExtraction>, readBy: String): StatementExtraction {
-    val items = readings.flatMap { it.items }
-      .distinctBy { listOf(it.date, it.amount, it.isCancel, it.isIncome, it.merchant.replace(" ", "").lowercase(), it.time) }
+    // Two equal coffees on one page are two payments; the same row on two pages is one. Keep, for
+    // each kind of row, as many as the page that shows it most often.
+    fun key(it: StatementItem) = listOf(it.date, it.amount, it.isCancel, it.isIncome, it.merchant.replace(" ", "").lowercase(), it.time)
+    val most = HashMap<List<Any?>, Int>()
+    readings.forEach { r -> r.items.groupingBy(::key).eachCount().forEach { (k, n) -> most[k] = maxOf(most[k] ?: 0, n) } }
+    val taken = HashMap<List<Any?>, Int>()
+    val items = readings.flatMap { it.items }.filter { item ->
+      val k = key(item)
+      val n = taken[k] ?: 0
+      if (n < (most[k] ?: 0)) { taken[k] = n + 1; true } else false
+    }
     return StatementExtraction(
       items = items.sortedByDescending { it.date },
       performance = readings.flatMap { it.performance }.distinct(),

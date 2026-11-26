@@ -50,7 +50,11 @@ class StatementTextParser(private val today: LocalDate) {
       (i until end).any { pickAmount(lines[it]) != null } || lines.getOrNull(i - 1)?.let { pickAmount(it) } != null
     }
     if (withAmount.isEmpty()) return false
-    val dateOnly = withAmount.count { i -> cleanMerchant(lines[i].replace(findDate(lines[i])!!.second, " ")).isEmpty() }
+    // "네이버 현대카드 Edition3 · 26. 9. 12 · 03:15 · 일시불": the rest of the date line names the card, not a shop.
+    val dateOnly = withAmount.count { i ->
+      val rest = cleanMerchant(lines[i].replace(findDate(lines[i])!!.second, " "))
+      rest.isEmpty() || CARD_NAME.containsMatchIn(rest)
+    }
     val above = withAmount.count { i -> lines.getOrNull(i - 1)?.let(::isMerchantLine) == true }
     // The date line itself names no merchant, and a merchant line sits above most rows.
     return above * 10 >= withAmount.size * 6 && dateOnly * 10 >= withAmount.size * 6
@@ -64,7 +68,8 @@ class StatementTextParser(private val today: LocalDate) {
     val joined = all.joinToString(" ")
     if (HEADER.containsMatchIn(joined) && AMOUNT.findAll(joined).none()) return null
     if (SUMMARY.containsMatchIn(window.first())) return null
-    val amount = all.asSequence().mapNotNull { pickAmount(it) }.firstOrNull() ?: return null
+    // Amounts on totals / bill lines ("총 이용금액 1,234,000원", "결제하실 금액") are not this purchase.
+    val amount = all.asSequence().filterNot { TOTAL_LINE.containsMatchIn(it) }.mapNotNull { pickAmount(it) }.firstOrNull() ?: return null
     if (amount <= 0) return null
     val time = TIME.find(joined)?.let { runCatching { LocalTime.of(it.groupValues[1].toInt(), it.groupValues[2].toInt()) }.getOrNull() }
     val merchant = (listOfNotNull(merchantLine) + window).asSequence()
@@ -132,7 +137,11 @@ class StatementTextParser(private val today: LocalDate) {
     /** Lines after the date line that can hold the amount in the merchant-first layout. */
     private const val MERCHANT_FIRST_TAIL = 3
     /** Statement totals and due amounts, not purchases. */
-    private val SUMMARY = Regex("명세서|결제\\s*예정|청구\\s*(금액|예정)|납부\\s*예정|이용\\s*대금|결제\\s*금액|결제일|합계|총\\s*이용")
+    private val SUMMARY = Regex("명세서|결제\\s*예정|결제\\s*(하실|할|될)\\s*금액|청구\\s*(금액|예정)|납부\\s*(예정|하실|할)|이용\\s*대금|결제\\s*금액|결제일|합계|총\\s*이용|이용\\s*기간")
+    /** Lines whose amount is a total or the bill, never one purchase ("결제금액 5,600원" in a row is fine). */
+    private val TOTAL_LINE = Regex("결제\\s*(하실|할|될|예정)\\s*금액|청구\\s*(금액|예정)|총\\s*(이용|결제|청구)|합계|이용\\s*기간|명세서")
+    /** A card product name on a row's detail line ("국민행복 현대카드", "Edition3 카드"). */
+    private val CARD_NAME = Regex("카드")
     /** Section titles that are never a merchant. */
     private val SECTION = Regex("^(최근\\s*)?이용\\s*내역|마이페이지|전체\\s*보기|더\\s*보기")
     private val FULL_DATE = Regex("(?<![0-9])(20\\d{2}|\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})(?![0-9])")
@@ -147,7 +156,7 @@ class StatementTextParser(private val today: LocalDate) {
     private val MASKED = Regex("[0-9*]{2,}[-*][0-9*\\-]+")
     private val NOT_PAYMENT = Regex("누적|잔액|잔고|한도|포인트|적립|할인|수수료|이자|캐시백")
     private val CANCEL = Regex("취소|환불")
-    private val NEGATIVE = Regex("(?<![0-9])-\\s*[0-9]{1,3}(?:,[0-9]{3})+\\s*원")
+    private val NEGATIVE = Regex("(?<![0-9])-\\s*[0-9][0-9,]*\\s*원")
     private val INSTALLMENT = Regex("([0-9]{1,2})\\s*개월")
     private val PERFORMANCE = Regex("실적")
     private val HEADER = Regex("^(이용일(자|시)?|거래일(자|시)?|승인일(자|시)?|가맹점(명)?|이용(금액|내역)|금액|구분|비고|합계|총\\s*이용금액)$")

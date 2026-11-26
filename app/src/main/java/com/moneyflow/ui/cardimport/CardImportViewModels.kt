@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -36,6 +38,7 @@ const val ARG_SITE_ID = "siteId"
 
 /** Largest card-site file read directly (이용내역 엑셀). */
 private const val MAX_DOWNLOAD = 15 * 1024 * 1024
+private const val MAX_REDIRECTS = 5
 
 sealed interface BrowserEvent {
   data object OpenPreview : BrowserEvent
@@ -98,12 +101,15 @@ class CardBrowserViewModel @Inject constructor(
     }
     viewModelScope.launch { web.pageLoads.collect { if (it > 0) probePage() } }
     // The code appears when the user picks "앱으로 로그인" on the page (no new page load): look every few seconds.
+    // Only while the screen shows it (not in the background, behind the lock screen or the preview).
     if (site.appNames.isNotEmpty()) viewModelScope.launch {
-      while (true) {
-        kotlinx.coroutines.delay(2_500)
-        if ((_pageCheck.value?.items ?: 0) > 0) { _appCode.value = null; continue }
-        val text = web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.READ_TEXT_JS)
-        _appCode.value = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.CardBrowsing.findAppCode(text) }
+      _appCode.subscriptionCount.map { it > 0 }.distinctUntilChanged().collectLatest { watched ->
+        while (watched) {
+          kotlinx.coroutines.delay(2_500)
+          if ((_pageCheck.value?.items ?: 0) > 0) { _appCode.value = null; continue }
+          val text = web.evaluate(com.moneyflow.domain.cardimport.CardBrowsing.READ_TEXT_JS)
+          _appCode.value = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.CardBrowsing.findAppCode(text) }
+        }
       }
     }
     viewModelScope.launch {
@@ -186,8 +192,7 @@ class CardBrowserViewModel @Inject constructor(
     _busy.value = true
     try {
       val name = com.moneyflow.domain.cardimport.CardBrowsing.downloadFileName(d.contentDisposition, d.url, d.mimeType)
-      val cookies = web.cookiesFor(d.url)
-      val bytes = withContext(Dispatchers.IO) { fetchFile(d, cookies) }
+      val bytes = withContext(Dispatchers.IO) { fetchFile(d) }
       val rows = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.TableFileReader.read(bytes, name) }
       val result = withContext(Dispatchers.Default) { com.moneyflow.domain.cardimport.TableStatementReader(clock.today()).read(rows, "카드사 파일") }
       if (result.items.isEmpty()) {
@@ -203,29 +208,46 @@ class CardBrowserViewModel @Inject constructor(
     }
   }
 
-  private fun fetchFile(d: SiteDownload, cookies: String?): ByteArray {
-    val c = java.net.URL(d.url).openConnection() as javax.net.ssl.HttpsURLConnection
-    try {
-      c.connectTimeout = 15_000
-      c.readTimeout = 30_000
-      c.setRequestProperty("User-Agent", d.userAgent)
-      cookies?.let { c.setRequestProperty("Cookie", it) }
-      if (c.responseCode != 200) throw java.io.IOException("파일을 받지 못했어요 (${c.responseCode}).")
-      return c.inputStream.use { input ->
-        val out = java.io.ByteArrayOutputStream()
-        val buf = ByteArray(16 * 1024)
-        while (true) {
-          val n = input.read(buf)
-          if (n < 0) break
-          out.write(buf, 0, n)
-          if (out.size() > MAX_DOWNLOAD) throw java.io.IOException("파일이 너무 커요.")
+  /**
+   * Downloads with the page's login. Redirects are followed by hand so each host only gets its own
+   * cookies (a file server must not receive the card company's login), and only over https.
+   */
+  private fun fetchFile(d: SiteDownload): ByteArray {
+    var url = d.url
+    repeat(MAX_REDIRECTS + 1) {
+      if (!url.startsWith("https://")) throw java.io.IOException("안전하지 않은 주소라 파일을 받지 않았어요.")
+      val c = java.net.URL(url).openConnection() as javax.net.ssl.HttpsURLConnection
+      try {
+        c.instanceFollowRedirects = false
+        c.connectTimeout = 15_000
+        c.readTimeout = 30_000
+        c.setRequestProperty("User-Agent", d.userAgent)
+        web.cookiesFor(url)?.let { c.setRequestProperty("Cookie", it) }
+        val code = c.responseCode
+        if (code in 300..399) {
+          val next = c.getHeaderField("Location") ?: throw java.io.IOException("파일을 받지 못했어요 ($code).")
+          url = java.net.URL(java.net.URL(url), next).toString()
+          return@repeat
         }
-        out.toByteArray()
+        if (code != 200) throw java.io.IOException("파일을 받지 못했어요 ($code).")
+        return c.inputStream.use { input ->
+          val out = java.io.ByteArrayOutputStream()
+          val buf = ByteArray(16 * 1024)
+          while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+            if (out.size() > MAX_DOWNLOAD) throw java.io.IOException("파일이 너무 커요.")
+          }
+          out.toByteArray()
+        }
+      } finally {
+        c.disconnect()
       }
-    } finally {
-      c.disconnect()
     }
+    throw java.io.IOException("파일 주소가 너무 여러 번 바뀌었어요.")
   }
+
 
   /** Pages of this card company read automatically after login ("이 화면 기억하기"). */
   val savedPages: StateFlow<List<com.moneyflow.domain.cardimport.SavedPage>> = settings.settings
@@ -422,11 +444,26 @@ class CardImportPreviewViewModel @Inject constructor(
 
   fun import() = viewModelScope.launch {
     val s = _state.value
+    if (s.busy) return@launch
     _state.value = s.copy(busy = true)
-    val account = s.account ?: s.newAccountName?.takeIf { s.createNew }?.let { repo.createCardAccount(it) } ?: run {
+    val account = try {
+      s.account ?: s.newAccountName?.takeIf { s.createNew }?.let { name ->
+        // Keep the new account in the state at once: a retry after a failure must not make another.
+        repo.createCardAccount(name).also { made -> _state.value = _state.value.copy(account = made, createNew = false, accounts = _state.value.accounts + made) }
+      }
+    } catch (e: Exception) {
+      null
+    } ?: run {
       _state.value = _state.value.copy(busy = false); return@launch
     }
-    val result = repo.import(s.rows.filterIndexed { i, _ -> i in s.selected }, account, s.splitInstallments)
+    val result = try {
+      repo.import(s.rows.filterIndexed { i, _ -> i in s.selected }, account, s.splitInstallments)
+    } catch (e: Exception) {
+      com.moneyflow.util.ProblemLog.record("카드 가져오기", e)
+      messages.show(com.moneyflow.util.UserErrors.message(e, "가져오지 못했어요. 다시 시도해 주세요."))
+      _state.value = _state.value.copy(busy = false)
+      return@launch
+    }
     if (s.savePerformance) s.extraction?.performance?.firstOrNull()?.let { repo.savePerformance(account.id, it) }
     val bill = s.extraction?.bill?.takeIf { s.saveBill }
     bill?.let { repo.saveBill(account.id, it) }
