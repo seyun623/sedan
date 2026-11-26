@@ -72,8 +72,13 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.18.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.19.0. */
   val all = listOf(
+    FeatureCheck(
+      "weekly_report", "주간 소비 리포트", "2.19",
+      listOf("설정 → 알림 → '매주 월요일 주간 소비 리포트'를 켜 두면, 월요일(늦어도 수요일)에 '지난주 ○○원 썼어요, 평소보다 …' 알림이 오는지 봐 주세요."),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
     FeatureCheck(
       "receipt", "영수증 사진으로 입력", "2.18",
       listOf(

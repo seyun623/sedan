@@ -62,6 +62,21 @@ class ReminderChecker @Inject constructor(
         budgetExpense = stats.budgetExpense(txs)
       )?.let { out += it }
     }
+    if (s.weeklyReportEnabled && today.dayOfWeek.value <= 3) {
+      val start = com.moneyflow.domain.alerts.WeeklyReport.lastWeekStart(today)
+      suspend fun week(from: java.time.LocalDate) = runCatching {
+        dao.getBetween(MonthKeys.dayStartMillis(from, zone), MonthKeys.dayStartMillis(from.plusDays(7), zone) - 1)
+      }.getOrDefault(emptyList())
+      val last = week(start)
+      val first = dao.earliestTimestamp()?.let { MonthKeys.toLocalDate(it, zone) }
+      // Only weeks the ledger already covered count toward "평소".
+      val earlier = (1..4).map { start.minusWeeks(it.toLong()) }.filter { first != null && !it.isBefore(first) }
+        .map { stats.budgetExpense(week(it).filter { t -> t.type.isSpending }) }
+      val spending = last.filter { it.type.isSpending }
+      val top = stats.categoryBreakdown(last).firstOrNull()?.let { it.category to it.amount }
+      val biggest = spending.filter { it.type == com.moneyflow.data.model.TransactionType.EXPENSE }.maxByOrNull { it.amount }?.let { it.memo.take(20) to it.amount }
+      com.moneyflow.domain.alerts.WeeklyReport.due(today, stats.budgetExpense(spending), earlier, top, biggest, sent)?.let { out += it }
+    }
     if (s.billRemindersEnabled) {
       out += com.moneyflow.domain.alerts.BillReminders.due(today, db.accountDao().getAll(), db.recurringTransactionDao().getActive(), sent, s.cardBills)
     }

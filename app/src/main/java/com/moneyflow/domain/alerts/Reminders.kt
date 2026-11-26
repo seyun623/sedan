@@ -86,6 +86,52 @@ object BudgetReminders {
   }
 }
 
+/**
+ * 주간 소비 리포트 (2.19): on Monday (or by Wednesday if the phone was off), last week's spending
+ * (Mon–Sun) against the average of the 4 weeks before, the top category and the biggest payment.
+ */
+object WeeklyReport {
+  /** Monday of the week before [today]'s week. */
+  fun lastWeekStart(today: LocalDate): LocalDate =
+    today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)).minusWeeks(1)
+
+  /**
+   * @param weekExpense last week's spending
+   * @param earlierWeeks spending of each of the 4 weeks before (only weeks the ledger already covered)
+   */
+  fun due(
+    today: LocalDate,
+    weekExpense: Long,
+    earlierWeeks: List<Long>,
+    topCategory: Pair<String, Long>?,
+    biggest: Pair<String, Long>?,
+    sent: Set<String>
+  ): Reminder? {
+    if (today.dayOfWeek.value > 3) return null
+    val start = lastWeekStart(today)
+    val key = "weekly|$start"
+    if (key in sent) return null
+    if (weekExpense <= 0 && earlierWeeks.all { it <= 0 }) return null
+    val end = start.plusDays(6)
+    val average = earlierWeeks.filter { it > 0 }.takeIf { it.isNotEmpty() }?.average()?.toLong()
+    val compare = average?.let { avg ->
+      val pct = Math.round((weekExpense - avg) * 100.0 / avg)
+      when {
+        pct >= 5 -> ", 평소보다 ${pct}% 많아요"
+        pct <= -5 -> ", 평소보다 ${-pct}% 적어요"
+        else -> ", 평소와 비슷해요"
+      }
+    }.orEmpty()
+    val text = buildList {
+      add("지난주 ${Formatters.formatCurrency(weekExpense)} 썼어요$compare")
+      if (average != null) add("최근 4주 평균 ${Formatters.formatCurrency(average)}")
+      topCategory?.takeIf { it.second > 0 }?.let { add("가장 많이 쓴 곳: ${it.first} ${Formatters.formatCurrency(it.second)}") }
+      biggest?.takeIf { it.second > 0 }?.let { add("가장 큰 지출: ${it.first} ${Formatters.formatCurrency(it.second)}") }
+    }.joinToString("\n")
+    return Reminder(key, ReminderChannel.BUDGET, "주간 소비 리포트 (${start.monthValue}.${start.dayOfMonth}~${end.monthValue}.${end.dayOfMonth})", text)
+  }
+}
+
 /** Card payment day (3 days before) and recurring payments (the day before), pure and testable. */
 object BillReminders {
   const val CARD_DAYS_BEFORE = 3L

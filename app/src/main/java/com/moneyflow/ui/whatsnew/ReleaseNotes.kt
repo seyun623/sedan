@@ -6,6 +6,12 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.19.0", "2026.11",
+      listOf(
+        "주간 소비 리포트: 설정 → '매주 월요일 주간 소비 리포트'를 켜면 월요일에 '지난주 32만 원 썼어요, 평소보다 12% 적어요'처럼 최근 4주 평균과 비교하고, 가장 많이 쓴 곳과 가장 큰 지출을 알려 드려요"
+      )
+    ),
+    ReleaseNote(
       "2.18.0", "2026.11",
       listOf(
         "영수증 사진으로 입력: 내역 추가에서 '📷 영수증 찍기'나 '앨범에서 고르기' → 금액·날짜·가게·품목을 채워요. 글자는 휴대폰 안에서 읽고 사진은 밖으로 보내지 않아요 (읽은 뒤 바로 지워요)",

@@ -188,6 +188,19 @@ fun SettingsScreen(
         },
         modifier = Modifier.testTag("settings_monthly_summary")
       )
+      val weeklyPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+      ) { granted -> if (granted) viewModel.setWeeklyReport(true) }
+      SettingsSwitchItem(
+        title = "매주 월요일 주간 소비 리포트",
+        subtitle = "지난주 쓴 돈을 최근 4주 평균과 비교하고, 가장 많이 쓴 곳과 가장 큰 지출을 알려 드려요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.weeklyReportEnabled,
+        onCheckedChange = { on ->
+          if (on && needsPermission()) weeklyPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else viewModel.setWeeklyReport(on)
+        },
+        modifier = Modifier.testTag("settings_weekly_report")
+      )
       val billPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
       ) { granted -> if (granted) viewModel.setBillReminders(true) }

@@ -81,6 +81,8 @@ data class AppSettings(
   val budgetAlertsEnabled: Boolean = false,
   /** Last month's summary on the 1st. */
   val monthlySummaryEnabled: Boolean = false,
+  /** 2.19: every Monday, last week's spending against the usual. */
+  val weeklyReportEnabled: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
   /** Google Drive bot (service account) key, encrypted with the Keystore. */
@@ -186,6 +188,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val BACKUP_REMINDER = booleanPreferencesKey("backup_reminder")
     val BUDGET_ALERTS = booleanPreferencesKey("budget_alerts")
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
+    val WEEKLY_REPORT = booleanPreferencesKey("weekly_report")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     val INSTALL_ID = stringPreferencesKey("install_id")
@@ -271,6 +274,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       backupReminderEnabled = p[Keys.BACKUP_REMINDER] ?: true,
       budgetAlertsEnabled = p[Keys.BUDGET_ALERTS] ?: false,
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
+      weeklyReportEnabled = p[Keys.WEEKLY_REPORT] ?: false,
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
       cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
@@ -579,6 +583,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setBillReminders(enabled: Boolean) = store.edit { it[Keys.BILL_REMINDERS] = enabled }
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }
+  suspend fun setWeeklyReport(enabled: Boolean) = store.edit { it[Keys.WEEKLY_REPORT] = enabled }
   suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
 
   /** Random id of this installation (tells family backups apart from this phone's own). */
