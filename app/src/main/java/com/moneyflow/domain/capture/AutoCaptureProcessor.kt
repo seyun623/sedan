@@ -12,6 +12,7 @@ import com.moneyflow.data.repository.LedgerRepository
 import com.moneyflow.data.repository.SettingsRepository
 import com.moneyflow.domain.AppClock
 import com.moneyflow.domain.InstallmentSplitter
+import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,6 +54,7 @@ class AutoCaptureProcessor @Inject constructor(
   private val notifier: CaptureNotifier,
   private val log: CaptureLog? = null
 ) {
+  private val decideLock = kotlinx.coroutines.sync.Mutex()
   private val parser = PaymentMessageParser(clock.zone)
 
   /** Parse only (used by the settings screen's test box). */
@@ -68,7 +70,9 @@ class AutoCaptureProcessor @Inject constructor(
     receivedAt: Long
   ): CaptureOutcome {
     val outcome = try {
-      decide(channel, origin, originLabel, title, body, receivedAt)
+      // One at a time: the same payment often arrives by SMS and by notification at the same
+      // moment, and each run must see what the other recorded (and the alerts it marked handled).
+      decideLock.withLock { decide(channel, origin, originLabel, title, body, receivedAt) }
     } catch (e: kotlinx.coroutines.CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -78,6 +82,9 @@ class AutoCaptureProcessor @Inject constructor(
     log?.let { l ->
       // Ordinary chats from KakaoTalk / text apps are not logged at all.
       val gateBlocked = channel == CaptureChannel.NOTIFICATION && FinancialApps.gate(origin, originLabel, title) == FinancialApps.Gate.BLOCKED
+      // Personal chats are never logged, even when they mention a bank ("국민은행 앞에서 보자");
+      // only pay-service channels (스마일페이 …) are, to explain why they aren't recorded.
+      if (gateBlocked && !(origin == FinancialApps.KAKAO && PAY_SERVICE.containsMatchIn(title))) return outcome
       val looksFinancial = parser.detectProvider("$title $body") != null
       // Ads and app news ("결제/입출금 문구가 없음" without a card company) would bury the real ones.
       val noise = outcome is CaptureOutcome.Skipped && (
@@ -137,18 +144,21 @@ class AutoCaptureProcessor @Inject constructor(
     val rules = db.ruleDao().getAll()
     CategoryRules.ignores(rules, title, body)?.let { return CaptureOutcome.Skipped("무시 규칙: ${it.keyword}") }
 
-    val result = parser.parse(title, body, receivedAt)
-    // A bill notice is all "footer" lines (명세서, 결제 예정) to the payment parser.
-    if (result is ParseResult.Ignored && (result.reason == "광고·안내 메시지" || result.reason == "빈 메시지")) {
+    // A bill notice ("결제하실 금액 523,000원, 결제일 12/14") is not a payment: check it before the
+    // payment parser, which would read "결제" as the action. Real payments say 승인/취소/출금/입금.
+    if (!PAYMENT_WORDS.containsMatchIn("$title $body") &&
+      com.moneyflow.domain.card.BillText.find("$title\n$body", clock.today(), message = true) != null
+    ) {
       billNotice(gate, originLabel, title, body, s, dryRun)?.let { return it }
     }
+    val result = parser.parse(title, body, receivedAt)
     val parsed = when (result) {
       is ParseResult.Ignored -> return CaptureOutcome.Skipped(result.reason)
       is ParseResult.Success -> result.payment
     }
     // A bank / card app's own notification often doesn't repeat the company name: take it from the app.
     val payment = if (parsed.provider == null && channel == CaptureChannel.NOTIFICATION && gate == FinancialApps.Gate.ALLOWED) {
-      parsed.copy(provider = originLabel?.let { parser.detectProvider(it) } ?: parser.detectProvider(title))
+      parsed.copy(provider = originLabel?.let { PaymentMessageParser.providerInName(it) } ?: parser.detectProvider(title))
     } else parsed
     val textLike = channel == CaptureChannel.SMS || gate == FinancialApps.Gate.SMS_APP || gate == FinancialApps.Gate.KAKAO_CHANNEL
     if (textLike && payment.provider == null) {
@@ -174,13 +184,17 @@ class AutoCaptureProcessor @Inject constructor(
         // The same cancellation can arrive by SMS and by app push: handle it once (±3 minutes).
         fun cancelKey(minute: Long) = "cancel|" + sha("${payment.amount}|${payment.merchant.replace(" ", "")}|$minute")
         val minute = timestamp / 60_000
-        if ((minute - 3..minute + 3).any { cancelKey(it) in s.sentCardAlerts }) {
+        // The SMS and the 알림톡 name the shop differently ("쿠팡(쿠페이)" / "쿠팡"): the amount and time decide.
+        fun amountKey(minute: Long) = "cancelamt|" + sha("${payment.amount}|$minute")
+        if ((minute - 3..minute + 3).any { cancelKey(it) in s.sentCardAlerts || amountKey(it) in s.sentCardAlerts }) {
           return@withTransaction CaptureOutcome.Skipped("이미 처리한 취소")
         }
         var outcome = cancelOriginal(payment, timestamp)
         // No matching purchase in the ledger (bought before the app, or entered differently):
         // keep the money as a refund so spending still goes down.
-        if (outcome is CaptureOutcome.Skipped && payment.merchant != UNKNOWN_MERCHANT) {
+        if (outcome is CaptureOutcome.Skipped && payment.merchant != UNKNOWN_MERCHANT &&
+          db.transactionDao().countByDedupKey("refund|" + cancelKey(minute)) == 0
+        ) {
           val account = pickAccount(payment, s, dryRun)
           if (account != null) {
             val refund = TransactionEntity(
@@ -200,7 +214,7 @@ class AutoCaptureProcessor @Inject constructor(
             outcome = CaptureOutcome.Recorded(ledger.insertWithEffects(refund), payment, account)
           }
         }
-        if (outcome !is CaptureOutcome.Skipped) settings.markAlertsSent(listOf(cancelKey(minute)))
+        if (outcome !is CaptureOutcome.Skipped) settings.markAlertsSent(listOf(cancelKey(minute), amountKey(minute)))
         return@withTransaction outcome
       }
 
@@ -211,7 +225,25 @@ class AutoCaptureProcessor @Inject constructor(
       val near = db.transactionDao().findAutoCapturedNear(
         payment.type, payment.amount, timestamp - DUPLICATE_WINDOW_MS, timestamp + DUPLICATE_WINDOW_MS
       )
-      if (near.isNotEmpty()) return@withTransaction CaptureOutcome.Skipped("같은 결제가 다른 경로로 이미 등록됨")
+      // The same payment by SMS and by app push names the shop a little differently ("스타벅스코리아" /
+      // "스타벅스 강남점"); two coffees of the same price at different shops are two payments.
+      // A pay app (카카오페이 …) often tells first; the card company's alert of the same payment
+      // then moves it from the pay / catch-all account to the card. The other way round, the pay
+      // app's message is the duplicate.
+      val heldByPay = near.firstOrNull { heldByPayApp(it) }
+      if (heldByPay != null && payment.provider?.endsWith("카드") == true) {
+        val card = pickAccount(payment, s, dryRun)
+        if (card != null && card.id != heldByPay.accountId) {
+          if (dryRun) return@withTransaction CaptureOutcome.WouldRecord(payment, card, card.id == 0L)
+          val created = card.id == lastCreatedId
+          ledger.updateTransaction(heldByPay.copy(accountId = card.id, accountName = card.name, paymentMethod = "카드"))
+          return@withTransaction CaptureOutcome.Recorded(heldByPay.id, payment, card, created)
+        }
+      }
+      if (near.isNotEmpty() && isPayService(payment.provider)) {
+        return@withTransaction CaptureOutcome.Skipped("같은 결제가 카드사 알림으로 이미 등록됨")
+      }
+      if (near.any { sameShop(it.memo, payment.merchant) }) return@withTransaction CaptureOutcome.Skipped("같은 결제가 다른 경로로 이미 등록됨")
       // An installment purchase already split into monthly parts by the other channel.
       if (payment.installmentMonths != null && splitPurchaseNear(payment.amount, timestamp) != null) {
         return@withTransaction CaptureOutcome.Skipped("같은 할부 결제가 다른 경로로 이미 등록됨")
@@ -307,7 +339,7 @@ class AutoCaptureProcessor @Inject constructor(
     val minute = timestamp / 60_000
     if ((minute - 3..minute + 3).any { keyAt(it) in s.sentCardAlerts }) return CaptureOutcome.Skipped("이미 알린 외화 결제")
     val key = keyAt(minute)
-    val account = pickAccount(payment, s, dryRun = false)
+    val account = db.withTransaction { pickAccount(payment, s, dryRun = false) }
     val prompt = ForeignPaymentPrompt(
       key = key,
       merchant = payment.merchant,
@@ -359,15 +391,37 @@ class AutoCaptureProcessor @Inject constructor(
   ): CaptureOutcome? {
     val text = "$title\n$body"
     val bill = com.moneyflow.domain.card.BillText.find(text, clock.today(), message = true) ?: return null
-    val provider = parser.detectProvider(text) ?: originLabel?.let { parser.detectProvider(it) } ?: return null
+    val provider = parser.detectProvider(text) ?: originLabel?.let { PaymentMessageParser.providerInName(it) } ?: return null
     if (!provider.endsWith("카드")) return null
     if (gate == FinancialApps.Gate.KAKAO_CHANNEL && !FinancialApps.sameCompany(title, provider)) return null
     val asPayment = ParsedPayment(PaymentKind.PAYMENT, TransactionType.EXPENSE, bill.amount, "", "", provider, null, null, null)
     val account = db.withTransaction { pickAccount(asPayment, s, dryRun) }
-      ?.takeIf { it.accountType == AccountType.CREDIT_CARD }
+      ?.takeIf { it.accountType == AccountType.CREDIT_CARD && (it.id == 0L || it.id == lastCreatedId || namesCompany(it, provider)) }
       ?: return CaptureOutcome.Skipped("청구 안내: $provider 카드 계좌가 없음")
     if (!dryRun) com.moneyflow.data.repository.CardBills.save(db, settings, account.id, bill, "카드사 안내", clock.nowMillis())
     return CaptureOutcome.BillNoticed(account, bill)
+  }
+
+  private fun isPayService(provider: String?): Boolean =
+    provider != null && (provider.endsWith("페이") || provider == "토스")
+
+  /** Recorded from a pay app's message on its wallet account or the catch-all account. */
+  private suspend fun heldByPayApp(tx: TransactionEntity): Boolean {
+    val a = db.accountDao().getById(tx.accountId) ?: return false
+    return a.name == OTHER_ACCOUNT || (a.accountType == AccountType.BANK && isPayService(a.name))
+  }
+
+  private fun namesCompany(a: AccountEntity, provider: String): Boolean {
+    val core = provider.removeSuffix("카드").removeSuffix("은행").removePrefix("KB").takeIf { it.length >= 2 } ?: return false
+    return a.name.contains(core) || a.bankName.contains(core)
+  }
+
+  private fun sameShop(memo: String, merchant: String): Boolean {
+    fun norm(s: String) = s.substringBefore(" (").replace(Regex("[\\s()（）㈜]|주식회사"), "").lowercase()
+    val a = norm(memo)
+    val b = norm(merchant)
+    if (a.isEmpty() || b.isEmpty() || merchant == UNKNOWN_MERCHANT || memo.startsWith(UNKNOWN_MERCHANT)) return true
+    return a.contains(b) || b.contains(a) || a.take(2) == b.take(2)
   }
 
   /** Id of the account the last [pickAccount] call created (to say so in the log). */
@@ -392,8 +446,12 @@ class AutoCaptureProcessor @Inject constructor(
         it.name.contains(provider, true) || it.bankName.contains(provider, true) ||
           (core.length >= 2 && (it.bankName.contains(core, true) || it.name.contains(core, true)))
       }
-      (matches.firstOrNull { (it.accountType == AccountType.CREDIT_CARD) == wantsCard } ?: matches.firstOrNull())
-        ?.let { return it }
+      matches.firstOrNull { (it.accountType == AccountType.CREDIT_CARD) == wantsCard }?.let { return it }
+      // Only the other kind matches ("신한카드" account for a 신한은행 salary): use it only when no
+      // new account may be made, or for a 체크카드 payment (it comes out of the bank account).
+      if (!s.autoCreateCaptureAccounts || newAccountType(provider) == null || (wantsCard && payment.isCheckCard)) {
+        matches.firstOrNull()?.let { return it }
+      }
     }
     if (s.autoCreateCaptureAccounts && provider != null && newAccountType(provider) != null) {
       val type = newAccountType(provider)!!
@@ -449,6 +507,8 @@ class AutoCaptureProcessor @Inject constructor(
     private const val DAY_MS = 24 * 60 * 60_000L
     private const val UNKNOWN_MERCHANT = "알 수 없는 가맹점"
     private val PAY_SERVICE = Regex("페이|PAY|Pay|pay")
+    /** Words of a real payment / transfer (a bill notice has none of them). */
+    private val PAYMENT_WORDS = Regex("승인|취소|출금|입금|사용\\s*(금액|하신)|결제\\s*(완료|되었|했)")
     const val OTHER_ACCOUNT = "기타 결제수단"
     const val NO_ACCOUNT = "등록할 계좌가 없음 (자동 등록 설정 → 기본 등록 계좌를 골라 주세요)"
   }

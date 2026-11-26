@@ -73,8 +73,10 @@ class CaptureDiagnosticsViewModel @Inject constructor(
    * Sends the test notification and waits a few seconds for the listener to read it. The answer
    * tells the user directly whether the phone lets the app read notifications.
    */
-  fun runNotificationTest(accessGranted: Boolean) = viewModelScope.launch {
+  fun runNotificationTest(accessGranted: Boolean, captureOn: Boolean = true) = viewModelScope.launch {
     if (!accessGranted) { _testState.value = "⚠ 먼저 위 '알림 접근 허용'을 해 주세요."; return@launch }
+    // The test reads the notification even when the switch is off; real payments would not be recorded.
+    if (!captureOn) { _testState.value = "⚠ '알림 자동 등록' 스위치가 꺼져 있어요. 켜야 결제가 기록돼요."; return@launch }
     val sentAt = System.currentTimeMillis()
     if (!sendTestNotification()) {
       _testState.value = "⚠ 알림을 보낼 수 없어요. 휴대폰 설정 → 애플리케이션 → 머니플로우 → 알림을 켜 주세요."

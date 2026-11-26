@@ -162,6 +162,54 @@ class AutoCaptureProcessorTest {
     assertEquals(14, db.accountDao().getById(card.id)!!.paymentDay)
   }
 
+  // ---- hourly review 1 (2.15.3) ----
+
+  @Test fun billNoticeVariantsAreNeverExpenses() = runBlocking {
+    for (msg in listOf(
+      "[신한카드] 홍길동님 12/14 결제하실 금액은 523,000원입니다.",
+      "12월 결제예정금액 안내\n523,000원\n결제일 12/14(월)"
+    )) {
+      val out = processor.process(CaptureChannel.SMS, "15447200", null, "신한카드", msg, clock.nowMillis())
+      assertTrue(out.toString(), out is CaptureOutcome.BillNoticed)
+    }
+    assertTrue(txs().isEmpty())
+  }
+
+  @Test fun cardAndBankOfTheSameGroupGetTheirOwnAccounts() = runBlocking {
+    processor.process(CaptureChannel.SMS, "15447200", null, "", "[Web발신] 신한카드(1234)승인 홍*동 12,000원 일시불 11/25 12:00 스타벅스", clock.nowMillis())
+    clock.advanceMillis(10 * 60_000L)
+    processor.process(CaptureChannel.SMS, "15778000", null, "", "[Web발신]\n신한 11/25 12:10\n110-***-123456\n입금 3,500,000\n잔액 4,200,000\n (주)머니플로우", clock.nowMillis())
+    val byType = txs().associate { it.type to db.accountDao().getById(it.accountId)!!.accountType }
+    assertEquals(com.moneyflow.data.model.AccountType.CREDIT_CARD, byType[com.moneyflow.data.model.TransactionType.EXPENSE])
+    assertEquals(com.moneyflow.data.model.AccountType.BANK, byType[com.moneyflow.data.model.TransactionType.INCOME])
+  }
+
+  @Test fun cardAppLabelIsTheCardCompany() {
+    assertEquals("KB국민카드", com.moneyflow.domain.capture.PaymentMessageParser.providerInName("KB Pay"))
+    assertEquals("신한카드", com.moneyflow.domain.capture.PaymentMessageParser.providerInName("신한 SOL페이"))
+    assertEquals("우리카드", com.moneyflow.domain.capture.PaymentMessageParser.providerInName("우리WON카드"))
+    assertEquals("우리은행", com.moneyflow.domain.capture.PaymentMessageParser.providerInName("우리WON뱅킹"))
+    assertEquals("NH농협카드", com.moneyflow.domain.capture.PaymentMessageParser.providerInName("NH pay"))
+  }
+
+  @Test fun cancellationWithDifferentShopTextCountsOnce() = runBlocking {
+    settings.setDefaultCaptureAccount(bankId)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", "[Web발신] 신한카드(1234)승인 홍*동 39,000원 일시불 11/25 12:00 쿠팡(쿠페이)", clock.nowMillis())
+    clock.advanceMillis(60_000L)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", "[Web발신] 신한카드(1234)승인취소 홍*동 39,000원 11/25 12:01 쿠팡(쿠페이)", clock.nowMillis())
+    processor.process(CaptureChannel.NOTIFICATION, "com.kakao.talk", "카카오톡", "신한카드", "[신한카드 승인취소]\n▶승인금액 : 39,000원\n▶승인일시 : 11/25 12:01\n▶가맹점명 : 쿠팡", clock.nowMillis())
+    // The purchase is gone and no refund was added.
+    assertTrue(txs().toString(), txs().none { it.amount == 39_000L })
+  }
+
+  @Test fun twoCoffeesAtDifferentShopsAreTwoPayments() = runBlocking {
+    settings.setDefaultCaptureAccount(bankId)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", "[Web발신] 신한카드(1234)승인 홍*동 4,500원 일시불 11/25 12:00 메가커피", clock.nowMillis())
+    clock.advanceMillis(60_000L)
+    processor.process(CaptureChannel.SMS, "15447200", null, "", "[Web발신] 신한카드(1234)승인 홍*동 4,500원 일시불 11/25 12:01 빽다방", clock.nowMillis())
+    assertEquals(2, txs().count { it.amount == 4_500L })
+  }
+
   @Test fun bankAppNameGivesTheBank() = runBlocking {
     val outcome = processor.process(
       CaptureChannel.NOTIFICATION, "com.wooribank.smart.npib", "우리WON뱅킹", "우리WON뱅킹 입출금알림",

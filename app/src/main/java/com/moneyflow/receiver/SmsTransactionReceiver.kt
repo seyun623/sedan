@@ -20,7 +20,8 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class SmsTransactionReceiver : BroadcastReceiver() {
 
-  @Inject lateinit var processor: AutoCaptureProcessor
+  /** Built on first use off the main thread (opening the encrypted database touches the Keystore). */
+  @Inject lateinit var processor: dagger.Lazy<AutoCaptureProcessor>
 
   override fun onReceive(context: Context, intent: Intent) {
     if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
@@ -34,7 +35,7 @@ class SmsTransactionReceiver : BroadcastReceiver() {
     val pending = goAsync()
     scope.launch {
       try {
-        processor.process(CaptureChannel.SMS, sender, null, "", body, receivedAt)
+        processor.get().process(CaptureChannel.SMS, sender, null, "", body, receivedAt)
       } catch (_: Exception) {
         // Ignore: a malformed message must never crash the receiver.
       } finally {

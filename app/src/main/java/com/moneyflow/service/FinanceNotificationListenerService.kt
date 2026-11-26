@@ -26,21 +26,32 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class FinanceNotificationListenerService : NotificationListenerService() {
 
-  @Inject lateinit var processor: AutoCaptureProcessor
+  /** Built on first use off the main thread (opening the encrypted database touches the Keystore). */
+  @Inject lateinit var processor: dagger.Lazy<AutoCaptureProcessor>
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val labelCache = HashMap<String, String?>()
   /** Newest message time already handled per notification (chat notifications are re-posted). */
   private val lastSeen = HashMap<String, Long>()
+  /** Text already handled per notification (cards / banks update their notification in place). */
+  private val lastText = HashMap<String, Int>()
 
   override fun onListenerConnected() {
     super.onListenerConnected()
-    status(this).edit().putLong(KEY_CONNECTED_AT, System.currentTimeMillis()).putBoolean(KEY_CONNECTED, true).apply()
+    val prefs = status(this)
+    val disconnectedAt = prefs.getLong(KEY_DISCONNECTED_AT, 0L)
+    prefs.edit().putLong(KEY_CONNECTED_AT, System.currentTimeMillis()).putBoolean(KEY_CONNECTED, true).apply()
+    // Alerts that arrived while the listener was unbound (update, reboot, Samsung sleep) are still
+    // in the shade: read the ones posted since then (at most a few hours back).
+    if (disconnectedAt > 0) {
+      val from = maxOf(disconnectedAt, System.currentTimeMillis() - REPLAY_MAX_MS)
+      runCatching { activeNotifications }.getOrNull()?.filter { it.postTime >= from }?.forEach(::onNotificationPosted)
+    }
   }
 
   override fun onListenerDisconnected() {
     super.onListenerDisconnected()
-    status(this).edit().putBoolean(KEY_CONNECTED, false).apply()
+    status(this).edit().putBoolean(KEY_CONNECTED, false).putLong(KEY_DISCONNECTED_AT, System.currentTimeMillis()).apply()
     // Samsung sometimes leaves the listener unbound (after updates / memory cleanup): ask again.
     runCatching { requestRebind(ComponentName(this, FinanceNotificationListenerService::class.java)) }
   }
@@ -62,9 +73,18 @@ class FinanceNotificationListenerService : NotificationListenerService() {
     // KakaoTalk group chats are never card alerts.
     if (sourcePackage == FinancialApps.KAKAO && NotificationText.isGroupChat(notification)) return
 
-    val since = lastSeen[sbn.key] ?: 0L
+    // First sight of a chat notification (e.g. after the app restarted): only its recent messages,
+    // so old unread card SMS in the same conversation aren't recorded again.
+    val since = lastSeen[sbn.key] ?: (sbn.postTime - FIRST_SIGHT_WINDOW_MS)
     val messages = NotificationText.messages(notification, since)
     if (messages.isEmpty()) return
+    // A notification updated with the same text (no message times to tell): handled already.
+    if (messages.all { it.time <= 0 }) {
+      val hash = messages.joinToString("\n") { it.title + "|" + it.text }.hashCode()
+      if (lastText[sbn.key] == hash) return
+      lastText[sbn.key] = hash
+      if (lastText.size > 200) lastText.keys.take(100).forEach { lastText.remove(it) }
+    }
     messages.maxOfOrNull { it.time }?.takeIf { it > 0 }?.let { lastSeen[sbn.key] = it }
     if (lastSeen.size > 200) lastSeen.keys.take(100).forEach { lastSeen.remove(it) }
 
@@ -72,7 +92,7 @@ class FinanceNotificationListenerService : NotificationListenerService() {
       if (NotificationText.looksHidden(m.text)) continue
       val channel = if (isTest) CaptureChannel.TEST else CaptureChannel.NOTIFICATION
       val time = if (m.time > 0) m.time else sbn.postTime
-      scope.launch { processor.process(channel, sourcePackage, label, m.title, m.text, time) }
+      scope.launch { processor.get().process(channel, sourcePackage, label, m.title, m.text, time) }
     }
   }
 
@@ -91,6 +111,10 @@ class FinanceNotificationListenerService : NotificationListenerService() {
     private const val PREFS = "capture_listener_status"
     private const val KEY_CONNECTED = "connected"
     private const val KEY_CONNECTED_AT = "connected_at"
+    private const val KEY_DISCONNECTED_AT = "disconnected_at"
+    /** Messages this much older than the notification's post are from before (already handled). */
+    private const val FIRST_SIGHT_WINDOW_MS = 5 * 60_000L
+    private const val REPLAY_MAX_MS = 6 * 60 * 60_000L
 
     private fun status(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

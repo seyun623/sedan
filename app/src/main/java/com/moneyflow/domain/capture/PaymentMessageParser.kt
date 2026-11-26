@@ -29,7 +29,9 @@ data class ParsedPayment(
   val paidAt: Long?,
   val foreignAmount: String? = null,
   /** For a card bill paid from a bank account: the card company named in the message ("삼성카드"). */
-  val billCard: String? = null
+  val billCard: String? = null,
+  /** "체크" in the message: the money comes out of the bank account behind the card. */
+  val isCheckCard: Boolean = false
 )
 
 sealed interface ParseResult {
@@ -138,7 +140,8 @@ class PaymentMessageParser(private val zone: ZoneId) {
         cardLast4 = cardLast4,
         installmentMonths = installment,
         paidAt = paidAt,
-        billCard = if (isCardBill) billCard else null
+        billCard = if (isCardBill) billCard else null,
+        isCheckCard = text.contains("체크")
       )
     )
   }
@@ -303,6 +306,15 @@ class PaymentMessageParser(private val zone: ZoneId) {
   }
 
   companion object {
+    /**
+     * The company an app is named after ("KB Pay" → KB국민카드, "우리WON뱅킹" → 우리은행). Only app /
+     * company names count here: the short bank tags of SMS ("KB", "신한") would make card apps banks.
+     */
+    fun providerInName(name: String): String? = PROVIDERS.mapNotNull { (needle, provider) ->
+      val idx = name.indexOf(needle, ignoreCase = true)
+      if (idx >= 0) Triple(idx, -needle.length, provider) else null
+    }.minWithOrNull(compareBy({ it.first }, { it.second }))?.third
+
     /** "12,000원" / "12,000 원" — but not "123 원할머니보쌈" (a number, then a name starting with 원). */
     private val WON_AMOUNT = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:원|\\s원(?![가-힣A-Za-z]))")
     private val ACTION_AMOUNT = Regex("(승인|출금|입금|결제|사용)\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?![0-9]*[/.:])")
@@ -380,6 +392,7 @@ class PaymentMessageParser(private val zone: ZoneId) {
       "카카오페이" to "카카오페이", "네이버페이" to "네이버페이", "토스페이" to "토스페이", "토스" to "토스",
       "삼성페이" to "삼성페이",
       // Bank / card app names (their own notifications often don't repeat the bank's name).
+      "우리WON카드" to "우리카드", "우리WON페이" to "우리카드", "NH pay" to "NH농협카드", "NH페이" to "NH농협카드",
       "우리WON" to "우리은행", "스타뱅킹" to "KB국민은행", "SOL뱅크" to "신한은행", "하나원큐" to "하나은행",
       "NH스마트뱅킹" to "NH농협은행", "NH올원뱅크" to "NH농협은행", "i-ONE" to "IBK기업은행", "페이북" to "BC카드"
     )

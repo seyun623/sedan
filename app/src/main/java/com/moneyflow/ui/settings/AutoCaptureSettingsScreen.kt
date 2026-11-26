@@ -205,7 +205,7 @@ fun AutoCaptureSettingsScreen(
       CaptureLogList(logEntries, onClear = diagnostics::clear)
       val testState by diagnostics.testState.collectAsStateWithLifecycle()
       OutlinedButton(
-        onClick = { diagnostics.runNotificationTest(notificationAccess) },
+        onClick = { diagnostics.runNotificationTest(notificationAccess, settings.notificationCaptureEnabled) },
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("capture_send_test")
       ) { Text("시험 알림 보내기") }
       testState?.let {
