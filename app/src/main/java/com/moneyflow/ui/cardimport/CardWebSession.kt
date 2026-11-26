@@ -184,6 +184,11 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
   private val client = object : WebViewClient() {
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
       val url = request.url.toString()
+      // Some bank pages still link to http:// (blocked on Android): open the https address instead.
+      if (url.startsWith("http://", ignoreCase = true) && request.isForMainFrame) {
+        view.loadUrl("https://" + url.substring(7))
+        return true
+      }
       return when (CardBrowsing.linkAction(url, request.hasGesture())) {
         CardBrowsing.LinkAction.LOAD_IN_PAGE -> false
         CardBrowsing.LinkAction.OPEN_APP -> { openExternal(view.context, url, view); true }

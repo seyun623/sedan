@@ -144,9 +144,9 @@ object CardBrowsing {
   /** Rank of a link text (lower first), or null when it isn't about card usage. */
   fun linkRank(text: String): Int? {
     val t = text.replace(Regex("\\s+"), " ").trim()
-    if (t.isEmpty() || t.length > 30) return null
+    if (t.isEmpty() || t.length > 45) return null
     // Ads, settings and help pages share these words but don't show the user's data.
-    if (Regex("안내|신청|설정|변경|해지|이벤트|혜택\\s*안내|자주|FAQ|문의|약관|해외이용|발급").containsMatchIn(t)) return null
+    if (Regex("안내|신청|설정|변경|해지|이벤트|혜택\\s*안내|자주|FAQ|문의|약관|해외이용|발급|리볼빙|이월|약정|대출|카드론|현금\\s*서비스|비교|추천|[0-9]\\s*종").containsMatchIn(t)) return null
     return LINK_WORDS.firstOrNull { it.first.containsMatchIn(t) }?.second
   }
 
@@ -177,7 +177,18 @@ object CardBrowsing {
     var els=d.querySelectorAll('a,button,[onclick],[role=button],[role=menuitem],[role=tab]');
     for(var i=0;i<els.length && out.length<60;i++){ var e=els[i];
       var t=(e.textContent||'').replace(/\s+/g,' ').trim();
-      if(!t||t.length>30||!re.test(t)) continue;
+      if(!t||t.length>30) continue;
+      if(!re.test(t)){
+        // "개인고객 바로가기" under an "이용내역조회" heading: name the button after its section.
+        if(!/바로\s*가기|조회|보기|확인|go/i.test(t)) continue;
+        var h='', p=e.parentElement;
+        for(var k=0;k<4 && p && !h;k++,p=p.parentElement){
+          var hs=p.querySelectorAll('h1,h2,h3,h4,h5,strong,dt,[class*=tit]');
+          for(var q=0;q<hs.length;q++){ var ht=(hs[q].textContent||'').replace(/\s+/g,' ').trim(); if(ht.length<=20 && re.test(ht)){ h=ht; break; } }
+        }
+        if(!h) continue;
+        t=h+' · '+t;
+      }
       var h=e.getAttribute('href')||'', u='';
       try{ if(h && !/^(javascript:|#)/i.test(h)) u=new URL(h,d.baseURI).href; }catch(x){}
       var id='mf'+(n++); e.setAttribute('data-mf-find',id);

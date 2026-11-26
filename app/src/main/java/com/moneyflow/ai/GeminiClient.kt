@@ -16,10 +16,15 @@ open class AiRequestException(message: String) : IOException(message)
 /** The chosen model doesn't exist (any more) at the provider (HTTP 404). */
 class AiModelNotFoundException(message: String) : AiRequestException(message)
 
+/** The provider is overloaded or briefly failing (HTTP 5xx / 429): worth trying again shortly. */
+class AiBusyException(message: String) : AiRequestException(message)
+
 /** Throws the right exception for an unsuccessful AI response. */
-internal fun aiFailure(code: Int, body: String): AiRequestException =
-  if (code == 404 && !body.contains("policy", ignoreCase = true)) AiModelNotFoundException(GeminiClient.errorMessage(code, body))
-  else AiRequestException(GeminiClient.errorMessage(code, body))
+internal fun aiFailure(code: Int, body: String): AiRequestException = when {
+  code == 404 && !body.contains("policy", ignoreCase = true) -> AiModelNotFoundException(GeminiClient.errorMessage(code, body))
+  code in 500..599 || code == 429 -> AiBusyException(GeminiClient.errorMessage(code, body))
+  else -> AiRequestException(GeminiClient.errorMessage(code, body))
+}
 
 /** Transport so the client can be tested without the network. */
 fun interface HttpTransport {

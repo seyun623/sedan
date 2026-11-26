@@ -127,6 +127,7 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
       CardSites.all.forEach { site ->
         SettingsItem(
           title = site.name,
+          subtitle = site.webLimit,
           icon = Icons.Filled.CreditCard,
           onClick = { onOpenSite(site) },
           modifier = Modifier.testTag("card_site_${site.id}")
@@ -429,7 +430,7 @@ fun CardBrowserScreen(
             }
           }
         }
-        val tip = site.loginTip
+        val tip = listOfNotNull(site.webLimit?.let { "⚠ $it" }, site.loginTip).joinToString("\n").ifEmpty { null }
         val check = pageCheck
         if (tip != null && !tipClosed && code == null && (check == null || check.items == 0) && popups.isEmpty()) {
           Surface(color = CardSurface, shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth().testTag("card_login_tip")) {
@@ -675,9 +676,17 @@ fun CardImportPreviewScreen(
             Text("어느 계좌(카드)에 넣을까요?", fontWeight = FontWeight.Bold, color = Gray900)
             Box {
               OutlinedButton(onClick = { accountMenu = true }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text(s.account?.let { "${it.name} (${it.bankName})" } ?: "계좌를 선택해 주세요", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                  s.account?.let { "${it.name} (${it.bankName})" }
+                    ?: s.newAccountName?.takeIf { s.createNew }?.let { "＋ 새 카드 계좌 '$it' 만들기" }
+                    ?: "계좌를 선택해 주세요",
+                  maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
               }
               DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+                s.newAccountName?.let { name ->
+                  DropdownMenuItem(text = { Text("＋ 새 카드 계좌 '$name' 만들기", color = TossBlue) }, onClick = { accountMenu = false; viewModel.chooseNewAccount() })
+                }
                 s.accounts.forEach { a ->
                   DropdownMenuItem(text = { Text("${a.name} · ${a.accountType.displayName}") }, onClick = { accountMenu = false; viewModel.selectAccount(a) })
                 }

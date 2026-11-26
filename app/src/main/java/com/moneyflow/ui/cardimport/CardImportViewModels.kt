@@ -92,7 +92,7 @@ class CardBrowserViewModel @Inject constructor(
   init {
     viewModelScope.launch { _aiLabel.value = if (ai.isReady()) ai.providerLabel() else null }
     viewModelScope.launch {
-      val d = settings.current().cardDesktopModes[site.id] ?: site.desktopDefault
+      val d = !site.pcBlocked && (settings.current().cardDesktopModes[site.id] ?: site.desktopDefault)
       web.prepare(d)
       _desktop.value = d
     }
@@ -117,6 +117,10 @@ class CardBrowserViewModel @Inject constructor(
 
   /** Switches the site between its PC and phone pages (remembered for this card company). */
   fun setDesktop(on: Boolean) = viewModelScope.launch {
+    if (on && site.pcBlocked) {
+      _events.send(BrowserEvent.Info("${site.name} PC 화면은 보안프로그램(키보드 보안 등)이 없으면 로그인할 수 없어 휴대폰 화면만 써요."))
+      return@launch
+    }
     settings.setCardDesktopMode(site.id, on)
     _desktop.value = on
     web.setDesktop(on, if (on) site.pcUrl else site.url)
@@ -249,10 +253,18 @@ class CardBrowserViewModel @Inject constructor(
     if (_busy.value || pages.isEmpty()) return@launch
     _busy.value = true
     try {
+      var aiFailed: String? = null
       val readings = pages.map { (_, text) ->
-        if (useAi) aiReader.read(text, clock.today())
-        else withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(text) }
+        val local = suspend { withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(text) } }
+        if (!useAi) local()
+        else try {
+          aiReader.read(text, clock.today())
+        } catch (e: com.moneyflow.ai.AiRequestException) {
+          aiFailed = e.message
+          local()
+        }
       }
+      aiFailed?.let { _events.send(BrowserEvent.Info("AI가 응답하지 않은 화면은 기기에서 읽었어요. ($it)")) }
       val readBy = if (useAi) readings.first().readBy else StatementTextParser.READ_LOCAL
       val merged = com.moneyflow.domain.cardimport.SavedPages.merge(readings, readBy)
       val empty = pages.indices.filter { readings[it].isEmpty }.map { pages[it].first.title }
@@ -275,8 +287,16 @@ class CardBrowserViewModel @Inject constructor(
     _busy.value = true
     try {
       val result: StatementExtraction = if (useAi) {
-        aiReader.read(screenText, clock.today()).let { r ->
-          if (r.bill != null) r else r.copy(bill = com.moneyflow.domain.card.BillText.find(screenText, clock.today()))
+        try {
+          aiReader.read(screenText, clock.today()).let { r ->
+            if (r.bill != null) r else r.copy(bill = com.moneyflow.domain.card.BillText.find(screenText, clock.today()))
+          }
+        } catch (e: com.moneyflow.ai.AiRequestException) {
+          // The AI didn't answer: what the device can read is better than nothing.
+          val local = withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(screenText) }
+          if (local.isEmpty) throw e
+          _events.send(BrowserEvent.Info("AI가 응답하지 않아 기기에서 읽었어요. (${e.message})"))
+          local
         }
       } else {
         withContext(Dispatchers.Default) { StatementTextParser(clock.today()).parse(screenText) }
@@ -312,9 +332,13 @@ data class PreviewState(
   val splitInstallments: Boolean = false,
   /** Indexes of extraction.benefits to add. */
   val selectedBenefits: Set<Int> = emptySet(),
-  val busy: Boolean = false
+  val busy: Boolean = false,
+  /** "삼성카드": the card company has no account yet; one can be made on import. */
+  val newAccountName: String? = null,
+  /** Import into a new account named [newAccountName] (made when importing). */
+  val createNew: Boolean = false
 ) {
-  val canImport: Boolean get() = !busy && account != null &&
+  val canImport: Boolean get() = !busy && (account != null || createNew) &&
     (selected.isNotEmpty() || selectedBenefits.isNotEmpty() || (savePerformance && extraction?.performance?.isNotEmpty() == true) ||
       (saveBill && extraction?.bill != null))
 }
@@ -338,20 +362,39 @@ class CardImportPreviewViewModel @Inject constructor(
     viewModelScope.launch {
       val (site, extraction) = session.current.value ?: return@launch
       val accounts = ledger.accounts.first()
-      val account = repo.suggestAccount(site.provider, accounts)
+      val named = repo.namedAccount(site.provider, accounts)
+      // A card company without its own account: offer to make it rather than filling another card.
+      val newName = site.provider.takeIf { named == null && it.endsWith("카드") }
+      val account = if (newName != null) null else repo.suggestAccount(site.provider, accounts)
       _state.value = PreviewState(
         site, extraction, accounts, account,
         splitInstallments = settings.current().splitInstallments,
-        selectedBenefits = extraction.benefits.indices.toSet()
+        selectedBenefits = extraction.benefits.indices.toSet(),
+        newAccountName = newName,
+        createNew = newName != null
       )
-      account?.let { selectAccount(it) }
+      if (account != null) selectAccount(account) else if (newName != null) chooseNewAccount()
     }
+  }
+
+  /** Import into a new card account named after the card company. */
+  fun chooseNewAccount() = viewModelScope.launch {
+    val extraction = _state.value.extraction ?: return@launch
+    // Nothing is recorded on a new account yet: no duplicates to look for.
+    val rows = repo.review(extraction.items, -1L)
+    _state.value = _state.value.copy(
+      account = null,
+      createNew = true,
+      rows = rows,
+      selected = rows.indices.filter { rows[it].selectedByDefault }.toSet()
+    )
   }
 
   fun selectAccount(account: AccountEntity) = viewModelScope.launch {
     val extraction = _state.value.extraction ?: return@launch
     val rows = repo.review(extraction.items, account.id)
     _state.value = _state.value.copy(
+      createNew = false,
       account = account,
       rows = rows,
       selected = rows.indices.filter { rows[it].selectedByDefault }.toSet()
@@ -379,8 +422,10 @@ class CardImportPreviewViewModel @Inject constructor(
 
   fun import() = viewModelScope.launch {
     val s = _state.value
-    val account = s.account ?: return@launch
     _state.value = s.copy(busy = true)
+    val account = s.account ?: s.newAccountName?.takeIf { s.createNew }?.let { repo.createCardAccount(it) } ?: run {
+      _state.value = _state.value.copy(busy = false); return@launch
+    }
     val result = repo.import(s.rows.filterIndexed { i, _ -> i in s.selected }, account, s.splitInstallments)
     if (s.savePerformance) s.extraction?.performance?.firstOrNull()?.let { repo.savePerformance(account.id, it) }
     val bill = s.extraction?.bill?.takeIf { s.saveBill }

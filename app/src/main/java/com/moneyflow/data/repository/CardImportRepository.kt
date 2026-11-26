@@ -44,6 +44,21 @@ class CardImportRepository @Inject constructor(
 ) {
   private val rules = PaymentMessageParser(clock.zone)
 
+  /** An account named after the card company / bank (null when there is none). */
+  fun namedAccount(provider: String, accounts: List<AccountEntity>): AccountEntity? {
+    val core = provider.removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크")
+    if (core.length < 2) return null
+    val isBank = provider.endsWith("은행") || provider.endsWith("뱅크")
+    val named = accounts.filter { it.bankName.contains(core) || it.name.contains(core) }
+    return named.firstOrNull { (it.accountType == AccountType.CREDIT_CARD) != isBank } ?: named.firstOrNull()
+  }
+
+  /** Makes the card account for a card company that has none yet ("삼성카드"). */
+  suspend fun createCardAccount(provider: String): AccountEntity {
+    val fresh = AccountEntity(name = provider, bankName = provider, accountType = AccountType.CREDIT_CARD, balance = 0, isDebt = true)
+    return fresh.copy(id = db.accountDao().insert(fresh))
+  }
+
   /** Card accounts first, preferring one whose name matches the card company. */
   fun suggestAccount(provider: String, accounts: List<AccountEntity>): AccountEntity? {
     val core = provider.removeSuffix("카드").removeSuffix("은행").removeSuffix("뱅크")

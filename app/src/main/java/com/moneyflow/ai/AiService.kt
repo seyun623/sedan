@@ -35,7 +35,7 @@ class AiService @Inject constructor(
       )
     }
     return try {
-      call(s.aiModel)
+      withBusyRetry { call(s.aiModel) }
     } catch (e: AiModelNotFoundException) {
       // Providers retire models (and free model lists change): switch to an available one and retry once.
       val available = runCatching { listModels(s.aiProvider, key, s.aiCustomBaseUrl) }.getOrDefault(emptyList())
@@ -53,16 +53,31 @@ class AiService @Inject constructor(
     if (!s.isAiReady) throw AiNotConfiguredException()
     if (s.aiProvider != AiProvider.GEMINI) return null
     val key = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
-    return gemini.generateGrounded(key, s.aiModel, prompt)
+    return withBusyRetry { gemini.generateGrounded(key, s.aiModel, prompt) }
   }
 
   /** Whether [searchWeb] can be used with the chosen provider. */
   suspend fun canSearchWeb(): Boolean = settings.current().let { it.isAiReady && it.aiProvider == AiProvider.GEMINI }
+
+  /** Free AI tiers are often briefly overloaded (503) or rate limited (429): wait and try again twice. */
+  private suspend fun <T> withBusyRetry(block: suspend () -> T): T {
+    var lastError: AiBusyException? = null
+    for (wait in BUSY_WAITS_MS) {
+      if (wait > 0) kotlinx.coroutines.delay(wait)
+      try { return block() } catch (e: AiBusyException) { lastError = e }
+    }
+    throw lastError!!
+  }
 
   /** Lists models for a key (also verifies the key). */
   suspend fun listModels(provider: AiProvider, apiKey: String, customBaseUrl: String): List<String> = when (provider) {
     AiProvider.GEMINI -> gemini.listModels(apiKey)
     AiProvider.CUSTOM -> compat.listModels(customBaseUrl, apiKey)
     else -> compat.listModels(provider.defaultBaseUrl!!, apiKey)
+  }
+
+  companion object {
+    /** Before each try: now, after 2 s, after 6 s. */
+    internal var BUSY_WAITS_MS = listOf(0L, 2_000L, 6_000L)
   }
 }

@@ -62,7 +62,10 @@ class V214CardBrowsingTest {
 
   @Test fun loginAdviceFollowsTheSiteCheck() {
     // PC page by default where it logs in more easily (app code / 간편인증); 우리·KB stay on the phone page.
-    assertEquals(setOf("hyundai", "lotte", "hana"), CardSites.all.filter { it.desktopDefault }.map { it.id }.toSet())
+    assertEquals(setOf("hyundai", "lotte"), CardSites.all.filter { it.desktopDefault }.map { it.id }.toSet())
+    // 2.15.2 (checked on a phone): these PC pages need Windows security programs.
+    assertEquals(setOf("kb", "woori", "nh"), CardSites.all.filter { it.pcBlocked }.map { it.id }.toSet())
+    assertTrue(CardSites.all.none { it.pcBlocked && it.desktopDefault })
     assertTrue(CardSites.byId("woori")!!.loginTip!!.contains("보안프로그램"))
     assertTrue(CardSites.all.filter { it.loginTip != null }.all { it.appNames.isNotEmpty() })
   }
