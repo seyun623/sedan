@@ -72,8 +72,16 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.20.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.21.0. */
   val all = listOf(
+    FeatureCheck(
+      "family_more", "가족 정산 기록·가족 예산 알림", "2.21",
+      listOf(
+        "설정 → 가족 합산 → 가족 정산의 '보냈어요'를 눌러 ✅가 붙는지 봐 주세요.",
+        "가족 합산 화면에서 가족 예산을 정하고 예산 알림을 켜 두면, 가족 전체 지출이 80%를 넘을 때 알림이 오는지 봐 주세요."
+      ),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
     FeatureCheck(
       "card_points", "포인트 모아보기", "2.20",
       listOf("카드사 가져오기 → 카드사 로그인 → 포인트 조회 화면에서 '이 화면 가져오기' → 미리보기의 포인트를 저장 → 자산 탭 '포인트 모아보기'에 나오는지 봐 주세요."),

@@ -54,6 +54,21 @@ object BudgetReminders {
   }
 
   /** Keys to mark as sent together with [r] (a 100% alert also covers 80%). */
+  /** 가족 공동 예산 (2.21): everyone's spending against the family budget, 80% and 100%. */
+  fun family(month: YearMonth, familyBudget: Long, spent: Long, sent: Set<String>): Reminder? {
+    if (familyBudget <= 0) return null
+    val level = LEVELS.firstOrNull { spent * 100 >= familyBudget * it } ?: return null
+    val key = "family|$month|$level"
+    if (key in sent) return null
+    val label = "${month.monthValue}월"
+    return Reminder(
+      key, ReminderChannel.BUDGET,
+      if (level >= 100) "$label 가족 예산을 넘었어요" else "$label 가족 예산의 ${level}%를 썼어요",
+      if (level >= 100) "가족 예산 ${Formatters.formatCurrency(familyBudget)}보다 ${Formatters.formatCurrency(spent - familyBudget)} 더 썼어요."
+      else "가족 합계 ${Formatters.formatCurrency(spent)} / ${Formatters.formatCurrency(familyBudget)} · ${Formatters.formatCurrency(familyBudget - spent)} 남았어요."
+    )
+  }
+
   fun alsoCovers(r: Reminder): List<String> =
     if (r.key.endsWith("|100") && r.key.count { it == '|' } == 2) listOf(r.key.removeSuffix("|100") + "|80") else emptyList()
 
@@ -105,7 +120,9 @@ object WeeklyReport {
     earlierWeeks: List<Long>,
     topCategory: Pair<String, Long>?,
     biggest: Pair<String, Long>?,
-    sent: Set<String>
+    sent: Set<String>,
+    /** Everyone's spending last week, when family records are combined (2.21). */
+    familyWeek: Long? = null
   ): Reminder? {
     if (today.dayOfWeek.value > 3) return null
     val start = lastWeekStart(today)
@@ -127,6 +144,7 @@ object WeeklyReport {
       if (average != null) add("최근 4주 평균 ${Formatters.formatCurrency(average)}")
       topCategory?.takeIf { it.second > 0 }?.let { add("가장 많이 쓴 곳: ${it.first} ${Formatters.formatCurrency(it.second)}") }
       biggest?.takeIf { it.second > 0 }?.let { add("가장 큰 지출: ${it.first} ${Formatters.formatCurrency(it.second)}") }
+      familyWeek?.takeIf { it > 0 }?.let { add("가족 전체 ${Formatters.formatCurrency(it)}") }
     }.joinToString("\n")
     return Reminder(key, ReminderChannel.BUDGET, "주간 소비 리포트 (${start.monthValue}.${start.dayOfMonth}~${end.monthValue}.${end.dayOfMonth})", text)
   }

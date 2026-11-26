@@ -97,6 +97,8 @@ data class AppSettings(
   val driveTestFileName: String? = null,
   /** Family monthly budget for the combined view (0 = not set). */
   val familyBudget: Long = 0L,
+  /** 가족 정산 transfers marked "보냈어요" (FamilySettlement.doneKey). */
+  val settledTransfers: Set<String> = emptySet(),
   /** 총급여 (세전 연봉) for the 연말정산 카드 소득공제 미리보기; 0 = not entered. */
   val annualSalary: Long = 0L,
   /** 2.18: last month's leftover (or overspending) is added to this month's budget. */
@@ -192,6 +194,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val BUDGET_ALERTS = booleanPreferencesKey("budget_alerts")
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
     val WEEKLY_REPORT = booleanPreferencesKey("weekly_report")
+    val SETTLED_TRANSFERS = androidx.datastore.preferences.core.stringSetPreferencesKey("settled_transfers")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
     val INSTALL_ID = stringPreferencesKey("install_id")
@@ -287,6 +290,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       }.toMap(),
       dismissedRecurringSuggestions = p[Keys.RECURRING_DISMISSED] ?: emptySet(),
       familyBudget = p[Keys.FAMILY_BUDGET] ?: 0L,
+      settledTransfers = p[Keys.SETTLED_TRANSFERS].orEmpty(),
       annualSalary = p[Keys.ANNUAL_SALARY] ?: 0L,
       budgetCarryOver = p[Keys.BUDGET_CARRY_OVER] ?: false,
       driveKeyEncrypted = p[Keys.DRIVE_KEY],
@@ -604,6 +608,12 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setBillReminders(enabled: Boolean) = store.edit { it[Keys.BILL_REMINDERS] = enabled }
   suspend fun setBudgetAlerts(enabled: Boolean) = store.edit { it[Keys.BUDGET_ALERTS] = enabled }
   suspend fun setMonthlySummary(enabled: Boolean) = store.edit { it[Keys.MONTHLY_SUMMARY] = enabled }
+  suspend fun setTransferSettled(key: String, done: Boolean) = store.edit {
+    val now = it[Keys.SETTLED_TRANSFERS].orEmpty()
+    // Keep only the newest 200 marks (keys start with the month).
+    val recent = now.sorted().takeLast(200).toSet()
+    it[Keys.SETTLED_TRANSFERS] = if (done) recent + key else recent - key
+  }
   suspend fun setWeeklyReport(enabled: Boolean) = store.edit { it[Keys.WEEKLY_REPORT] = enabled }
   suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
 

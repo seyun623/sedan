@@ -51,6 +51,13 @@ class ReminderChecker @Inject constructor(
         budgetTxs.groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.spending }.coerceAtLeast(0) }, sent
       )
     }
+    val hasFamily = runCatching { db.familyDao().memberCount() > 0 }.getOrDefault(false)
+    if (s.budgetAlertsEnabled && hasFamily && s.familyBudget > 0) {
+      val family = db.familyDao().getBetween(MonthKeys.startMillis(month, zone), MonthKeys.endMillis(month, zone))
+      val mine = dao.getBetween(MonthKeys.startMillis(month, zone), MonthKeys.endMillis(month, zone))
+      val spent = (stats.budgetExpense(mine) + family.filter { !it.isExcludedFromBudget }.sumOf { it.spending }).coerceAtLeast(0)
+      BudgetReminders.family(month, s.familyBudget, spent, sent)?.let { out += it }
+    }
     if (s.monthlySummaryEnabled) {
       val last = month.minusMonths(1)
       val txs = dao.getBetween(MonthKeys.startMillis(last, zone), MonthKeys.endMillis(last, zone))
@@ -75,7 +82,11 @@ class ReminderChecker @Inject constructor(
       val spending = last.filter { it.type.isSpending }
       val top = stats.categoryBreakdown(last).firstOrNull()?.let { it.category to it.amount }
       val biggest = spending.filter { it.type == com.moneyflow.data.model.TransactionType.EXPENSE }.maxByOrNull { it.amount }?.let { it.memo.ifBlank { it.category }.take(20) to it.amount }
-      com.moneyflow.domain.alerts.WeeklyReport.due(today, stats.budgetExpense(spending), earlier, top, biggest, sent)?.let { out += it }
+      val familyWeek = if (!hasFamily) null else runCatching {
+        db.familyDao().getBetween(MonthKeys.dayStartMillis(start, zone), MonthKeys.dayStartMillis(start.plusDays(7), zone) - 1)
+          .filter { !it.isExcludedFromBudget }.sumOf { it.spending }
+      }.getOrNull()?.let { it + stats.budgetExpense(spending) }
+      com.moneyflow.domain.alerts.WeeklyReport.due(today, stats.budgetExpense(spending), earlier, top, biggest, sent, familyWeek)?.let { out += it }
     }
     if (s.billRemindersEnabled) {
       out += com.moneyflow.domain.alerts.BillReminders.due(today, db.accountDao().getAll(), db.recurringTransactionDao().getActive(), sent, s.cardBills)

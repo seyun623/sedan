@@ -24,6 +24,9 @@ object FamilySettlement {
   val SHARED_TAGS = setOf("공동", "같이", "더치", "공동경비")
   const val DEFAULT_TAG = "공동"
 
+  /** Saved when a transfer is marked "보냈어요"; a changed amount needs marking again. */
+  fun doneKey(month: java.time.YearMonth, t: SettleTransfer) = "$month|${t.from}|${t.to}|${t.amount}"
+
   fun isShared(memo: String): Boolean = Tags.extract(memo).any { it in SHARED_TAGS }
 
   fun settle(paid: List<Pair<String, Long>>): Settlement {

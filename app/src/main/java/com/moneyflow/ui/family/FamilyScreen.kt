@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -116,6 +117,9 @@ class FamilyViewModel @Inject constructor(
   private val _errors = Channel<String>(Channel.BUFFERED)
   val errors = _errors.receiveAsFlow()
 
+  private val settingsRepository = settingsRepo
+  fun setSettled(key: String, done: Boolean) = viewModelScope.launch { settingsRepository.setTransferSettled(key, done) }
+
   fun moveMonth(delta: Long) { _month.value = _month.value.plusMonths(delta) }
 
   fun import(uri: Uri, password: String, name: String) = viewModelScope.launch {
@@ -175,7 +179,12 @@ fun FamilyScreen(onBack: () -> Unit, onOpenDrive: () -> Unit = {}, viewModel: Fa
     )
     summary?.let { s -> FamilySummary(s, onEditBudget = { editBudget = true }) }
 
-    if (members.isNotEmpty()) summary?.let { s -> FamilySettleSection(Formatters.formatMonth(month), s.sharedPaid) }
+    if (members.isNotEmpty()) summary?.let { s ->
+      FamilySettleSection(
+        month, s.sharedPaid, appSettings?.settledTransfers.orEmpty(),
+        onDone = { key, done -> viewModel.setSettled(key, done) }
+      )
+    }
 
     if (members.isNotEmpty()) SettingsSection("함께 모으는 목표") {
       if (sharedGoals.isEmpty()) {
@@ -408,7 +417,8 @@ private fun SharedGoalRow(g: com.moneyflow.data.repository.SharedGoal) {
 
 /** 가족 정산: spending tagged #공동 split equally, with who sends whom how much. */
 @Composable
-private fun FamilySettleSection(monthLabel: String, sharedPaid: List<Pair<String, Long>>) {
+private fun FamilySettleSection(month: YearMonth, sharedPaid: List<Pair<String, Long>>, settled: Set<String>, onDone: (String, Boolean) -> Unit) {
+  val monthLabel = Formatters.formatMonth(month)
   val settlement = remember(sharedPaid) { com.moneyflow.domain.family.FamilySettlement.settle(sharedPaid) }
   val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
   var copied by remember { mutableStateOf(false) }
@@ -431,11 +441,25 @@ private fun FamilySettleSection(monthLabel: String, sharedPaid: List<Pair<String
       if (settlement.transfers.isEmpty()) {
         Text("주고받을 돈이 없어요.", color = AccentGreen, modifier = Modifier.padding(top = 6.dp))
       }
-      settlement.transfers.forEach { t ->
-        Text(
-          "${t.from} → ${t.to}  ${Formatters.formatCurrency(t.amount)}",
-          fontWeight = FontWeight.Bold, color = TossBlue, modifier = Modifier.padding(top = 6.dp)
-        )
+      settlement.transfers.forEachIndexed { i, t ->
+        val key = com.moneyflow.domain.family.FamilySettlement.doneKey(month, t)
+        val done = key in settled
+        Row(
+          verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            .toggleable(value = done, role = androidx.compose.ui.semantics.Role.Checkbox) { onDone(key, it) }
+            .testTag("family_settle_done_$i")
+        ) {
+          Text(
+            (if (done) "✅ " else "") + "${t.from} → ${t.to}  ${Formatters.formatCurrency(t.amount)}",
+            fontWeight = FontWeight.Bold, color = if (done) Gray600 else TossBlue, modifier = Modifier.weight(1f)
+          )
+          androidx.compose.material3.Checkbox(checked = done, onCheckedChange = null)
+          Text("보냈어요", style = MaterialTheme.typography.labelSmall, color = Gray600)
+        }
+      }
+      if (settlement.transfers.isNotEmpty() && settlement.transfers.all { com.moneyflow.domain.family.FamilySettlement.doneKey(month, it) in settled }) {
+        Text("이번 달 정산을 마쳤어요.", color = AccentGreen, modifier = Modifier.padding(top = 4.dp))
       }
       androidx.compose.material3.TextButton(
         onClick = {

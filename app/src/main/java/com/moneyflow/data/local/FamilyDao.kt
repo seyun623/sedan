@@ -18,6 +18,9 @@ interface FamilyDao {
 
   @Query("SELECT * FROM family_transactions WHERE timestamp BETWEEN :start AND :end")
   fun observeBetween(start: Long, end: Long): Flow<List<FamilyTransactionEntity>>
+  @Query("SELECT * FROM family_transactions WHERE timestamp BETWEEN :start AND :end")
+  suspend fun getBetween(start: Long, end: Long): List<FamilyTransactionEntity>
+  @Query("SELECT COUNT(*) FROM family_members") suspend fun memberCount(): Int
   @Query("SELECT COUNT(*) FROM family_transactions WHERE memberId = :memberId") suspend fun count(memberId: Long): Int
   @Query("DELETE FROM family_transactions WHERE memberId = :memberId") suspend fun clearTransactions(memberId: Long)
   @Insert suspend fun insertTransactions(items: List<FamilyTransactionEntity>)
