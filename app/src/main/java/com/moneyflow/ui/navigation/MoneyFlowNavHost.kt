@@ -179,7 +179,14 @@ fun MoneyFlowNavHost(
           onBack = if (simpleMode) ({ navController.popBackStack() }) else null
         )
       }
-      composable(Routes.ANALYTICS) { AnalyticsScreen(onOpenTransaction = { openTransaction(it) }, onOpenYearly = { navController.navigate(Routes.YEARLY) }) }
+      composable(Routes.ANALYTICS) {
+        AnalyticsScreen(
+          onOpenTransaction = { openTransaction(it) },
+          onOpenYearly = { navController.navigate(Routes.YEARLY) },
+          onOpenTax = { navController.navigate(Routes.TAX_PREVIEW) }
+        )
+      }
+      composable(Routes.TAX_PREVIEW) { com.moneyflow.ui.analytics.TaxPreviewScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.YEARLY) { com.moneyflow.ui.analytics.YearlyReportScreen(onBack = { navController.popBackStack() }) }
       composable(Routes.BUDGET) { BudgetScreen(onOpenTransaction = { openTransaction(it) }) }
       composable(

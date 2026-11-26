@@ -79,6 +79,7 @@ import kotlin.math.abs
 fun AnalyticsScreen(
   onOpenTransaction: (Long) -> Unit,
   onOpenYearly: () -> Unit = {},
+  onOpenTax: () -> Unit = {},
   viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -88,7 +89,8 @@ fun AnalyticsScreen(
     onNextMonth = viewModel::nextMonth,
     onCurrentMonth = viewModel::goToCurrentMonth,
     onOpenTransaction = onOpenTransaction,
-    onOpenYearly = onOpenYearly
+    onOpenYearly = onOpenYearly,
+    onOpenTax = onOpenTax
   )
 }
 
@@ -99,7 +101,8 @@ private fun AnalyticsContent(
   onNextMonth: () -> Unit,
   onCurrentMonth: () -> Unit,
   onOpenTransaction: (Long) -> Unit,
-  onOpenYearly: () -> Unit = {}
+  onOpenYearly: () -> Unit = {},
+  onOpenTax: () -> Unit = {}
 ) {
   val monthKey = state.month.toString()
   var selectedCategory by rememberSaveable(monthKey) { mutableStateOf<String?>(null) }
@@ -299,6 +302,11 @@ private fun AnalyticsContent(
     item(key = "yearly") {
       SectionCard(modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(role = Role.Button, onClick = onOpenYearly).testTag("open_yearly_report")) {
         SectionTitle("${state.month.year}년 결산 보기 →", "1년 동안 번 돈·쓴 돈, 가장 많이 쓴 곳을 한눈에 보고 이미지로 공유해요")
+      }
+    }
+    item(key = "tax") {
+      SectionCard(modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(role = Role.Button, onClick = onOpenTax).testTag("open_tax_preview")) {
+        SectionTitle("연말정산 카드 소득공제 미리보기 →", "올해 신용·체크카드, 전통시장·대중교통 사용액으로 공제 예상액과 어떤 결제가 유리한지 알려 줘요")
       }
     }
   }

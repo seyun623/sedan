@@ -570,6 +570,8 @@ object FinancialApps {
     packageName in BLOCKED -> Gate.BLOCKED
     packageName in extraPackages -> Gate.ALLOWED
     appLabel != null && Vouchers.LABEL.containsMatchIn(appLabel) -> Gate.ALLOWED
+    // Transit card apps (모바일티머니, 캐시비, 레일플러스): their top-up / payment alerts.
+    appLabel != null && TRANSIT_LABEL.containsMatchIn(appLabel) -> Gate.ALLOWED
     packageName in KNOWN || (appLabel != null && FINANCIAL_LABEL.containsMatchIn(appLabel)) -> Gate.ALLOWED
     else -> Gate.BLOCKED
   }
@@ -593,6 +595,8 @@ object FinancialApps {
     "com.kakaopay.app", "com.nhn.android.search", "com.naverfin.payapp", "com.samsung.android.spay",
     "com.bccard.android.mobile", "com.citibank.cardapp", "com.scbank.ma30", "com.epost.psf.sdsi", "com.knb.psb", "com.dgb.mobilebank"
   )
+
+  private val TRANSIT_LABEL = Regex("티머니|캐시비|레일플러스|T-money|Tmoney|cashbee", RegexOption.IGNORE_CASE)
 
   private val FINANCIAL_LABEL = Regex("카드|은행|뱅크|뱅킹|페이|증권|Card|Bank|Pay", RegexOption.IGNORE_CASE)
 

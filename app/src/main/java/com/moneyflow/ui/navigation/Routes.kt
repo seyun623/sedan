@@ -29,6 +29,7 @@ object Routes {
   const val DRIVE = "settings/drive"
   const val CLEANUP = "settings/cleanup"
   const val YEARLY = "analytics/yearly"
+  const val TAX_PREVIEW = "analytics/tax"
   const val REPORT = "settings/report"
   const val FEATURE_CHECK = "settings/feature-check"
   const val CARD_IMPORT = "card-import"

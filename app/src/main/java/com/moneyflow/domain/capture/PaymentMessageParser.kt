@@ -418,6 +418,8 @@ class PaymentMessageParser(private val zone: ZoneId) {
         "면세점", "유니클로", "스마트스토어", "쇼핑", "인터파크"
       ),
       "교통" to listOf(
+        // Transit cards and the card's monthly 후불교통 charge (2.17).
+        "후불교통", "교통카드", "캐시비", "이비카드", "레일플러스", "기후동행", "K-패스", "K패스", "알뜰교통", "따릉이", "공항철도",
         "카카오T", "택시", "코레일", "SRT", "티머니", "지하철", "버스", "하이패스", "주유소", "GS칼텍스",
         "SK에너지", "S-OIL", "오일뱅크", "쏘카", "그린카", "주차"
       ),
