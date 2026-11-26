@@ -24,7 +24,9 @@ data class CardSite(
   /** What the website can't do (checked on a real phone); shown in the card company list. */
   val webLimit: String? = null,
   /** A shopping site: its order list gives product names for card payments (2.16). */
-  val shop: Boolean = false
+  val shop: Boolean = false,
+  /** Settings key for remembered pages / PC mode: BC member cards share BC카드's (2.17.2). */
+  val settingsId: String = id
 )
 
 object CardSites {
@@ -134,5 +136,23 @@ object CardSites {
     CardSite("kurly", "컬리", "https://www.kurly.com/mypage/order", "컬리", shop = true, loginTip = "로그인한 뒤 주문 내역 화면에서 '이 화면 가져오기'를 누르세요")
   )
 
-  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id } ?: shops.firstOrNull { it.id == id } ?: cardGorilla.takeIf { it.id == id }
+  /**
+   * 우리·NH농협·IBK기업 cards with the BC mark are BC카드 member cards: their usage shows on BC카드's
+   * website (their own websites don't show it). Opens BC카드 and saves into that card's account.
+   */
+  val bcMembers: List<CardSite> by lazy {
+    val bc = all.first { it.id == "bc" }
+    listOf("woori" to "우리카드", "nh" to "NH농협카드", "ibk" to "IBK기업카드").map { (id, provider) ->
+      val own = all.first { it.id == id }
+      bc.copy(
+        id = "bc_$id",
+        name = "${own.name} (BC카드로 가져오기)",
+        provider = provider,
+        settingsId = "bc",
+        loginTip = "카드 앞면에 BC 마크가 있는 ${provider}는 BC카드에서 이용내역을 볼 수 있어요. 페이북 코드나 BC카드 아이디로 로그인 → 카드 승인내역 → '이 화면 가져오기'. 읽은 내역은 '$provider' 계좌에 기록돼요"
+      )
+    }
+  }
+
+  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id } ?: bcMembers.firstOrNull { it.id == id } ?: shops.firstOrNull { it.id == id } ?: cardGorilla.takeIf { it.id == id }
 }

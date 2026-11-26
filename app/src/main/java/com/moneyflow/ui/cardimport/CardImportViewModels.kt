@@ -99,7 +99,7 @@ class CardBrowserViewModel @Inject constructor(
   init {
     viewModelScope.launch { _aiLabel.value = if (ai.isReady()) ai.providerLabel() else null }
     viewModelScope.launch {
-      val d = !site.pcBlocked && (settings.current().cardDesktopModes[site.id] ?: site.desktopDefault)
+      val d = !site.pcBlocked && (settings.current().cardDesktopModes[site.settingsId] ?: site.desktopDefault)
       web.prepare(d)
       _desktop.value = d
     }
@@ -131,7 +131,7 @@ class CardBrowserViewModel @Inject constructor(
       _events.send(BrowserEvent.Info("${site.name} PC 화면은 보안프로그램(키보드 보안 등)이 없으면 로그인할 수 없어 휴대폰 화면만 써요."))
       return@launch
     }
-    settings.setCardDesktopMode(site.id, on)
+    settings.setCardDesktopMode(site.settingsId, on)
     _desktop.value = on
     web.setDesktop(on, if (on) site.pcUrl else site.url)
   }
@@ -290,23 +290,23 @@ class CardBrowserViewModel @Inject constructor(
 
   /** Pages of this card company read automatically after login ("이 화면 기억하기"). */
   val savedPages: StateFlow<List<com.moneyflow.domain.cardimport.SavedPage>> = settings.settings
-    .map { it.cardSavedPages[site.id].orEmpty() }
+    .map { it.cardSavedPages[site.settingsId].orEmpty() }
     .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
   /** Remembers the page now shown; returns why it can't, or null when saved. */
   fun savePage(url: String?, title: String) = viewModelScope.launch {
-    val current = settings.current().cardSavedPages[site.id].orEmpty()
+    val current = settings.current().cardSavedPages[site.settingsId].orEmpty()
     val problem = com.moneyflow.domain.cardimport.SavedPages.problem(url, site.url, current)
     if (problem != null) { _events.send(BrowserEvent.Error(problem)); return@launch }
     val page = com.moneyflow.domain.cardimport.SavedPage(
       com.moneyflow.domain.cardimport.SavedPages.sanitize(url!!), title.ifBlank { "화면 ${current.size + 1}" }.take(40), clock.nowMillis()
     )
-    settings.setCardSavedPages(site.id, current + page)
+    settings.setCardSavedPages(site.settingsId, current + page)
     _events.send(BrowserEvent.Info("'${page.title}' 화면을 기억했어요. 다음부터 로그인한 뒤 '기억한 화면 읽기'를 누르면 자동으로 읽어요."))
   }
 
   fun removePage(page: com.moneyflow.domain.cardimport.SavedPage) = viewModelScope.launch {
-    settings.setCardSavedPages(site.id, settings.current().cardSavedPages[site.id].orEmpty().filter { it.url != page.url })
+    settings.setCardSavedPages(site.settingsId, settings.current().cardSavedPages[site.settingsId].orEmpty().filter { it.url != page.url })
   }
 
   /** Reads the texts of several remembered pages and opens one combined preview. */

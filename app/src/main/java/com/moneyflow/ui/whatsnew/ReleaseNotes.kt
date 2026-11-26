@@ -6,6 +6,12 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.17.2", "2026.11",
+      listOf(
+        "카드사 가져오기: 우리·NH농협·IBK기업 카드 중 BC 마크가 있는 카드는 'BC카드로 가져오기'로 BC카드 홈페이지에서 이용내역을 읽고, 그 카드 계좌(우리카드·NH농협카드·IBK기업카드)에 기록해요"
+      )
+    ),
+    ReleaseNote(
       "2.17.1", "2026.11",
       listOf(
         "카드 혜택 찾기: 카드 → 카드 혜택 → '혜택 찾기'에서 카드 이름만 넣으면 AI가 혜택을 찾아 정리해요. Gemini는 웹에서 최신 정보를 검색하고, 다른 AI는 알고 있는 정보로 찾아요 (카드고릴라로 나가지 않아요)",

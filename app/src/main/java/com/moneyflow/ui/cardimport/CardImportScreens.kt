@@ -149,15 +149,25 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
         )
       }
     }
-    SettingsSection("웹으로는 가져올 수 없는 카드사") {
+    SettingsSection("우리·농협·IBK 카드 (BC카드로)") {
       Text(
-        "아래 카드사는 홈페이지에서 이용내역을 보여 주지 않거나(앱 전용), 보안 프로그램이 필요해 가져올 수 없었어요. 결제 알림 자동 등록으로 기록해 주세요.",
+        "이 카드사 홈페이지는 이용내역을 보여 주지 않아요. 카드 앞면에 BC 마크가 있으면 BC카드 홈페이지에서 볼 수 있어서, BC카드로 열고 그 카드 계좌에 기록해요. " +
+          "BC 마크가 없는 카드는 결제 알림 자동 등록으로 기록해 주세요.",
         style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
       )
-      CardSites.all.filter { it.webLimit != null }.forEach { site ->
+      CardSites.bcMembers.forEach { site ->
         SettingsItem(
           title = site.name,
-          subtitle = "그래도 열어 보기",
+          subtitle = "BC카드 로그인 → 카드 승인내역",
+          icon = Icons.Filled.CreditCard,
+          onClick = { onOpenSite(site) },
+          modifier = Modifier.testTag("card_site_${site.id}")
+        )
+      }
+      CardSites.all.filter { it.webLimit != null }.forEach { site ->
+        SettingsItem(
+          title = "${site.name} 홈페이지",
+          subtitle = "그래도 열어 보기 (이용내역은 없어요)",
           icon = Icons.Filled.CreditCard,
           onClick = { onOpenSite(site) },
           modifier = Modifier.testTag("card_site_${site.id}")

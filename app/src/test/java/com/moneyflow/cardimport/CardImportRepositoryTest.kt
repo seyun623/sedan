@@ -134,4 +134,19 @@ class CardImportRepositoryTest {
     assertEquals(3, r.items[1].installmentMonths)
     assertEquals(1, r.performance.size)
   }
+
+  /** 2.17.2: 우리·농협·IBK BC member cards open BC카드 and save into their own card account. */
+  @Test fun bcMemberCardsOpenBcAndUseTheirOwnAccount() = runBlocking {
+    val members = com.moneyflow.domain.cardimport.CardSites.bcMembers
+    assertEquals(listOf("bc_woori", "bc_nh", "bc_ibk"), members.map { it.id })
+    val bc = com.moneyflow.domain.cardimport.CardSites.byId("bc")!!
+    members.forEach { assertEquals(bc.url, it.url); assertEquals("bc", it.settingsId) }
+    assertEquals("우리카드", com.moneyflow.domain.cardimport.CardSites.byId("bc_woori")!!.provider)
+    val nhId = ledger.addAccount(card(name = "농협 채움카드"))
+    val accounts = ledger.getAccounts()
+    assertEquals(nhId, repo.namedAccount(members[1].provider, accounts)!!.id)
+    // No 우리 / IBK account yet: the preview offers to make one named after the card.
+    assertEquals(null, repo.namedAccount("우리카드", accounts))
+    assertEquals(null, repo.namedAccount("IBK기업카드", accounts))
+  }
 }
