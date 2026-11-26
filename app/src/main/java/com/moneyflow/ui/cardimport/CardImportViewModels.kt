@@ -138,6 +138,8 @@ class CardBrowserViewModel @Inject constructor(
 
   /** Looks at the new page: a login form folds the buttons away, found payments bring them back. */
   private fun probePage() {
+    // The payment check reads card statements; a shop's order list would only confuse it.
+    if (site.shop) return
     probeJob?.cancel()
     probeJob = viewModelScope.launch {
       _pageCheck.value = null
@@ -217,6 +219,10 @@ class CardBrowserViewModel @Inject constructor(
 
   /** The site offered a file (이용내역 엑셀 저장): read it right away with the same login. */
   private suspend fun importDownload(d: SiteDownload) {
+    if (site.shop) {
+      _events.send(BrowserEvent.Info("쇼핑몰 파일은 읽지 않아요. 주문내역 화면에서 '이 화면 가져오기'를 눌러 주세요."))
+      return
+    }
     if (!d.url.startsWith("https://")) {
       _events.send(BrowserEvent.Error("이 파일은 바로 읽을 수 없어요. 휴대폰에 저장한 뒤 '엑셀·CSV 파일에서 가져오기'로 열어 주세요."))
       return
@@ -305,6 +311,8 @@ class CardBrowserViewModel @Inject constructor(
 
   /** Reads the texts of several remembered pages and opens one combined preview. */
   fun readMany(pages: List<Pair<com.moneyflow.domain.cardimport.SavedPage, String>>, useAi: Boolean) = viewModelScope.launch {
+    // Never read a shopping site's pages as card spending.
+    if (site.shop) { readOrders(pages.joinToString("\n") { it.second }, useAi); return@launch }
     if (_busy.value || pages.isEmpty()) return@launch
     _busy.value = true
     try {

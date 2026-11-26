@@ -201,7 +201,7 @@ fun CardBrowserScreen(
   var aiConsent by remember { mutableStateOf<String?>(null) }
   val savedPages by viewModel.savedPages.collectAsStateWithLifecycle()
   /** "필요한 것만 가져오기": the site's known pages (phone page) and the pages the user remembered. */
-  val tourPages = remember(savedPages, desktop) {
+  val tourPages = if (site.shop) emptyList() else remember(savedPages, desktop) {
     val known = if (desktop == true) emptyList() else site.pages.map { (title, url) -> com.moneyflow.domain.cardimport.SavedPage(url, title, 0L) }
     (known + savedPages).distinctBy { it.url }
   }
@@ -309,11 +309,11 @@ fun CardBrowserScreen(
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
               DropdownMenuItem(
-                text = { Text("이용내역 메뉴 찾기") },
+                text = { Text(if (site.shop) "주문내역 메뉴 찾기" else "이용내역 메뉴 찾기") },
                 onClick = { menuOpen = false; viewModel.findLinks() },
                 modifier = Modifier.testTag("card_find_links")
               )
-              DropdownMenuItem(
+              if (!site.shop) DropdownMenuItem(
                 text = { Text(if (desktop == true) "휴대폰 화면으로 보기" else "PC 화면으로 보기") },
                 onClick = { menuOpen = false; viewModel.setDesktop(desktop != true) },
                 modifier = Modifier.testTag("card_toggle_desktop")
@@ -323,7 +323,8 @@ fun CardBrowserScreen(
                 onClick = { menuOpen = false; viewModel.removeOverlays() },
                 modifier = Modifier.testTag("card_remove_overlays")
               )
-              DropdownMenuItem(
+              // Remembered pages are read as card statements: not for shopping sites.
+              if (!site.shop) DropdownMenuItem(
                 text = { Text("이 화면 기억하기") },
                 onClick = { menuOpen = false; viewModel.savePage(web.front?.url, web.front?.title.orEmpty()) }
               )
@@ -547,8 +548,13 @@ fun CardBrowserScreen(
   aiConsent?.let { text ->
     AlertDialog(
       onDismissRequest = { aiConsent = null },
-      title = { Text("카드 이용내역을 AI로 보낼까요?", fontWeight = FontWeight.Bold) },
-      text = { Text("지금 화면의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요.") },
+      title = { Text(if (site.shop) "주문내역을 AI로 보낼까요?" else "카드 이용내역을 AI로 보낼까요?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text(
+          if (site.shop) "지금 화면의 글자(주문일, 상품 이름, 금액)가 ${aiLabel}(으)로 전송돼요. 전화번호·주소·받는 분 이름은 가리고 보내지만, 화면에 다른 개인 정보가 있으면 함께 전송될 수 있어요. 주문 목록 화면에서 읽는 게 좋아요 (주문 상세·배송지 화면 말고)."
+          else "지금 화면의 글자(가맹점, 금액, 날짜 등)가 ${aiLabel}(으)로 전송돼요. 카드번호 일부나 이름이 화면에 있으면 함께 전송될 수 있어요."
+        )
+      },
       confirmButton = { TextButton(onClick = { aiConsent = null; viewModel.read(text, useAi = true) }) { Text("보내고 읽기", fontWeight = FontWeight.Bold) } },
       dismissButton = { TextButton(onClick = { aiConsent = null }) { Text("취소") } }
     )

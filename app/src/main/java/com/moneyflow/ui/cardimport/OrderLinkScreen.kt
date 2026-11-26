@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -53,6 +55,8 @@ data class OrderLinkState(
   val selected: Set<Int> = emptySet(),
   /** Orders with no payment of the same amount (paid another way, or not recorded yet). */
   val unmatched: List<ShopOrder> = emptyList(),
+  /** Nothing to show (the app was closed in between): read the order list again. */
+  val noOrders: Boolean = false,
   val loading: Boolean = true,
   val busy: Boolean = false
 )
@@ -72,7 +76,8 @@ class OrderLinkViewModel @Inject constructor(
 
   init {
     viewModelScope.launch {
-      val (site, orders) = session.current.value ?: run { _state.value = OrderLinkState(loading = false); return@launch }
+      val (site, orders) = session.current.value?.takeIf { it.second.isNotEmpty() }
+        ?: run { _state.value = OrderLinkState(loading = false, noOrders = true); return@launch }
       val from = MonthKeys.dayStartMillis(orders.minOf { it.date }, clock.zone)
       val to = MonthKeys.dayStartMillis(orders.maxOf { it.date }.plusDays(5), clock.zone)
       val payments = db.transactionDao().getBetween(from, to)
@@ -81,7 +86,8 @@ class OrderLinkViewModel @Inject constructor(
       _state.value = OrderLinkState(
         shopName = site.name,
         matches = matches,
-        selected = matches.indices.toSet(),
+        // Payments that don't name the shop are suggestions only: the user ticks them.
+        selected = matches.indices.filter { matches[it].namesShop }.toSet(),
         unmatched = orders.filter { it !in matched },
         loading = false
       )
@@ -98,13 +104,19 @@ class OrderLinkViewModel @Inject constructor(
     if (s.busy) return@launch
     _state.value = s.copy(busy = true)
     var changed = 0
-    s.matches.filterIndexed { i, _ -> i in s.selected }.forEach { m ->
-      // Only the memo changes (no balance effect); re-read in case it was edited meanwhile.
-      val current = db.transactionDao().getById(m.transaction.id) ?: return@forEach
-      if (current.memo == m.transaction.memo) {
-        ledger.updateTransaction(current.copy(memo = m.newMemo))
-        changed++
+    try {
+      s.matches.filterIndexed { i, _ -> i in s.selected }.forEach { m ->
+        // Only the memo changes (no balance effect); re-read in case it was edited meanwhile.
+        val current = db.transactionDao().getById(m.transaction.id) ?: return@forEach
+        if (current.memo == m.transaction.memo &&
+          ledger.updateTransaction(current.copy(memo = m.newMemo)) == com.moneyflow.data.repository.LedgerResult.Ok
+        ) changed++
       }
+    } catch (e: Exception) {
+      com.moneyflow.util.ProblemLog.record("쇼핑몰 주문 연결", e)
+      messages.show(com.moneyflow.util.UserErrors.message(e, "일부 결제에 상품 이름을 붙이지 못했어요."))
+    } finally {
+      _state.value = _state.value.copy(busy = false)
     }
     session.clear()
     messages.show(if (changed > 0) "결제 ${changed}건에 상품 이름을 붙였어요." else "바뀐 내역이 없어요.")
@@ -118,8 +130,13 @@ fun OrderLinkScreen(onBack: () -> Unit, viewModel: OrderLinkViewModel = hiltView
   val s by viewModel.state.collectAsStateWithLifecycle()
   LaunchedEffect(viewModel) { viewModel.done.collect { onBack() } }
 
-  SettingsScaffold(title = "${s.shopName} 주문 → 상품명 붙이기", onBack = onBack) {
-    if (!s.loading && s.matches.isEmpty()) {
+  SettingsScaffold(title = if (s.shopName.isEmpty()) "주문 → 상품명 붙이기" else "${s.shopName} 주문 → 상품명 붙이기", onBack = onBack) {
+    if (s.noOrders) {
+      Text(
+        "읽은 주문이 없어요. 쇼핑몰 주문내역 화면에서 '이 화면 가져오기'를 다시 눌러 주세요.",
+        style = MaterialTheme.typography.bodyMedium, color = Gray600, modifier = Modifier.padding(16.dp)
+      )
+    } else if (!s.loading && s.matches.isEmpty()) {
       Text(
         "가계부에서 같은 금액의 결제를 찾지 못했어요. 카드 결제가 먼저 기록돼 있어야 해요 (결제 알림 자동 등록이나 카드사 가져오기). " +
           "주문일부터 3일 안의 같은 금액 결제를 찾아요.",
@@ -132,11 +149,14 @@ fun OrderLinkScreen(onBack: () -> Unit, viewModel: OrderLinkViewModel = hiltView
         s.matches.forEachIndexed { i, m ->
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).testTag("order_match_$i")
+            modifier = Modifier.fillMaxWidth()
+              .toggleable(value = i in s.selected, role = Role.Checkbox) { viewModel.toggle(i) }
+              .padding(horizontal = 8.dp, vertical = 4.dp).testTag("order_match_$i")
           ) {
-            Checkbox(checked = i in s.selected, onCheckedChange = { viewModel.toggle(i) })
+            Checkbox(checked = i in s.selected, onCheckedChange = null)
             Column(Modifier.weight(1f)) {
               Text(m.newMemo, fontWeight = FontWeight.SemiBold, color = Gray900)
+              if (!m.namesShop) Text("결제 이름에 ${s.shopName}이(가) 없어요. 맞으면 골라 주세요", style = MaterialTheme.typography.labelSmall, color = com.moneyflow.ui.theme.AccentRedText)
               Text(
                 "${m.order.date.monthValue}.${m.order.date.dayOfMonth} 주문 · ${Formatters.formatCurrency(m.order.amount)} · 지금: ${m.transaction.memo}",
                 style = MaterialTheme.typography.bodySmall, color = Gray600
@@ -145,6 +165,10 @@ fun OrderLinkScreen(onBack: () -> Unit, viewModel: OrderLinkViewModel = hiltView
           }
         }
       }
+      Text(
+        "가족 자동 합산을 쓰면 가족에게도 상품 이름이 보여요.",
+        style = MaterialTheme.typography.labelSmall, color = Gray600, modifier = Modifier.padding(horizontal = 16.dp)
+      )
       Button(
         onClick = viewModel::apply,
         enabled = s.selected.isNotEmpty() && !s.busy,

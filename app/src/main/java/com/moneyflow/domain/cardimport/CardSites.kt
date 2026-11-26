@@ -125,7 +125,7 @@ object CardSites {
       loginTip = "로그인한 뒤 주문목록이 보이면 아래 '이 화면 가져오기'를 누르세요. 아래로 내려 더 많은 주문을 펼친 뒤 누르면 더 많이 읽어요"
     ),
     CardSite(
-      "naverpay", "네이버페이", "https://m.pay.naver.com/o/home", "네이버페이", shop = true,
+      "naverpay", "네이버페이", "https://new-m.pay.naver.com/historybenefit/paymenthistory", "네이버페이", shop = true,
       loginTip = "로그인 → 결제내역(주문내역) 화면에서 '이 화면 가져오기'를 누르세요"
     ),
     CardSite("11st", "11번가", "https://m.11st.co.kr", "11번가", shop = true, loginTip = "로그인 → 나의 11번가 → 주문내역에서 '이 화면 가져오기'를 누르세요"),
