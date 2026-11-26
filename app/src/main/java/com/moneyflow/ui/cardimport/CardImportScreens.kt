@@ -139,10 +139,25 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
       )
     }
     SettingsSection("카드사 선택") {
-      CardSites.all.forEach { site ->
+      CardSites.all.filter { it.webLimit == null }.forEach { site ->
         SettingsItem(
           title = site.name,
           subtitle = site.webLimit,
+          icon = Icons.Filled.CreditCard,
+          onClick = { onOpenSite(site) },
+          modifier = Modifier.testTag("card_site_${site.id}")
+        )
+      }
+    }
+    SettingsSection("웹으로는 가져올 수 없는 카드사") {
+      Text(
+        "아래 카드사는 홈페이지에서 이용내역을 보여 주지 않거나(앱 전용), 보안 프로그램이 필요해 가져올 수 없었어요. 결제 알림 자동 등록으로 기록해 주세요.",
+        style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+      )
+      CardSites.all.filter { it.webLimit != null }.forEach { site ->
+        SettingsItem(
+          title = site.name,
+          subtitle = "그래도 열어 보기",
           icon = Icons.Filled.CreditCard,
           onClick = { onOpenSite(site) },
           modifier = Modifier.testTag("card_site_${site.id}")
@@ -214,7 +229,9 @@ fun CardBrowserScreen(
   var managePages by remember { mutableStateOf(false) }
   var menuOpen by remember { mutableStateOf(false) }
   /** The buttons at the bottom folded into a small button (so the site's own buttons are reachable). */
-  var folded by rememberSaveable { mutableStateOf(false) }
+  // Starts folded: card sites put login choices at the bottom (KB 'other login' sheet). Unfolds when
+  // payments show up on the page, or from the top bar's '가져오기'.
+  var folded by rememberSaveable { mutableStateOf(!site.shop) }
   val imeVisible = WindowInsets.isImeVisible
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   val context = androidx.compose.ui.platform.LocalContext.current
@@ -302,6 +319,11 @@ fun CardBrowserScreen(
           IconButton(onClick = goBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
         },
         actions = {
+          // Folded: nothing covers the bottom of the page; the buttons come back from here.
+          if (folded) TextButton(onClick = { folded = false }, modifier = Modifier.testTag("card_unfold_bar")) {
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = TossBlue)
+            Text("가져오기", fontWeight = FontWeight.Bold, color = TossBlue)
+          }
           IconButton(onClick = { web.front?.reload() }) { Icon(Icons.Filled.Refresh, contentDescription = "새로고침") }
           Box {
             IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("card_browser_menu")) {
@@ -460,19 +482,7 @@ fun CardBrowserScreen(
           }
         }
       }
-      if (folded && !imeVisible) {
-        androidx.compose.material3.SmallFloatingActionButton(
-          onClick = { folded = false },
-          containerColor = TossBlue,
-          contentColor = OnBrand,
-          modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).testTag("card_unfold_bar")
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp)) {
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
-            Text("가져오기", fontWeight = FontWeight.Bold)
-          }
-        }
-      }
+
     }
   }
 

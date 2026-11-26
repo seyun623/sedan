@@ -72,13 +72,13 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.17.1. */
   val all = listOf(
     FeatureCheck(
-      "capture", "결제 알림 자동 등록", "2.13",
+      "capture_no_account", "결제수단이 없는 결제 기록", "2.17.1",
       listOf(
-        "'열기'를 눌러 맨 위 점검 목록이 모두 ✅인지 봐 주세요. ⚠가 있으면 그 줄을 눌러 고쳐요.",
-        "'시험 알림 보내기'를 누르고 10초 안에 버튼 아래에 뜨는 문구(✅/⚠)를 확인해 주세요.",
-        "실제로 카드를 한 번 쓴 뒤 '최근 받은 결제 알림'에 '기록됨'이 뜨는지 봐 주세요."
+        "계좌로 등록하지 않은 카드·페이(카카오페이·네이버페이 등)로 결제해 보세요.",
+        "'최근 받은 결제 알림'에 '기록됨'이 뜨고, 자산 탭에 그 이름의 계좌(또는 '기타 결제수단')가 생기는지 봐 주세요. 안 되면 그 줄의 문구를 적어 주세요."
       ),
       CheckTarget.AUTO_CAPTURE, fullOnly = true
     ),
@@ -92,64 +92,38 @@ object FeatureChecks {
     ),
     FeatureCheck(
       "card_needed_only", "필요한 것만 가져오기", "2.15",
-      listOf("카드사 가져오기 → KB국민·하나(휴대폰 화면)·BC 중 하나에 로그인 → 아래 '필요한 것만 가져오기' → 미리보기에 이용내역·결제 예정 금액이 나오는지 봐 주세요."),
+      listOf("카드사 가져오기 → 하나카드(휴대폰 화면) 로그인 → 아래 '필요한 것만 가져오기' → 미리보기에 이용내역·결제 예정 금액이 나오는지 봐 주세요."),
       CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
-      "bill", "카드 결제일 미리 알림", "2.6",
-      listOf(
-        "자산 탭에서 카드를 열어 '결제일'이 입력돼 있는지 확인해 주세요.",
-        "아래 '시험 알림 보내기'를 누르면 결제일 알림이 지금 바로 와요. (진짜 알림은 결제일 3일 전에 와요)"
-      )
+      "kb_login", "KB국민카드 로그인", "2.17.1",
+      listOf("카드사 가져오기 → KB국민카드: 처음엔 아래 버튼이 접혀 있어요. '다른 수단으로 로그인'이 화면 아래에서 올라오는지 봐 주세요. 버튼을 다시 열려면 위쪽 '가져오기'를 누르세요."),
+      CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
-      "networth", "순자산 그래프", "2.7",
-      listOf("'열기'를 누른 뒤 아래로 내리면 '순자산 추이' 그래프가 있어요. 최근 12개월이 보이는지 봐 주세요."),
-      CheckTarget.ANALYTICS
+      "shop_orders", "쇼핑몰 주문 → 상품명 붙이기", "2.16",
+      listOf("카드사 가져오기 → 쇼핑몰 주문내역(쿠팡 등) 로그인 → 주문목록에서 '이 화면 가져오기' → 결제에 상품 이름이 붙는지 봐 주세요."),
+      CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
-      "yearly", "연간 결산 이미지 공유", "2.7",
-      listOf("'열기' → '이미지로 공유'를 눌러 카카오톡 등으로 이미지가 보내지는지 봐 주세요. (나에게 보내기로 시험)"),
-      CheckTarget.YEARLY
-    ),
-    FeatureCheck(
-      "simple", "간단 모드 (부모님용 큰 화면)", "2.8",
-      listOf(
-        "설정 → 화면 → '간단 모드'를 켜면 큰 글씨 화면이 나와요.",
-        "간단 모드 화면 맨 아래 '일반 화면으로 돌아가기'를 누르면 원래대로 돌아와요."
-      ),
+      "benefit_search", "카드 혜택 자동 찾기", "2.17.1",
+      listOf("자산 탭 → 카드 → 카드 혜택 → '혜택 찾기' → 카드 이름(예: 신한카드 Deep Dream)을 넣고 '찾기' → 혜택 목록이 나오는지 봐 주세요."),
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     ),
     FeatureCheck(
-      "drive_restore", "드라이브의 내 가족 파일로 복원 (선택)", "2.11",
-      listOf(
-        "지금 기록을 덮어쓰니 꼭 필요할 때만 해 주세요. (먼저 백업 권장)",
-        "'열기' → '드라이브의 내 가족 파일로 복원' → 가족 비밀번호 입력."
-      ),
-      CheckTarget.DRIVE
+      "vouchers", "지역화폐·온누리상품권", "2.17",
+      listOf("지역화폐·온누리로 결제한 뒤 결제수단이 '지역화폐'/'온누리상품권'으로 기록되는지 봐 주세요. 안 되면 결제 알림 자동 등록 → '추가로 읽을 앱'에서 그 앱을 골라 주세요."),
+      CheckTarget.AUTO_CAPTURE, fullOnly = true
     ),
     FeatureCheck(
-      "card_import", "카드사 가져오기", "2.14",
-      listOf(
-        "현대: PC 화면으로 열려요. 현대카드 앱 인증번호로 로그인 → 앱 다녀와서 잠금을 풀어도 화면이 그대로인지.",
-        "KB국민: 아래 버튼이 접혀 '다른 수단으로 로그인'이 눌리는지.",
-        "롯데: 화면이 안 눌리면 오른쪽 위 ⋮ → '가림막 걷기'.",
-        "하나: 앱으로 넘어가지 않고 웹에 머무는지.",
-        "우리·농협·IBK: 로그인 후 '메뉴 찾기'로 이용내역 화면이 열리는지."
-      ),
-      CheckTarget.CARD_IMPORT
+      "tax_preview", "연말정산 카드 소득공제 미리보기", "2.17",
+      listOf("소비분석 탭 맨 아래 → '연말정산 카드 소득공제 미리보기' → 총급여를 넣으면 문턱·예상 공제액·안내가 나오는지 봐 주세요."),
+      CheckTarget.ANALYTICS
     ),
     FeatureCheck(
-      "swipe_delete", "밀어서 삭제 확인", "2.14",
-      listOf("아래 시험용 내역을 왼쪽으로 밀어 보세요. '이 내역을 지울까요?'가 뜨면 정상이에요. (시험용이라 실제로 지워지지 않아요)")
-    ),
-    FeatureCheck(
-      "rules", "규칙 저장 시 기존 내역 바꾸기", "2.14.1",
-      listOf(
-        "'열기' → '앱이 기억한 분류'에서 기타지출인 가게(예: 후라토식당)를 눌러 카테고리를 골라 저장해 주세요.",
-        "'이미 있던 내역 N건도 바꿨어요'가 뜨고, 목록과 가계부에서 바뀌었는지 봐 주세요."
-      ),
-      CheckTarget.RULES
+      "security_pin", "보안: PIN 확인", "2.15.6",
+      listOf("앱 PIN을 쓰는 중이면: 설정 → 보안 → 생체 인증 켜기 / 복구 코드 새로 만들기를 누를 때 '현재 PIN 확인'이 먼저 뜨는지 봐 주세요."),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
     )
   )
 

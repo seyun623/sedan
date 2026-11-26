@@ -179,9 +179,9 @@ class AccountDetailViewModel @Inject constructor(
       _benefitRead.value = try {
         val found = benefitReader.search(cardName)
         when {
-          found == null -> BenefitReadState.Failed("검색은 AI 설정에서 Google Gemini를 고른 경우에만 돼요. 아래 '카드고릴라에서 찾기'를 써 주세요.")
+          found == null -> BenefitReadState.Failed("AI 설정을 먼저 해 주세요.")
           found.drafts.isEmpty() -> BenefitReadState.Failed("'${cardName.trim()}'의 혜택을 찾지 못했어요. 카드 이름을 정확히 (예: 신한카드 Deep Dream) 입력해 주세요.")
-          else -> BenefitReadState.Done(found.drafts, found.sources)
+          else -> BenefitReadState.Done(found.drafts, if (found.fromMemory) listOf("AI가 알고 있는 정보 (최신이 아닐 수 있음)" to "") else found.sources)
         }
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e

@@ -32,7 +32,7 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
   }
 
   /** Benefits found by searching the web for a card product, with the pages used. */
-  data class Searched(val drafts: List<CardBenefitEntity>, val sources: List<Pair<String, String>>)
+  data class Searched(val drafts: List<CardBenefitEntity>, val sources: List<Pair<String, String>>, val fromMemory: Boolean = false)
 
   /**
    * Searches the web for [cardName]'s benefits (card company product page, card comparison sites)
@@ -40,7 +40,7 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
    */
   suspend fun search(cardName: String): Searched? {
     val name = cardName.trim().take(60)
-    val (answer, sources) = ai.searchWeb(
+    val web = ai.searchWeb(
       """
       한국 카드 상품 "$name"의 혜택을 웹에서 찾아 자세히 정리해 주세요. 카드사 공식 상품 안내를 우선하고, 카드고릴라 같은 비교 사이트로 보완하세요.
       혜택마다: 대상(업종·가맹점), 할인·적립·캐시백 비율이나 금액, 건당·일·월 한도, 필요한 전월 실적 구간(구간별로 다르면 모두), 제외 조건.
@@ -48,7 +48,17 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
       같은 이름의 카드가 여러 개면 가장 흔한 것을 고르고 첫 줄에 정확한 카드 이름을 적어 주세요. 단종된 카드면 그렇다고 적어 주세요.
       찾지 못하면 "찾지 못함"이라고만 답하세요.
       """.trimIndent()
-    ) ?: return null
+    )
+    if (web == null) {
+      // A provider without web search: what the model knows about the card (may be dated).
+      val prompt = buildString {
+        appendLine("한국 카드 상품 \"$name\"의 혜택을 알고 있는 대로 정리해 주세요. 확실하지 않은 혜택은 넣지 마세요. 모르는 카드면 빈 배열로 답하세요.")
+        appendLine(RULES)
+      }
+      val json = JSONObject(ai.completeJson(prompt, schema(), """{"benefits":[$ITEM_SHAPE]}"""))
+      return Searched(parse(json.optJSONArray("benefits")), emptyList(), fromMemory = true)
+    }
+    val (answer, sources) = web
     if (answer.contains("찾지 못함") && answer.length < 40) return Searched(emptyList(), sources)
     return Searched(read(answer), sources)
   }

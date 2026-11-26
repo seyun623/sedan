@@ -7,7 +7,6 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,13 +45,20 @@ class BenefitSearchTest {
     assertEquals("스타벅스 5% 적립", found.drafts.single().title)
   }
 
-  @Test fun otherProvidersCannotSearch() = runBlocking {
+  @Test fun otherProvidersAnswerFromMemory() = runBlocking {
     val settings = testSettingsRepository()
     settings.setAiProvider(AiProvider.OPENROUTER)
     settings.setAiApiKeyEncrypted(PlainSecretStore.encrypt("KEY"))
     settings.setAiModel("x:free")
     settings.setAiEnabled(true)
-    val ai = AiService(settings, PlainSecretStore, GeminiClient(), OpenAiCompatClient())
-    assertNull(BenefitReader(ai).search("삼성카드 taptap O"))
+    val content = JSONObject().put("benefits", JSONArray().put(JSONObject().put("title", "대중교통 10% 할인").put("category", "교통")
+      .put("merchants", "버스, 지하철").put("kind", "PERCENT").put("value", 10).put("monthlyCap", 5000).put("perUseCap", 0).put("minPerformance", 300000))).toString()
+    val reply = JSONObject().put("choices", JSONArray().put(JSONObject().put("message", JSONObject().put("content", content)))).toString()
+    val t = HttpTransport { _, _, _, _ -> 200 to reply }
+    val ai = AiService(settings, PlainSecretStore, GeminiClient(), OpenAiCompatClient().apply { transport = t })
+    val found = BenefitReader(ai).search("삼성카드 taptap O")!!
+    assertTrue(found.fromMemory)
+    assertTrue(found.sources.isEmpty())
+    assertEquals("대중교통 10% 할인", found.drafts.single().title)
   }
 }

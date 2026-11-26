@@ -102,7 +102,7 @@ object CardSites {
     CardSite(
       "ibk", "IBK기업은행 카드", "https://www.ibk.co.kr", "IBK기업은행",
       guide = "로그인 → 카드 → 나의카드관리 → 카드정보관리 → '이용내역' 칸의 바로가기",
-      webLimit = "은행 인터넷뱅킹 로그인(인증서)이 필요해요"
+      webLimit = "웹에서 이용내역을 가져올 수 없었어요 (2026-11 확인) → 결제 알림 자동 등록을 써 주세요"
     )
   )
 

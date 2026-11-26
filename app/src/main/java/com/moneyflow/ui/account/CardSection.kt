@@ -125,7 +125,7 @@ internal fun CardSection(
       Spacer(Modifier.height(8.dp))
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text("카드 혜택", fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
-        TextButton(onClick = onAddBenefitWithAi, modifier = Modifier.testTag("add_benefit_ai")) { Text("AI로 등록") }
+        TextButton(onClick = onAddBenefitWithAi, modifier = Modifier.testTag("add_benefit_ai")) { Text("혜택 찾기") }
         TextButton(onClick = onAddBenefit, modifier = Modifier.testTag("add_benefit")) { Text("직접 추가") }
       }
       if (benefits.isEmpty()) {
@@ -352,7 +352,7 @@ internal fun BenefitPasteDialog(
   var name by rememberSaveable { mutableStateOf(cardName) }
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("AI로 혜택 등록", fontWeight = FontWeight.Bold) },
+    title = { Text("카드 혜택 찾기", fontWeight = FontWeight.Bold) },
     text = {
       Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // 1) Search the card product (no login; usually more detailed than the card site's own screen).
@@ -366,22 +366,18 @@ internal fun BenefitPasteDialog(
           enabled = !loading,
           modifier = Modifier.fillMaxWidth().testTag("benefit_search_name")
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          if (aiLabel != null && canSearch) {
-            Button(
-              onClick = { onSearch(name) },
-              enabled = name.isNotBlank() && !loading,
-              colors = ButtonDefaults.buttonColors(containerColor = TossBlue),
-              modifier = Modifier.testTag("benefit_search")
-            ) { Text("검색해서 가져오기") }
-          }
-          OutlinedButton(onClick = onOpenCardGorilla, enabled = !loading, modifier = Modifier.testTag("benefit_card_gorilla")) { Text("카드고릴라에서 찾기") }
-        }
+        Button(
+          onClick = { onSearch(name) },
+          enabled = aiLabel != null && name.isNotBlank() && !loading,
+          colors = ButtonDefaults.buttonColors(containerColor = TossBlue),
+          modifier = Modifier.fillMaxWidth().testTag("benefit_search")
+        ) { Text("찾기", fontWeight = FontWeight.Bold) }
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue, trackColor = Gray200)
         Text(
           when {
-            aiLabel == null -> "카드고릴라에서 카드 상세 화면을 연 뒤 '이 화면 가져오기' → 'AI로 읽기'로 등록해요. (AI 설정 필요)"
-            canSearch -> "검색: 카드 이름이 ${aiLabel}의 구글 검색으로 전송돼요. 카드고릴라: 카드 상세 화면에서 '이 화면 가져오기' → 'AI로 읽기'."
-            else -> "'검색해서 가져오기'는 AI 설정에서 Google Gemini를 고르면 쓸 수 있어요. 카드고릴라는 지금도 돼요."
+            aiLabel == null -> "설정 → AI 설정에서 AI를 켜면 카드 이름만으로 혜택을 찾아요."
+            canSearch -> "카드 이름이 ${aiLabel}의 구글 검색으로 전송돼요. 카드사 공식 안내를 먼저 찾아 혜택을 정리해요."
+            else -> "${aiLabel}가 아는 정보로 찾아요 (최신이 아닐 수 있어요). Google Gemini를 고르면 웹에서 최신 정보를 검색해요."
           },
           style = MaterialTheme.typography.bodySmall, color = Gray600
         )
@@ -407,7 +403,6 @@ internal fun BenefitPasteDialog(
           modifier = Modifier.fillMaxWidth().testTag("benefit_paste_input")
         )
         Text("붙여 넣은 글이 ${aiLabel}(으)로 전송돼요. 카드번호·이름 같은 개인 정보는 넣지 마세요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue, trackColor = Gray200)
         error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AccentRed) }
         TextButton(onClick = onOpenCardImport, enabled = !loading) { Text("카드사 화면에서 가져오기") }
       }
