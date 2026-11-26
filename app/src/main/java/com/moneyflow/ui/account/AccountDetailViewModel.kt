@@ -43,7 +43,11 @@ data class AccountDetailUiState(
 sealed interface BenefitReadState {
   data object Idle : BenefitReadState
   data object Loading : BenefitReadState
-  data class Done(val drafts: List<com.moneyflow.data.model.CardBenefitEntity>) : BenefitReadState
+  data class Done(
+    val drafts: List<com.moneyflow.data.model.CardBenefitEntity>,
+    /** Web pages the search used (title, address); empty for pasted text. */
+    val sources: List<Pair<String, String>> = emptyList()
+  ) : BenefitReadState
   data class Failed(val message: String) : BenefitReadState
 }
 
@@ -85,6 +89,11 @@ class AccountDetailViewModel @Inject constructor(
   val aiLabel: StateFlow<String?> = settings.settings
     .map { if (it.isAiReady) it.aiProvider.label else null }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+  /** Whether "검색해서 가져오기" works (Gemini's Google Search). */
+  val canSearchBenefits: StateFlow<Boolean> = settings.settings
+    .map { it.isAiReady && it.aiProvider == com.moneyflow.ai.AiProvider.GEMINI }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
   private val _benefitRead = MutableStateFlow<BenefitReadState>(BenefitReadState.Idle)
   val benefitRead: StateFlow<BenefitReadState> = _benefitRead.asStateFlow()
@@ -157,6 +166,27 @@ class AccountDetailViewModel @Inject constructor(
         throw e
       } catch (e: Exception) {
         BenefitReadState.Failed(e.message ?: "AI가 혜택을 읽지 못했어요.")
+      }
+    }
+  }
+
+  /** Searches the web for the card product's benefits (Gemini only). */
+  fun searchBenefits(cardName: String) {
+    if (cardName.isBlank() || _benefitRead.value == BenefitReadState.Loading) return
+    benefitJob?.cancel()
+    _benefitRead.value = BenefitReadState.Loading
+    benefitJob = viewModelScope.launch {
+      _benefitRead.value = try {
+        val found = benefitReader.search(cardName)
+        when {
+          found == null -> BenefitReadState.Failed("검색은 AI 설정에서 Google Gemini를 고른 경우에만 돼요. 아래 '카드고릴라에서 찾기'를 써 주세요.")
+          found.drafts.isEmpty() -> BenefitReadState.Failed("'${cardName.trim()}'의 혜택을 찾지 못했어요. 카드 이름을 정확히 (예: 신한카드 Deep Dream) 입력해 주세요.")
+          else -> BenefitReadState.Done(found.drafts, found.sources)
+        }
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        BenefitReadState.Failed(e.message ?: "검색하지 못했어요.")
       }
     }
   }

@@ -76,6 +76,22 @@ class GeminiClient @Inject constructor() {
       parseGeneratedText(body) ?: throw AiRequestException("AI 응답이 비어 있어요.")
     }
 
+  /**
+   * Answers [prompt] with Google Search grounding (the model searches the web first). Returns the
+   * text and the web pages it used (title, address).
+   */
+  suspend fun generateGrounded(apiKey: String, model: String, prompt: String): Pair<String, List<Pair<String, String>>> =
+    withContext(Dispatchers.IO) {
+      val request = JSONObject()
+        .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+        .put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+      val url = "$BASE/models/${URLEncoder.encode(model.removePrefix("models/"), "UTF-8")}:generateContent"
+      val (code, body) = transport.execute("POST", url, headers(apiKey) + ("Content-Type" to "application/json"), request.toString())
+      if (code !in 200..299) throw aiFailure(code, body)
+      val text = parseGeneratedText(body) ?: throw AiRequestException("AI 응답이 비어 있어요.")
+      text to parseSources(body)
+    }
+
   private fun headers(apiKey: String) = mapOf("x-goog-api-key" to apiKey)
 
   companion object {
@@ -90,6 +106,16 @@ class GeminiClient @Inject constructor() {
         }
         .map { it.getString("name").removePrefix("models/") }
         .filter { it.startsWith("gemini") }
+    }
+
+    /** Web pages a grounded answer used: candidates[0].groundingMetadata.groundingChunks[].web. */
+    internal fun parseSources(body: String): List<Pair<String, String>> {
+      val chunks = JSONObject(body).optJSONArray("candidates")?.optJSONObject(0)
+        ?.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks") ?: return emptyList()
+      return (0 until chunks.length()).mapNotNull { i ->
+        val web = chunks.optJSONObject(i)?.optJSONObject("web") ?: return@mapNotNull null
+        web.optString("title").ifBlank { "웹 페이지" } to web.optString("uri")
+      }.distinctBy { it.first }
     }
 
     internal fun parseGeneratedText(body: String): String? {

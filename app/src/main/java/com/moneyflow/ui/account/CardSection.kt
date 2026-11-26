@@ -14,6 +14,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -339,18 +342,55 @@ internal fun BenefitPasteDialog(
   error: String?,
   onRead: (String) -> Unit,
   onOpenCardImport: () -> Unit,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  cardName: String = "",
+  canSearch: Boolean = false,
+  onSearch: (String) -> Unit = {},
+  onOpenCardGorilla: () -> Unit = {}
 ) {
   var text by rememberSaveable { mutableStateOf("") }
+  var name by rememberSaveable { mutableStateOf(cardName) }
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("AI로 혜택 등록", fontWeight = FontWeight.Bold) },
     text = {
       Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 1) Search the card product (no login; usually more detailed than the card site's own screen).
+        Text("카드 이름으로 찾기", fontWeight = FontWeight.SemiBold, color = Gray900)
+        OutlinedTextField(
+          value = name,
+          onValueChange = { name = it.take(60) },
+          label = { Text("카드 상품 이름") },
+          placeholder = { Text("예: 신한카드 Deep Dream") },
+          singleLine = true,
+          enabled = !loading,
+          modifier = Modifier.fillMaxWidth().testTag("benefit_search_name")
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (aiLabel != null && canSearch) {
+            Button(
+              onClick = { onSearch(name) },
+              enabled = name.isNotBlank() && !loading,
+              colors = ButtonDefaults.buttonColors(containerColor = TossBlue),
+              modifier = Modifier.testTag("benefit_search")
+            ) { Text("검색해서 가져오기") }
+          }
+          OutlinedButton(onClick = onOpenCardGorilla, enabled = !loading, modifier = Modifier.testTag("benefit_card_gorilla")) { Text("카드고릴라에서 찾기") }
+        }
+        Text(
+          when {
+            aiLabel == null -> "카드고릴라에서 카드 상세 화면을 연 뒤 '이 화면 가져오기' → 'AI로 읽기'로 등록해요. (AI 설정 필요)"
+            canSearch -> "검색: 카드 이름이 ${aiLabel}의 구글 검색으로 전송돼요. 카드고릴라: 카드 상세 화면에서 '이 화면 가져오기' → 'AI로 읽기'."
+            else -> "'검색해서 가져오기'는 AI 설정에서 Google Gemini를 고르면 쓸 수 있어요. 카드고릴라는 지금도 돼요."
+          },
+          style = MaterialTheme.typography.bodySmall, color = Gray600
+        )
+        androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Gray200)
         if (aiLabel == null) {
-          Text("설정 → AI 설정에서 AI를 켜면 쓸 수 있어요. 그 전에는 '직접 추가'로 혜택을 등록해 주세요.", color = Gray600)
+          Text("설정 → AI 설정에서 AI를 켜면 붙여 넣은 글도 읽을 수 있어요. 그 전에는 '직접 추가'로 혜택을 등록해 주세요.", color = Gray600)
           return@Column
         }
+        Text("또는 혜택 안내 글 붙여 넣기", fontWeight = FontWeight.SemiBold, color = Gray900)
         Text(
           "카드사 앱·홈페이지의 카드 상품 안내에서 혜택 부분을 복사해 붙여 넣으세요. " +
             "또는 '카드사 화면에서 가져오기'로 로그인한 혜택 화면을 바로 읽을 수 있어요.",
@@ -386,7 +426,8 @@ internal fun BenefitDraftsDialog(
   drafts: List<CardBenefitEntity>,
   hasProfile: Boolean,
   onAdd: (List<CardBenefitEntity>, setTarget: Boolean) -> Unit,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  sources: List<Pair<String, String>> = emptyList()
 ) {
   var selected by rememberSaveable { mutableStateOf(drafts.indices.toSet()) }
   val minPerf = drafts.filterIndexed { i, _ -> i in selected }.map { it.minPerformance }.filter { it > 0 }.minOrNull()
@@ -397,6 +438,12 @@ internal fun BenefitDraftsDialog(
     text = {
       Column(Modifier.verticalScroll(rememberScrollState())) {
         Text("등록할 혜택을 고르세요. 등록한 뒤에도 하나씩 수정할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
+        if (sources.isNotEmpty()) {
+          Text(
+            "검색 출처: " + sources.take(4).joinToString(", ") { it.first } + " · 검색 결과라 실제와 다를 수 있어요. 카드사 상품 안내와 한 번 비교해 주세요.",
+            style = MaterialTheme.typography.bodySmall, color = AccentOrange, modifier = Modifier.padding(top = 4.dp)
+          )
+        }
         drafts.forEachIndexed { i, b ->
           Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Checkbox(checked = i in selected, onCheckedChange = { selected = if (it) selected + i else selected - i })

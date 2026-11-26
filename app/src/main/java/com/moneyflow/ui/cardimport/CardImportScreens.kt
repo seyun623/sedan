@@ -114,6 +114,15 @@ fun CardImportScreen(onBack: () -> Unit, onOpenSite: (CardSite) -> Unit, onOpenF
         modifier = Modifier.testTag("card_import_file")
       )
     }
+    SettingsSection("카드 혜택 찾기 (로그인 없이)") {
+      SettingsItem(
+        title = CardSites.cardGorilla.name,
+        subtitle = "카드 이름으로 혜택을 자세히 찾아 'AI로 읽기'로 등록해요",
+        icon = Icons.Filled.CreditCard,
+        onClick = { onOpenSite(CardSites.cardGorilla) },
+        modifier = Modifier.testTag("card_site_cardgorilla")
+      )
+    }
     SettingsSection("카드사 선택") {
       CardSites.all.forEach { site ->
         SettingsItem(

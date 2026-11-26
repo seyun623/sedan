@@ -76,6 +76,7 @@ fun AccountDetailScreen(
   onBack: () -> Unit,
   onOpenTransaction: (Long) -> Unit,
   onOpenCardImport: () -> Unit = {},
+  onOpenCardGorilla: () -> Unit = {},
   viewModel: AccountDetailViewModel = hiltViewModel()
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -88,6 +89,7 @@ fun AccountDetailScreen(
   var editingBenefitId by rememberSaveable { mutableStateOf<Long?>(null) }
   var showBenefitPaste by rememberSaveable { mutableStateOf(false) }
   val aiLabel by viewModel.aiLabel.collectAsStateWithLifecycle()
+  val canSearchBenefits by viewModel.canSearchBenefits.collectAsStateWithLifecycle()
   val benefitRead by viewModel.benefitRead.collectAsStateWithLifecycle()
   var showTransfer by rememberSaveable { mutableStateOf(false) }
   var confirmDelete by rememberSaveable { mutableStateOf(false) }
@@ -218,6 +220,7 @@ fun AccountDetailScreen(
   if (read is BenefitReadState.Done) {
     BenefitDraftsDialog(
       drafts = read.drafts,
+      sources = read.sources,
       hasProfile = state.cardProfile != null,
       onAdd = { drafts, setTarget -> showBenefitPaste = false; viewModel.addBenefits(drafts, setTarget) },
       onDismiss = viewModel::closeBenefitRead
@@ -229,7 +232,11 @@ fun AccountDetailScreen(
       error = (read as? BenefitReadState.Failed)?.message,
       onRead = viewModel::readBenefits,
       onOpenCardImport = { showBenefitPaste = false; viewModel.closeBenefitRead(); onOpenCardImport() },
-      onDismiss = { showBenefitPaste = false; viewModel.closeBenefitRead() }
+      onDismiss = { showBenefitPaste = false; viewModel.closeBenefitRead() },
+      cardName = state.account?.name.orEmpty(),
+      canSearch = canSearchBenefits,
+      onSearch = viewModel::searchBenefits,
+      onOpenCardGorilla = { showBenefitPaste = false; viewModel.closeBenefitRead(); onOpenCardGorilla() }
     )
   }
 

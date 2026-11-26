@@ -31,6 +31,28 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
     return parse(json.optJSONArray("benefits"))
   }
 
+  /** Benefits found by searching the web for a card product, with the pages used. */
+  data class Searched(val drafts: List<CardBenefitEntity>, val sources: List<Pair<String, String>>)
+
+  /**
+   * Searches the web for [cardName]'s benefits (card company product page, card comparison sites)
+   * and turns the answer into drafts. Null when the AI provider can't search the web.
+   */
+  suspend fun search(cardName: String): Searched? {
+    val name = cardName.trim().take(60)
+    val (answer, sources) = ai.searchWeb(
+      """
+      한국 카드 상품 "$name"의 혜택을 웹에서 찾아 자세히 정리해 주세요. 카드사 공식 상품 안내를 우선하고, 카드고릴라 같은 비교 사이트로 보완하세요.
+      혜택마다: 대상(업종·가맹점), 할인·적립·캐시백 비율이나 금액, 건당·일·월 한도, 필요한 전월 실적 구간(구간별로 다르면 모두), 제외 조건.
+      연회비, 포인트 전환, 라운지 같은 결제 할인·적립이 아닌 서비스는 빼 주세요.
+      같은 이름의 카드가 여러 개면 가장 흔한 것을 고르고 첫 줄에 정확한 카드 이름을 적어 주세요. 단종된 카드면 그렇다고 적어 주세요.
+      찾지 못하면 "찾지 못함"이라고만 답하세요.
+      """.trimIndent()
+    ) ?: return null
+    if (answer.contains("찾지 못함") && answer.length < 40) return Searched(emptyList(), sources)
+    return Searched(read(answer), sources)
+  }
+
   companion object {
     private const val MAX_CHARS = 15_000
 

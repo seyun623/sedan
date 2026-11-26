@@ -190,7 +190,8 @@ fun MoneyFlowNavHost(
         AccountDetailScreen(
           onBack = { navController.popBackStack() },
           onOpenTransaction = { openTransaction(it) },
-          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) }
+          onOpenCardImport = { navController.navigate(Routes.CARD_IMPORT) },
+          onOpenCardGorilla = { navController.navigate(Routes.cardBrowser(com.moneyflow.domain.cardimport.CardSites.cardGorilla.id)) }
         )
       }
       composable(Routes.SETTINGS) {

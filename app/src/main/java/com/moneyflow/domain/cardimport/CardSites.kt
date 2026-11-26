@@ -89,5 +89,14 @@ object CardSites {
     CardSite("ibk", "IBK기업은행 카드", "https://www.ibk.co.kr", "IBK기업은행", guide = "카드 이용내역은 은행 홈페이지의 카드 메뉴 안에 있어요")
   )
 
-  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id }
+  /**
+   * Card product search (no login): benefits are listed in detail for every card, usually more
+   * than the card company's own screen after login. Read with "이 화면 가져오기" → "AI로 읽기".
+   */
+  val cardGorilla = CardSite(
+    "cardgorilla", "카드고릴라 (카드 혜택 검색)", "https://www.card-gorilla.com", "",
+    loginTip = "위 검색에서 카드 이름을 찾아 카드 상세 화면을 연 뒤, 아래 '이 화면 가져오기' → 'AI로 읽기'를 누르세요"
+  )
+
+  fun byId(id: String): CardSite? = all.firstOrNull { it.id == id } ?: cardGorilla.takeIf { it.id == id }
 }

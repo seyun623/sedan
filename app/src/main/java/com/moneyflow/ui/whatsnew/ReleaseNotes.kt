@@ -6,6 +6,13 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "2.15.1", "2026.11",
+      listOf(
+        "카드 혜택을 로그인 없이 찾아 등록해요: 카드 → 카드 혜택 → 'AI로 등록' → 카드 이름 입력 → '검색해서 가져오기' (AI 설정에서 Google Gemini를 고른 경우). 찾은 출처도 함께 보여 줘요",
+        "'카드고릴라에서 찾기': 카드 혜택 비교 사이트에서 카드 상세 화면을 열고 '이 화면 가져오기' → 'AI로 읽기'로 혜택을 등록해요 (카드사 가져오기 화면에도 있어요)"
+      )
+    ),
+    ReleaseNote(
       "2.15.0", "2026.11",
       listOf(
         "카드 계좌에 '다음 결제' 금액과 결제일이 보여요. 결제일 미리 알림에도 결제하실 금액이 나와요",

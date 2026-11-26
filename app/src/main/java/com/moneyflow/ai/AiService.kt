@@ -47,6 +47,18 @@ class AiService @Inject constructor(
     }
   }
 
+  /** Web search with the answer (Gemini's Google Search grounding); null when the provider can't search. */
+  suspend fun searchWeb(prompt: String): Pair<String, List<Pair<String, String>>>? {
+    val s = settings.current()
+    if (!s.isAiReady) throw AiNotConfiguredException()
+    if (s.aiProvider != AiProvider.GEMINI) return null
+    val key = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
+    return gemini.generateGrounded(key, s.aiModel, prompt)
+  }
+
+  /** Whether [searchWeb] can be used with the chosen provider. */
+  suspend fun canSearchWeb(): Boolean = settings.current().let { it.isAiReady && it.aiProvider == AiProvider.GEMINI }
+
   /** Lists models for a key (also verifies the key). */
   suspend fun listModels(provider: AiProvider, apiKey: String, customBaseUrl: String): List<String> = when (provider) {
     AiProvider.GEMINI -> gemini.listModels(apiKey)
