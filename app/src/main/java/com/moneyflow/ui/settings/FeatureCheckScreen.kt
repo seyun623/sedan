@@ -72,8 +72,13 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.19.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 2.20.0. */
   val all = listOf(
+    FeatureCheck(
+      "card_points", "포인트 모아보기", "2.20",
+      listOf("카드사 가져오기 → 카드사 로그인 → 포인트 조회 화면에서 '이 화면 가져오기' → 미리보기의 포인트를 저장 → 자산 탭 '포인트 모아보기'에 나오는지 봐 주세요."),
+      CheckTarget.CARD_IMPORT
+    ),
     FeatureCheck(
       "weekly_report", "주간 소비 리포트", "2.19",
       listOf("설정 → 알림 → '매주 월요일 주간 소비 리포트'를 켜 두면, 월요일(늦어도 수요일)에 '지난주 ○○원 썼어요, 평소보다 …' 알림이 오는지 봐 주세요."),

@@ -105,4 +105,10 @@ class V218Test {
     val text = ReceiptScanner.mergeRows(listOf(Triple("합계", 100, 20), Triple("9,460", 104, 20), Triple("신용카드", 140, 20)))
     assertEquals("합계 9,460\n신용카드", text)
   }
+
+  /** 2.19.1: a date or time is never taken as the amount when there is no total line. */
+  @Test fun dateIsNotTheAmount() {
+    val r = parser.parse("동네분식\n2026-11-25 12:30\n떡볶이 4,500\n순대 3,000")!!
+    assertEquals(4_500L, r.total)
+  }
 }

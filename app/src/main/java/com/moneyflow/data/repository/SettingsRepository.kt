@@ -67,6 +67,8 @@ data class AppSettings(
   val cardPerformance: Map<Long, CardPerformance> = emptyMap(),
   /** Next bill of each card account (from the card company's screen or its 청구 안내). */
   val cardBills: Map<Long, com.moneyflow.domain.card.CardBill> = emptyMap(),
+  /** 2.20: point balances read from card company screens, by card account. */
+  val cardPoints: Map<Long, com.moneyflow.domain.card.CardPoint> = emptyMap(),
   /** Auto backup: folder picked with the system file picker (tree URI). */
   val autoBackupFolder: String? = null,
   /** Auto backup password, encrypted with the Android Keystore. */
@@ -172,6 +174,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val AI_ENABLED = booleanPreferencesKey("ai_enabled")
     val CARD_PERFORMANCE = stringPreferencesKey("card_performance_json")
     val CARD_BILLS = stringPreferencesKey("card_bills_json")
+    val CARD_POINTS = stringPreferencesKey("card_points_json")
     val CARD_ALERTS = booleanPreferencesKey("card_alerts_enabled")
     val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
     val SENT_CARD_ALERTS = androidx.datastore.preferences.core.stringSetPreferencesKey("sent_card_alerts")
@@ -263,6 +266,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
       cardBills = parseBills(p[Keys.CARD_BILLS]),
+      cardPoints = parsePoints(p[Keys.CARD_POINTS]),
       cardAlertsEnabled = p[Keys.CARD_ALERTS] ?: false,
       lastSeenVersion = p[Keys.LAST_SEEN_VERSION],
       sentCardAlerts = p[Keys.SENT_CARD_ALERTS] ?: emptySet(),
@@ -386,6 +390,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun clearCardFigures() = store.edit {
     it.remove(Keys.CARD_BILLS)
     it.remove(Keys.CARD_PERFORMANCE)
+    it.remove(Keys.CARD_POINTS)
   }
 
   suspend fun setCardBill(accountId: Long, bill: com.moneyflow.domain.card.CardBill) = store.edit {
@@ -397,6 +402,22 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     }
     it[Keys.CARD_BILLS] = json.toString()
   }
+
+  suspend fun setCardPoint(accountId: Long, point: com.moneyflow.domain.card.CardPoint?) = store.edit {
+    val map = parsePoints(it[Keys.CARD_POINTS]).toMutableMap()
+    if (point == null) map.remove(accountId) else map[accountId] = point
+    val json = org.json.JSONObject()
+    map.forEach { (id, v) -> json.put(id.toString(), org.json.JSONObject().put("label", v.label).put("amount", v.amount).put("at", v.fetchedAt)) }
+    it[Keys.CARD_POINTS] = json.toString()
+  }
+
+  private fun parsePoints(raw: String?): Map<Long, com.moneyflow.domain.card.CardPoint> = runCatching {
+    val json = org.json.JSONObject(raw ?: return emptyMap())
+    json.keys().asSequence().associate { k ->
+      val o = json.getJSONObject(k)
+      k.toLong() to com.moneyflow.domain.card.CardPoint(o.optString("label"), o.optLong("amount"), o.optLong("at"))
+    }
+  }.getOrDefault(emptyMap())
 
   private fun parseBills(raw: String?): Map<Long, com.moneyflow.domain.card.CardBill> = runCatching {
     val json = org.json.JSONObject(raw ?: return emptyMap())

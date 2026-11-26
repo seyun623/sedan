@@ -74,7 +74,7 @@ class ReminderChecker @Inject constructor(
         .map { stats.budgetExpense(week(it).filter { t -> t.type.isSpending }) }
       val spending = last.filter { it.type.isSpending }
       val top = stats.categoryBreakdown(last).firstOrNull()?.let { it.category to it.amount }
-      val biggest = spending.filter { it.type == com.moneyflow.data.model.TransactionType.EXPENSE }.maxByOrNull { it.amount }?.let { it.memo.take(20) to it.amount }
+      val biggest = spending.filter { it.type == com.moneyflow.data.model.TransactionType.EXPENSE }.maxByOrNull { it.amount }?.let { it.memo.ifBlank { it.category }.take(20) to it.amount }
       com.moneyflow.domain.alerts.WeeklyReport.due(today, stats.budgetExpense(spending), earlier, top, biggest, sent)?.let { out += it }
     }
     if (s.billRemindersEnabled) {

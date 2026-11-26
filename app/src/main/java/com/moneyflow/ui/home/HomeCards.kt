@@ -576,3 +576,33 @@ internal fun CardGuideCard(
 }
 
 private const val GUIDE_ROWS = 4
+
+/** 포인트 모아보기: point balances read from card company screens (카드사 가져오기). */
+@Composable
+internal fun CardPointsCard(points: Map<Long, com.moneyflow.domain.card.CardPoint>, names: Map<Long, String>, onOpenAccount: (Long) -> Unit) {
+  androidx.compose.material3.Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    color = CardSurface,
+    modifier = Modifier.fillMaxWidth().testTag("home_card_points")
+  ) {
+    Column(Modifier.padding(20.dp)) {
+      Text("포인트 모아보기", fontWeight = FontWeight.Bold, color = Gray900, style = MaterialTheme.typography.titleMedium)
+      Text(
+        "합계 ${"%,d".format(points.values.sumOf { it.amount })}P · 카드사 화면에서 읽은 값이에요",
+        style = MaterialTheme.typography.bodySmall, color = Gray600
+      )
+      points.entries.sortedByDescending { it.value.amount }.forEach { (id, p) ->
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenAccount(id) }.padding(vertical = 8.dp)
+        ) {
+          Column(Modifier.weight(1f)) {
+            Text(names[id] ?: "카드", fontWeight = FontWeight.SemiBold, color = Gray900, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${p.label} · ${Formatters.formatDateTime(p.fetchedAt)} 기준", style = MaterialTheme.typography.labelSmall, color = Gray600)
+          }
+          Text("%,d".format(p.amount), fontWeight = FontWeight.Bold, color = Gray900)
+        }
+      }
+    }
+  }
+}

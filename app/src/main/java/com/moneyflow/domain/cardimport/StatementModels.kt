@@ -26,7 +26,9 @@ data class StatementExtraction(
   /** Benefits found on a benefit screen (AI reading only); accountId is set when saving. */
   val benefits: List<com.moneyflow.data.model.CardBenefitEntity> = emptyList(),
   /** The amount to be paid ("결제하실 금액") found on the screen. */
-  val bill: com.moneyflow.domain.card.BillInfo? = null
+  val bill: com.moneyflow.domain.card.BillInfo? = null,
+  /** The point balance found on the screen (2.20). */
+  val points: com.moneyflow.domain.card.PointInfo? = null
 ) {
-  val isEmpty: Boolean get() = items.isEmpty() && performance.isEmpty() && benefits.isEmpty() && bill == null
+  val isEmpty: Boolean get() = items.isEmpty() && performance.isEmpty() && benefits.isEmpty() && bill == null && points == null
 }

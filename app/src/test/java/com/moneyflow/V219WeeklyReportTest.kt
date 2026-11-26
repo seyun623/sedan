@@ -34,3 +34,26 @@ class V219WeeklyReportTest {
     assertEquals(false, WeeklyReport.due(monday, 50_000, emptyList(), null, null, emptySet())!!.text.contains("평소"))
   }
 }
+
+/** 2.20: 포인트 모아보기 (point balance read from card company screens). */
+class V220PointsTest {
+  @Test fun findsThePointBalance() {
+    val p = com.moneyflow.domain.card.PointText.find("마이신한포인트\n12,345P\n소멸 예정 포인트 1,000P")!!
+    assertEquals("마이신한포인트", p.label)
+    assertEquals(12_345L, p.amount)
+    assertEquals(3_200L, com.moneyflow.domain.card.PointText.find("포인트리 3,200점")!!.amount)
+    assertEquals("마일리지", com.moneyflow.domain.card.PointText.find("보유 마일리지 1,520마일")!!.label)
+  }
+
+  @Test fun notExpiringOrRates() {
+    assertNull(com.moneyflow.domain.card.PointText.find("소멸 예정 포인트 500P\n포인트 적립률 1%"))
+    assertNull(com.moneyflow.domain.card.PointText.find("스타벅스 5,600원"))
+  }
+
+  @Test fun statementParserKeepsPoints() {
+    val r = com.moneyflow.domain.cardimport.StatementTextParser(LocalDate.of(2026, 11, 26)).parse("11.20 스타벅스 5,600원\n하나머니 8,000")
+    assertEquals(null, r.points)
+    val r2 = com.moneyflow.domain.cardimport.StatementTextParser(LocalDate.of(2026, 11, 26)).parse("11.20 스타벅스 5,600원\n하나머니 8,000P")
+    assertEquals(8_000L, r2.points!!.amount)
+  }
+}

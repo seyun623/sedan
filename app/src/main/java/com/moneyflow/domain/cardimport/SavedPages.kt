@@ -73,7 +73,8 @@ object SavedPages {
       performance = readings.flatMap { it.performance }.distinct(),
       readBy = readBy,
       benefits = readings.flatMap { it.benefits }.distinctBy { it.title.replace(" ", "") },
-      bill = readings.firstNotNullOfOrNull { it.bill }
+      bill = readings.firstNotNullOfOrNull { it.bill },
+      points = readings.firstNotNullOfOrNull { it.points }
     )
   }
 }

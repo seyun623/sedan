@@ -58,7 +58,9 @@ data class HomeUiState(
   /** 실적 status of cards that have 실적 settings. */
   val cardStatuses: List<com.moneyflow.domain.card.CardStatus> = emptyList(),
   /** "어디서 어떤 카드?" rows from registered card benefits. */
-  val cardGuide: List<com.moneyflow.domain.card.CardGuideRow> = emptyList()
+  val cardGuide: List<com.moneyflow.domain.card.CardGuideRow> = emptyList(),
+  /** 포인트 모아보기 (2.20): saved point balances of existing card accounts. */
+  val cardPoints: Map<Long, com.moneyflow.domain.card.CardPoint> = emptyMap()
 ) {
   val hasNoAccounts: Boolean get() = !isLoading && accounts.isEmpty()
 }
@@ -118,7 +120,8 @@ class HomeViewModel @Inject constructor(
       goals = goals,
       isLockEnabled = s.isLockEnabled,
       cardStatuses = cardStatuses.filter { it.target > 0 },
-      cardGuide = cardGuide
+      cardGuide = cardGuide,
+      cardPoints = s.cardPoints.filterKeys { id -> accounts.any { it.id == id } }.filterValues { it.amount > 0 }
     )
   }
 

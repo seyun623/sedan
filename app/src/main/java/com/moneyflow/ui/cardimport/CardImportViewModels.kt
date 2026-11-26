@@ -353,7 +353,8 @@ class CardBrowserViewModel @Inject constructor(
       val result: StatementExtraction = if (useAi) {
         try {
           aiReader.read(screenText, clock.today()).let { r ->
-            if (r.bill != null) r else r.copy(bill = com.moneyflow.domain.card.BillText.find(screenText, clock.today()))
+            (if (r.bill != null) r else r.copy(bill = com.moneyflow.domain.card.BillText.find(screenText, clock.today())))
+              .let { x -> if (x.points != null) x else x.copy(points = com.moneyflow.domain.card.PointText.find(screenText)) }
           }
         } catch (e: com.moneyflow.ai.AiRequestException) {
           // The AI didn't answer: what the device can read is better than nothing.
@@ -392,6 +393,7 @@ data class PreviewState(
   val savePerformance: Boolean = true,
   /** Keep the bill (결제 예정 금액) on the card account. */
   val saveBill: Boolean = true,
+  val savePoints: Boolean = true,
   /** Record installment purchases as monthly parts. */
   val splitInstallments: Boolean = false,
   /** Indexes of extraction.benefits to add. */
@@ -404,7 +406,7 @@ data class PreviewState(
 ) {
   val canImport: Boolean get() = !busy && (account != null || createNew) &&
     (selected.isNotEmpty() || selectedBenefits.isNotEmpty() || (savePerformance && extraction?.performance?.isNotEmpty() == true) ||
-      (saveBill && extraction?.bill != null))
+      (saveBill && extraction?.bill != null) || (savePoints && extraction?.points != null))
 }
 
 @HiltViewModel
@@ -477,6 +479,7 @@ class CardImportPreviewViewModel @Inject constructor(
 
   fun setSavePerformance(on: Boolean) { _state.value = _state.value.copy(savePerformance = on) }
   fun setSaveBill(on: Boolean) { _state.value = _state.value.copy(saveBill = on) }
+  fun setSavePoints(on: Boolean) { _state.value = _state.value.copy(savePoints = on) }
   fun setSplitInstallments(on: Boolean) { _state.value = _state.value.copy(splitInstallments = on) }
 
   fun toggleBenefit(index: Int) {
@@ -509,6 +512,8 @@ class CardImportPreviewViewModel @Inject constructor(
     if (s.savePerformance) s.extraction?.performance?.firstOrNull()?.let { repo.savePerformance(account.id, it) }
     val bill = s.extraction?.bill?.takeIf { s.saveBill }
     bill?.let { repo.saveBill(account.id, it) }
+    val points = s.extraction?.points?.takeIf { s.savePoints }
+    points?.let { repo.savePoints(account.id, it) }
     val benefits = s.extraction?.benefits.orEmpty().filterIndexed { i, _ -> i in s.selectedBenefits }
     val benefitResult = if (benefits.isEmpty()) null else cards.addBenefits(account.id, benefits, setTargetIfMissing = true)
     session.clear()
@@ -518,6 +523,7 @@ class CardImportPreviewViewModel @Inject constructor(
       if (result.skipped > 0) append(" ${result.skipped}건은 건너뛰었어요.")
       benefitResult?.let { append(" ${benefitMessage(it)}") }
       bill?.let { append(" 결제 예정 금액 ${com.moneyflow.util.Formatters.formatCurrency(it.amount)}을 저장했어요.") }
+      points?.let { append(" ${it.label} ${"%,d".format(it.amount)}을 저장했어요.") }
       if (isEmpty()) append("실적을 저장했어요.")
     }.trim())
     _state.value = _state.value.copy(busy = false)

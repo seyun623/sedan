@@ -39,7 +39,7 @@ class ReceiptParser(private val today: LocalDate) {
         if (amount != null && amount in 100..100_000_000) return amount to i
       }
     }
-    val all = lines.withIndex().filter { !NOT_TOTAL.containsMatchIn(it.value) && !PHONE_OR_NUMBER.containsMatchIn(it.value) }
+    val all = lines.withIndex().filter { !NOT_TOTAL.containsMatchIn(it.value) && !PHONE_OR_NUMBER.containsMatchIn(it.value) && DATE.find(it.value) == null && !TIME.containsMatchIn(it.value) }
       .mapNotNull { (i, l) -> amountIn(l)?.takeIf { it in 100..100_000_000 }?.let { it to i } }
     return all.maxByOrNull { it.first }
   }
@@ -79,6 +79,7 @@ class ReceiptParser(private val today: LocalDate) {
 
   companion object {
     private val AMOUNT = Regex("(?<![0-9.,])([0-9]{1,3}(?:[,.][0-9]{3})+|[0-9]{3,8})\\s*원?(?![0-9])")
+    private val TIME = Regex("(?<![0-9])[0-2]?[0-9]:[0-5][0-9]")
     private val ONLY_AMOUNT = Regex("[₩\\s]*[0-9][0-9,]{2,12}\\s*원?")
     /** Totals, best first. */
     private val TOTALS = listOf(

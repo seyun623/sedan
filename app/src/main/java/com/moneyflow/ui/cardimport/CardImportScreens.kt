@@ -782,6 +782,23 @@ fun CardImportPreviewScreen(
         }
       }
 
+      extraction.points?.let { pt ->
+        item(key = "points") {
+          Surface(shape = RoundedCornerShape(16.dp), color = CardSurface, modifier = Modifier.fillMaxWidth().testTag("preview_points")) {
+            Column(Modifier.padding(16.dp)) {
+              Row(Modifier.fillMaxWidth()) {
+                Text(pt.label, fontWeight = FontWeight.Bold, color = Gray900, modifier = Modifier.weight(1f))
+                Text("%,d".format(pt.amount), fontWeight = FontWeight.Bold, color = Gray900)
+              }
+              Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Text("이 카드의 포인트로 저장 (자산 탭 → 포인트 모아보기)", modifier = Modifier.weight(1f), color = Gray900)
+                Switch(checked = s.savePoints, onCheckedChange = viewModel::setSavePoints)
+              }
+            }
+          }
+        }
+      }
+
       if (extraction.benefits.isNotEmpty()) {
         item(key = "benefits") {
           Surface(shape = RoundedCornerShape(16.dp), color = CardSurface, modifier = Modifier.fillMaxWidth()) {

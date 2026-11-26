@@ -156,6 +156,12 @@ fun HomeScreen(
       }
     }
 
+    if (state.cardPoints.isNotEmpty()) {
+      item(key = "card_points") {
+        CardPointsCard(points = state.cardPoints, names = state.accounts.associate { it.id to it.name }, onOpenAccount = onOpenAccount)
+      }
+    }
+
     groups.forEach { group ->
       item(key = "group_${group.title}") {
         AccountSectionHeader(title = group.title, count = group.accounts.size, total = group.total, isDebt = group.isDebt)

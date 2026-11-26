@@ -79,7 +79,12 @@ class TransactionFormViewModel @Inject constructor(
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
   /** Recently used #tags (quick chips under the memo). */
-  val recentTags: StateFlow<List<String>> = ledger.transactions.map { com.moneyflow.util.Tags.recent(it) }
+  val recentTags: StateFlow<List<String>> = kotlinx.coroutines.flow.combine(ledger.transactions, settings.settings) { txs, s ->
+    val recent = com.moneyflow.util.Tags.recent(txs)
+    // With family sync on, #공동 (가족 정산) is always offered.
+    val shared = com.moneyflow.domain.family.FamilySettlement.DEFAULT_TAG
+    if (s.familySyncEnabled && shared !in recent) recent.take(7) + shared else recent
+  }
     .flowOn(kotlinx.coroutines.Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

@@ -19,7 +19,8 @@ class StatementTextParser(private val today: LocalDate) {
     val items = if (merchantBeforeDate(lines, dated.map { it.first })) parseMerchantFirst(lines, dated) else parseDateFirst(lines, dated)
     return StatementExtraction(
       items.filterNot { SUMMARY.containsMatchIn(it.merchant) }, findPerformance(lines), READ_LOCAL,
-      bill = com.moneyflow.domain.card.BillText.find(text, today)
+      bill = com.moneyflow.domain.card.BillText.find(text, today),
+      points = com.moneyflow.domain.card.PointText.find(text)
     )
   }
 
