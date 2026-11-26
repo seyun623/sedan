@@ -92,7 +92,7 @@ class FamilyRepository @Inject constructor(
     /** false: a file older than the loaded copy is ignored (automatic sync). */
     allowOlder: Boolean = true
   ): FamilyImportResult {
-    val content = withContext(Dispatchers.Default) { backups.readBackup(file, password) }
+    val content = withContext(Dispatchers.Default) { backups.readBackup(file, password, newerDbOk = true) }
     val ownId = settings.installId()
     if (content.deviceId.isNotEmpty() && content.deviceId == ownId) {
       throw FamilyImportException("이 휴대폰에서 만든 백업이에요. 가족이 자기 휴대폰에서 만든 백업 파일을 골라 주세요.")

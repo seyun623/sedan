@@ -91,8 +91,10 @@ class DriveClient(
   fun download(fileId: String): ByteArray = call("GET", "$API/files/${enc(fileId)}?alt=media&supportsAllDrives=true", null, null)
 
   /** Replaces a file's content; the file stays owned by whoever created it. */
-  fun update(fileId: String, content: ByteArray) {
-    call("PATCH", "$UPLOAD/files/${enc(fileId)}?uploadType=media&supportsAllDrives=true", content, "application/octet-stream")
+  /** Replaces the file's contents; returns Drive's new modifiedTime ("" if not reported). */
+  fun update(fileId: String, content: ByteArray): String {
+    val body = call("PATCH", "$UPLOAD/files/${enc(fileId)}?uploadType=media&supportsAllDrives=true&fields=modifiedTime", content, "application/octet-stream")
+    return runCatching { JSONObject(body.toString(Charsets.UTF_8)).optString("modifiedTime") }.getOrDefault("")
   }
 
   private fun list(query: String): List<DriveFile> {

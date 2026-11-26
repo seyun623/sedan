@@ -6,6 +6,7 @@ import com.moneyflow.domain.backup.NotABackupFileException
 import com.moneyflow.data.repository.BackupFormatException
 import com.moneyflow.domain.backup.WrongPasswordException
 import com.moneyflow.security.SecretStore
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.IOException
@@ -78,6 +79,8 @@ class FamilySyncRepository @Inject constructor(
   suspend fun adoptRestoredFile(file: com.moneyflow.drive.DriveFile, password: String) {
     settings.setFamilySync(memberName(file.name), secrets.encrypt(password))
     settings.setFamilySyncFile(file.name, clock.nowMillis(), settings.familySyncGenerations().first)
+    // This phone takes the file over: the old phone's writes are no longer "mine".
+    settings.setFamilySyncMyModified(null)
     // The restored copy came from this file, so it is not another member's file.
     settings.setFamilySyncSeen(settings.familySyncSeen() - file.id)
   }
@@ -108,10 +111,22 @@ class FamilySyncRepository @Inject constructor(
       val (generation, uploadedGeneration) = settings.familySyncGenerations()
       if (mine == null) {
         problems += "드라이브 폴더에서 내 가족 파일 '$myName'을(를) 찾지 못했어요. 지웠다면 '내 가족 파일 만들기'를 다시 해 주세요. (방금 만들었다면 1~2분 뒤 다시 시도)"
-      } else if (forceUpload || generation != uploadedGeneration || now - s.familySyncLastUploadAt >= DAY_MS) {
-        // The version is read before the snapshot: a change made meanwhile stays "to upload".
-        drive.overwrite(mine.id, backups.createBackup(pw, BuildConfig.VERSION_NAME))
-        uploadedGen = generation
+      } else {
+        // Someone else wrote my file since my last upload: an old phone after moving to a new one,
+        // or another family member with the same name. Don't overwrite each other back and forth.
+        val lastMine = settings.familySyncMyModified()
+        val takenOver = lastMine != null && mine.modifiedTime.isNotEmpty() && mine.modifiedTime != lastMine
+        if (takenOver && !forceUpload) {
+          problems += "드라이브의 '$myName' 파일을 다른 휴대폰이 바꿨어요. 휴대폰을 바꿨다면 예전 휴대폰에서 가족 자동 합산을 꺼 주세요. " +
+            "같은 이름의 가족이 있다면 한 사람의 이름을 바꿔 주세요. 이 휴대폰의 기록으로 덮어쓰려면 '지금 합산'을 누르세요."
+        } else if (forceUpload || generation != uploadedGeneration || now - s.familySyncLastUploadAt >= DAY_MS) {
+          // The version is read before the snapshot: a change made meanwhile stays "to upload".
+          val written = drive.overwrite(mine.id, backups.createBackup(pw, BuildConfig.VERSION_NAME))
+          uploadedGen = generation
+          settings.setFamilySyncMyModified(written)
+          // Kept even if a download below fails (otherwise every run uploads again).
+          settings.setFamilySyncResult(now, now, generation, null)
+        }
       }
 
       val seen = settings.familySyncSeen().toMutableMap()
@@ -141,11 +156,20 @@ class FamilySyncRepository @Inject constructor(
           throw e
         } catch (e: IOException) {
           throw e
+        } catch (e: com.moneyflow.drive.DriveException) {
+          // Drive busy for a moment (429 / 5xx): try the whole run later, don't mark the file failed.
+          if (e.transient) throw e
+          failed[f.id] = f.modifiedTime
+          problems += "'${f.name}': " + (e.message ?: "읽지 못했어요.")
         } catch (e: Exception) {
           // One bad file (newer app version, deleted meanwhile …) must not stop the others.
           failed[f.id] = f.modifiedTime
           problems += "'${f.name}': " + (if (e is BackupFormatException) "더 새 버전의 앱에서 만든 파일이에요. 앱을 업데이트해 주세요." else e.message ?: "읽지 못했어요.")
         }
+      }
+      // Two members with the same name (a reinstalled phone sends a new file): both are counted.
+      family.members.first().groupBy { it.name }.filter { it.value.size > 1 }.keys.forEach { name ->
+        problems += "가족 '$name'이(가) 두 번 들어와 있어요 (휴대폰을 다시 설치한 경우). 가족 화면에서 오래된 '$name'을(를) 지워 주세요."
       }
       // Forget files that were removed from the folder (the listing worked, so this is real).
       settings.setFamilySyncSeen(seen.filterKeys { id -> files.any { it.id == id } })

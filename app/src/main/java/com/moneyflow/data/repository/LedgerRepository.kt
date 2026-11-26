@@ -125,8 +125,10 @@ class LedgerRepository @Inject constructor(
 
   /** Must be called inside a DB transaction. */
   internal suspend fun deleteWithEffects(tx: TransactionEntity) {
-    txDao.delete(tx)
-    revertEffects(tx)
+    // The list may be stale (deleted or edited meanwhile): undo what is stored, and only once.
+    val current = txDao.getById(tx.id) ?: return
+    txDao.delete(current)
+    revertEffects(current)
   }
 
   private suspend fun validate(tx: TransactionEntity): String? {

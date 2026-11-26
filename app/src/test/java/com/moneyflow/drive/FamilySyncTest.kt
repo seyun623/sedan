@@ -66,7 +66,7 @@ class FamilySyncTest {
         method == "PATCH" -> {
           val f = files.getValue(url.substringAfter("/files/").substringBefore("?"))
           f.bytes = body!!; f.version++
-          json("{}")
+          json("""{"modifiedTime":"v${f.version}"}""")
         }
         else -> 404 to "{}".toByteArray()
       }
@@ -243,6 +243,17 @@ class FamilySyncTest {
     newPhone.spend(5_000, "새 폰에서")
     assertTrue(newPhone.sync.sync()!!.uploaded)
     assertTrue(wife.sync.sync()!!.loaded.contains("세윤"))
+
+    // 2.15.5: the old phone (still on in a drawer) must not overwrite the new phone's file.
+    val before = folder.byName(myFile).version
+    me.spend(1_000, "예전 폰")
+    val old = me.sync.sync()!!
+    assertTrue(!old.uploaded)
+    assertTrue(old.problems.joinToString(), old.problems.any { it.contains("다른 휴대폰") })
+    assertEquals(before, folder.byName(myFile).version)
+    // The new phone keeps uploading as before.
+    newPhone.spend(2_000, "또")
+    assertTrue(newPhone.sync.sync()!!.uploaded)
     newPhone.db.close()
   }
 

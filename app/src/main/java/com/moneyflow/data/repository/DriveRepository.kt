@@ -65,7 +65,8 @@ class DriveRepository @Inject constructor(
 
   suspend fun download(fileId: String): ByteArray = withContext(Dispatchers.IO) { client().download(fileId) }
 
-  suspend fun overwrite(fileId: String, bytes: ByteArray) = withContext(Dispatchers.IO) { client().update(fileId, bytes) }
+  /** Replaces a file's contents; returns its new modifiedTime on Drive ("" if unknown). */
+  suspend fun overwrite(fileId: String, bytes: ByteArray): String = withContext(Dispatchers.IO) { client().update(fileId, bytes) }
 
   /** Overwrites the file called [name] in the folder (made earlier on the phone; the bot can't create files). */
   suspend fun overwriteByName(name: String, bytes: ByteArray) {

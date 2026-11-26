@@ -209,6 +209,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val FAMILY_SYNC_GEN = longPreferencesKey("family_sync_generation")
     val FAMILY_SYNC_UP_GEN = longPreferencesKey("family_sync_uploaded_generation")
     val FAMILY_SYNC_FAILED = stringPreferencesKey("family_sync_failed_json")
+    /** Drive modifiedTime of my family file right after this phone last wrote it. */
+    val FAMILY_SYNC_MY_MODIFIED = stringPreferencesKey("family_sync_my_modified")
     val FAMILY_SYNC_SEEN = stringPreferencesKey("family_sync_seen_json")
     val RECURRING_DISMISSED = androidx.datastore.preferences.core.stringSetPreferencesKey("recurring_suggestions_dismissed")
     fun aiKey(p: AiProvider) = stringPreferencesKey("ai_key_${p.name}")
@@ -368,6 +370,12 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     it[Keys.CARD_PERFORMANCE] = json.toString()
   }
 
+  /** Forgets card bills and 실적 read from card companies (after a restore: account ids changed). */
+  suspend fun clearCardFigures() = store.edit {
+    it.remove(Keys.CARD_BILLS)
+    it.remove(Keys.CARD_PERFORMANCE)
+  }
+
   suspend fun setCardBill(accountId: Long, bill: com.moneyflow.domain.card.CardBill) = store.edit {
     val map = parseBills(it[Keys.CARD_BILLS]).toMutableMap()
     map[accountId] = bill
@@ -502,6 +510,12 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
    * Result of a sync run. [uploadedGeneration] is the data version that was uploaded (null = no
    * upload); a change made while uploading keeps a newer version, so it is uploaded next time.
    */
+  /** modifiedTime of my family file after my last upload (null: not known yet, e.g. after taking a file over). */
+  suspend fun familySyncMyModified(): String? = store.data.first()[Keys.FAMILY_SYNC_MY_MODIFIED]
+  suspend fun setFamilySyncMyModified(value: String?) = store.edit {
+    if (value.isNullOrEmpty()) it.remove(Keys.FAMILY_SYNC_MY_MODIFIED) else it[Keys.FAMILY_SYNC_MY_MODIFIED] = value
+  }
+
   suspend fun setFamilySyncResult(at: Long, uploadedAt: Long?, uploadedGeneration: Long?, error: String?) = store.edit {
     it[Keys.FAMILY_SYNC_LAST] = at
     if (uploadedAt != null && uploadedGeneration != null) {

@@ -115,11 +115,15 @@ class BackupRepository @Inject constructor(
       ?.let { db.familyDao().byDevice(it)?.name }
 
   /** Decrypts and validates a backup file. Throws WrongPasswordException / NotABackupFileException / BackupFormatException. */
-  fun readBackup(file: ByteArray, password: CharArray): BackupContent {
+  /**
+   * @param newerDbOk read a file from a newer app whose JSON layout is unchanged (family view: only
+   *   records are read, and a database version bump usually just adds a column).
+   */
+  fun readBackup(file: ByteArray, password: CharArray, newerDbOk: Boolean = false): BackupContent {
     val text = BackupCrypto.decrypt(file, password).toString(Charsets.UTF_8)
     val root = try { JSONObject(text) } catch (e: Exception) { throw BackupFormatException("백업 내용을 읽을 수 없어요.") }
     if (root.optString("format") != FORMAT) throw BackupFormatException("머니플로우 백업 파일이 아니에요.")
-    if (root.optInt("formatVersion") > FORMAT_VERSION || root.optInt("dbVersion") > AppDatabase.VERSION) {
+    if (root.optInt("formatVersion") > FORMAT_VERSION || (!newerDbOk && root.optInt("dbVersion") > AppDatabase.VERSION)) {
       throw BackupFormatException("더 새로운 버전의 앱에서 만든 백업이에요. 앱을 업데이트한 뒤 다시 시도해 주세요.")
     }
     try {
@@ -209,7 +213,16 @@ class BackupRepository @Inject constructor(
       db.cardDao().insertProfiles(content.cardProfiles)
       db.cardDao().insertBenefits(content.cardBenefits)
       db.ruleDao().insertAll(content.categoryRules)
+      // This phone becomes the backup's person: a family-member copy of that person (loaded
+      // earlier from the family folder) would count their records twice.
+      if (content.deviceId.isNotEmpty()) db.familyDao().byDevice(content.deviceId)?.let { m ->
+        db.familyDao().clearGoals(m.id)
+        db.familyDao().clearTransactions(m.id)
+        db.familyDao().deleteMember(m.id)
+      }
     }
+    // Card bills and 실적 figures are kept per account id, which now names other accounts.
+    settings.clearCardFigures()
     // The same person on a new phone: family members' copies of this person keep updating in place.
     if (content.deviceId.isNotEmpty()) settings.setInstallId(content.deviceId)
     // The default auto-capture account may not exist in the restored data.

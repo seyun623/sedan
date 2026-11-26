@@ -23,11 +23,16 @@ import java.util.concurrent.TimeUnit
 class FamilySyncWorker @AssistedInject constructor(
   @Assisted context: Context,
   @Assisted params: WorkerParameters,
-  private val sync: FamilySyncRepository
+  private val sync: FamilySyncRepository,
+  private val settings: com.moneyflow.data.repository.SettingsRepository
 ) : CoroutineWorker(context, params) {
 
   override suspend fun doWork(): Result = try {
     sync.sync()
+    // Changes made while this run was uploading go out in one more run.
+    val (generation, uploaded) = settings.familySyncGenerations()
+    // (Appended: this run is itself the unique "now" work, which KEEP would leave as it is.)
+    if (generation > uploaded && settings.current().familySyncEnabled) runSoon(applicationContext, followUp = true)
     Result.success()
   } catch (e: kotlinx.coroutines.CancellationException) {
     throw e
@@ -53,10 +58,11 @@ class FamilySyncWorker @AssistedInject constructor(
     }
 
     /** Soon after the records change (several changes in a row become one upload). */
-    fun runSoon(context: Context, delaySeconds: Long = 60) {
+    fun runSoon(context: Context, delaySeconds: Long = 60, followUp: Boolean = false) {
       WorkManager.getInstance(context).enqueueUniqueWork(
-        // APPEND_OR_REPLACE: a sync already running finishes; the data version makes sure later changes upload next.
-        "family-sync-now", ExistingWorkPolicy.APPEND_OR_REPLACE,
+        // KEEP: changes in a row become one upload (a waiting run reads the newest data); a change made
+        // while a run is uploading is picked up by the follow-up run that doWork() schedules.
+        "family-sync-now", if (followUp) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP,
         OneTimeWorkRequestBuilder<FamilySyncWorker>()
           .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
           .setConstraints(network)
