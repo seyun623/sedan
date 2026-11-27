@@ -60,7 +60,8 @@ import com.moneyflow.util.BiometricAuthHelper
 fun DeviceLockScreen(
   onUnlocked: () -> Unit,
   /** The phone has no screen lock any more: the app can't ask for one. */
-  onNoDeviceLock: () -> Unit
+  onNoDeviceLock: () -> Unit,
+  fingerprintFirst: Boolean = false
 ) {
   val activity = androidx.activity.compose.LocalActivity.current as? FragmentActivity
   var message by remember { mutableStateOf<String?>(null) }
@@ -72,6 +73,8 @@ fun DeviceLockScreen(
     message = null
     BiometricAuthHelper.showDeviceLockPrompt(
       activity = act,
+      fingerprintFirst = fingerprintFirst,
+      subtitle = if (fingerprintFirst) "지문으로 확인해요 (휴대폰 PIN·패턴도 돼요)" else "휴대폰 잠금(지문·얼굴·패턴·PIN)으로 확인해요",
       onSuccess = onUnlocked,
       onError = { code, err ->
         // Cancelled by the user: just stay on this screen.

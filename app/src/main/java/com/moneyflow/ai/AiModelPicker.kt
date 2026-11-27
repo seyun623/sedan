@@ -31,4 +31,20 @@ object AiModelPicker {
     }
     return preferences.firstNotNullOfOrNull { p -> usable.firstOrNull(p) } ?: usable.first()
   }
+
+  /**
+   * Other models to try when the chosen one hit its free quota (429): each Gemini model has its
+   * own daily limit, so a lighter or another flash model usually still answers. Best first, at most 3.
+   */
+  fun quotaAlternatives(provider: AiProvider, models: List<String>, exclude: String): List<String> {
+    if (provider != AiProvider.GEMINI) return emptyList()
+    val usable = models.filter { it != exclude && !UNSUITABLE.containsMatchIn(it) && it.contains("gemini") && !it.contains("exp") }
+    val order: List<(String) -> Boolean> = listOf(
+      { it.contains("flash-lite") && !it.contains("preview") },
+      { it.contains("flash") && !it.contains("preview") },
+      { it.contains("flash") },
+      { it.contains("gemma") }
+    )
+    return order.flatMap { p -> usable.filter(p) }.distinct().take(3)
+  }
 }

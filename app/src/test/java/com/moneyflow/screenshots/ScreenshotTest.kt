@@ -121,7 +121,7 @@ class ScreenshotTest {
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
-  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus, com.moneyflow.ui.common.PrefillStore())
+  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus, com.moneyflow.domain.receipt.AiReceiptReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), com.moneyflow.ui.common.PrefillStore())
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
@@ -142,7 +142,8 @@ class ScreenshotTest {
   @Test fun captureDark() { val vm = settingsVm(); val diag = diagVm(); shot("09_autocapture", true) { com.moneyflow.ui.settings.AutoCaptureSettingsScreen({}, viewModel = vm, diagnostics = diag) } }
   private fun accountVm() = com.moneyflow.ui.account.AccountDetailViewModel(
     SavedStateHandle(mapOf(com.moneyflow.ui.account.ARG_ACCOUNT_ID to 3L)), ledger, settings, com.moneyflow.data.repository.CardRepository(db, clock),
-    com.moneyflow.domain.card.BenefitReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), bus)
+    com.moneyflow.domain.card.BenefitReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), bus,
+    androidx.test.core.app.ApplicationProvider.getApplicationContext())
   @Test fun accountLight() { val vm = accountVm(); shot("10_account", false) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   @Test fun accountDark() { val vm = accountVm(); shot("10_account", true) { com.moneyflow.ui.account.AccountDetailScreen({}, {}, viewModel = vm) } }
   private fun backupVm() = com.moneyflow.ui.settings.BackupViewModel(

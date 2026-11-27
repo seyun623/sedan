@@ -48,7 +48,8 @@ class MainActivity : FragmentActivity() {
           s == null -> Box(Modifier.fillMaxSize().background(Gray100))
           s.usesDeviceLock && locked -> com.moneyflow.ui.lock.DeviceLockScreen(
             onUnlocked = appViewModel::unlockWithDeviceLock,
-            onNoDeviceLock = appViewModel::deviceLockMissing
+            onNoDeviceLock = appViewModel::deviceLockMissing,
+            fingerprintFirst = s.deviceLockFingerprint
           )
           s.isLockEnabled && locked -> LockScreen(
             settings = s,

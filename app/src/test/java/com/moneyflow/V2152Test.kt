@@ -49,7 +49,8 @@ class V2152Test {
     assertEquals(3, calls)
     // Always busy: the user gets the message after three tries.
     calls = 0
-    val busy = HttpTransport { _, _, _, _ -> calls++; 503 to "{}" }
+    // (3.0.1: then it looks for other models with their own limit; the list here is empty.)
+    val busy = HttpTransport { method, _, _, _ -> if (method == "POST") calls++; 503 to "{}" }
     val ai2 = AiService(settings, PlainSecretStore, GeminiClient().apply { transport = busy }, OpenAiCompatClient())
     assertTrue(runCatching { ai2.completeJson("p", JSONObject(), "{}") }.exceptionOrNull() is AiBusyException)
     assertEquals(3, calls)

@@ -94,3 +94,26 @@ class ReceiptParser(private val today: LocalDate) {
     private val DATE = Regex("(?<![0-9])(20[0-9]{2}|[0-9]{2})\\s*[-./년]\\s*([0-9]{1,2})\\s*[-./월]\\s*([0-9]{1,2})")
   }
 }
+
+/** Reads a receipt photo with the AI (Gemini) when the phone's text reading found nothing. */
+class AiReceiptReader @javax.inject.Inject constructor(private val ai: com.moneyflow.ai.AiService) {
+  suspend fun canRead(): Boolean = ai.isReady() && ai.canSearchWeb()
+
+  suspend fun read(jpeg: ByteArray, today: LocalDate): ReceiptInfo? {
+    val schema = org.json.JSONObject().put("type", "OBJECT").put("properties", org.json.JSONObject()
+      .put("total", org.json.JSONObject().put("type", "INTEGER"))
+      .put("merchant", org.json.JSONObject().put("type", "STRING"))
+      .put("date", org.json.JSONObject().put("type", "STRING"))
+      .put("items", org.json.JSONObject().put("type", "ARRAY").put("items", org.json.JSONObject().put("type", "STRING"))))
+      .put("required", org.json.JSONArray(listOf("total")))
+    val prompt = "이 사진은 한국 영수증입니다. 실제로 결제한 합계 금액(원), 가게 이름, 결제 날짜(YYYY-MM-DD), 산 물건 이름 최대 5개를 읽어 주세요. " +
+      "사진에 없는 값은 만들지 말고 비워 두세요. 영수증이 아니면 total을 0으로 하세요."
+    val base64 = android.util.Base64.encodeToString(jpeg, android.util.Base64.NO_WRAP)
+    val json = org.json.JSONObject(ai.completeJson(prompt, schema, """{"total":12300,"merchant":"","date":"","items":[]}""", "image/jpeg" to base64))
+    val total = json.optLong("total", 0L).takeIf { it in 100..100_000_000 } ?: return null
+    val date = runCatching { LocalDate.parse(json.optString("date").trim()) }.getOrNull()
+      ?.takeIf { !it.isAfter(today.plusDays(1)) && it.isAfter(today.minusYears(2)) }
+    val items = json.optJSONArray("items")?.let { a -> (0 until a.length()).map { a.optString(it).trim().take(20) }.filter { it.length >= 2 }.distinct().take(5) }.orEmpty()
+    return ReceiptInfo(total, json.optString("merchant").trim().take(30), date, items)
+  }
+}

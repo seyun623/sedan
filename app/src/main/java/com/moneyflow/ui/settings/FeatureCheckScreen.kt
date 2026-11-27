@@ -49,6 +49,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -72,12 +73,12 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.0.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.0.1. */
   val all = listOf(
     FeatureCheck(
-      "start_guide", "홈 '시작하기'·설정 정리", "3.0",
+      "start_guide", "홈 '시작하기'·설정 정리", "3.0.1",
       listOf(
-        "홈 위쪽 '시작하기'에서 안 한 항목을 누르면 그 화면으로 가는지, '닫기'를 누르면 사라지는지 봐 주세요.",
+        "할 일을 이미 다 해 두셔서 '시작하기'가 안 보였던 거예요. 아래 '시작하기 다시 보이기'를 누르고 홈에서 ✅ 표시와 '닫기'를 봐 주세요.",
         "설정에서 '기록 도구'가 맨 위에 있고, '알림 설정'을 누르면 알림 6가지가 펼쳐지는지 봐 주세요."
       ),
       CheckTarget.SETTINGS, openLabel = "설정 열기"
@@ -91,8 +92,8 @@ object FeatureChecks {
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     ),
     FeatureCheck(
-      "card_points", "포인트 모아보기", "2.20",
-      listOf("카드사 가져오기 → 카드사 로그인 → 포인트 조회 화면에서 '이 화면 가져오기' → 미리보기의 포인트를 저장 → 자산 탭 '포인트 모아보기'에 나오는지 봐 주세요."),
+      "card_points", "포인트 모아보기", "3.0.1",
+      listOf("카드사 로그인 → ⋮ → '이용내역 메뉴 찾기'에 이제 포인트 메뉴도 나와요. 포인트 화면에서 '이 화면 가져오기' → 미리보기 맨 아래 포인트를 저장 → 자산 탭 '포인트 모아보기'에 나오는지 봐 주세요."),
       CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
@@ -101,10 +102,10 @@ object FeatureChecks {
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     ),
     FeatureCheck(
-      "receipt", "영수증 사진으로 입력", "2.18",
+      "receipt", "영수증 사진으로 입력", "3.0.1",
       listOf(
         "+ 버튼(내역 추가) → '📷 영수증 찍기'로 영수증을 찍거나 '앨범에서 고르기'로 사진을 고르세요.",
-        "금액·날짜·메모(가게 · 품목)가 채워지는지 봐 주세요. 틀리면 어떤 영수증(마트·카페 등)이었는지 적어 주세요."
+        "금액·날짜·메모(가게 · 품목)가 채워지는지 봐 주세요. 큰 사진도 줄여서 읽고, 휴대폰에서 못 읽으면 Gemini로 사진을 읽어요. 틀리면 어떤 영수증이었는지와 화면에 뜬 문구를 적어 주세요."
       )
     ),
     FeatureCheck(
@@ -117,17 +118,9 @@ object FeatureChecks {
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     ),
     FeatureCheck(
-      "bc_members", "우리·농협·IBK → BC카드로 가져오기", "2.17.2",
-      listOf("BC 마크가 있는 우리·농협·IBK 카드가 있으면: 카드사 가져오기 → '우리·농협·IBK 카드 (BC카드로)'에서 그 카드 → BC카드 로그인 → 카드 승인내역 → '이 화면 가져오기' → 그 카드 계좌에 기록되는지 봐 주세요."),
+      "bc_members", "우리·농협·IBK → BC카드로 가져오기", "3.0.1",
+      listOf("BC 마크가 있는 우리·농협·IBK 카드가 있으면: 카드사 가져오기 → '우리·농협·IBK 카드 (BC카드로)'에서 그 카드 → BC카드 로그인 → 카드 승인내역 → '이 화면 가져오기' → 미리보기에서 그 카드 내역만 골라 가져온 뒤, 남은 내역을 다른 카드로 이어서 가져올 수 있는지 봐 주세요."),
       CheckTarget.CARD_IMPORT
-    ),
-    FeatureCheck(
-      "capture_no_account", "결제수단이 없는 결제 기록", "2.17.1",
-      listOf(
-        "계좌로 등록하지 않은 카드·페이(카카오페이·네이버페이 등)로 결제해 보세요.",
-        "'최근 받은 결제 알림'에 '기록됨'이 뜨고, 자산 탭에 그 이름의 계좌(또는 '기타 결제수단')가 생기는지 봐 주세요. 안 되면 그 줄의 문구를 적어 주세요."
-      ),
-      CheckTarget.AUTO_CAPTURE, fullOnly = true
     ),
     FeatureCheck(
       "next_bill", "다음 결제 금액 (청구 안내)", "2.15",
@@ -138,13 +131,13 @@ object FeatureChecks {
       CheckTarget.AUTO_CAPTURE, fullOnly = true
     ),
     FeatureCheck(
-      "card_needed_only", "필요한 것만 가져오기", "2.15",
-      listOf("카드사 가져오기 → 하나카드(휴대폰 화면) 로그인 → 아래 '필요한 것만 가져오기' → 미리보기에 이용내역·결제 예정 금액이 나오는지 봐 주세요."),
+      "card_needed_only", "필요한 것만 가져오기", "3.0.1",
+      listOf("카드사 로그인 → '필요한 것만 가져오기' → 미리보기에 이번 달 결제 예정 금액과 최근 1달 이용내역만 나오는지 봐 주세요."),
       CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
-      "kb_login", "KB국민카드 로그인", "2.17.1",
-      listOf("카드사 가져오기 → KB국민카드: 처음엔 아래 버튼이 접혀 있어요. '다른 수단으로 로그인'이 화면 아래에서 올라오는지 봐 주세요. 버튼을 다시 열려면 위쪽 '가져오기'를 누르세요."),
+      "kb_login", "KB국민카드 로그인", "3.0.1",
+      listOf("카드사 가져오기 → KB국민카드 → '다른 로그인 방법 선택'을 누르면, 화면 밖에 걸리던 아래 창이 위로 올라와 고를 수 있는지 봐 주세요. (키보드를 열 때 화면이 검게 변하던 것도 고쳤어요)"),
       CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
@@ -153,8 +146,11 @@ object FeatureChecks {
       CheckTarget.CARD_IMPORT
     ),
     FeatureCheck(
-      "benefit_search", "카드 혜택 자동 찾기", "2.17.1",
-      listOf("자산 탭 → 카드 → 카드 혜택 → '혜택 찾기' → 카드 이름(예: 신한카드 Deep Dream)을 넣고 '찾기' → 혜택 목록이 나오는지 봐 주세요."),
+      "benefit_search", "카드 혜택 자동 찾기", "3.0.1",
+      listOf(
+        "자산 탭 → 카드 → '혜택 찾기' → 카드 이름을 넣고 '찾기' → 혜택과 함께 '실적 조건도 저장'(전월 실적·실적 제외)이 나오는지 봐 주세요.",
+        "한도 초과가 뜨면 다른 Gemini 모델로 자동으로 다시 시도해요. 그래도 안 되면 '한도가 풀리면 자동으로 찾아 등록하기'를 눌러 두고, 나중에 알림이 오는지 봐 주세요."
+      ),
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     ),
     FeatureCheck(
@@ -168,8 +164,8 @@ object FeatureChecks {
       CheckTarget.ANALYTICS
     ),
     FeatureCheck(
-      "security_pin", "보안: PIN 확인", "2.15.6",
-      listOf("앱 PIN을 쓰는 중이면: 설정 → 보안 → 생체 인증 켜기 / 복구 코드 새로 만들기를 누를 때 '현재 PIN 확인'이 먼저 뜨는지 봐 주세요."),
+      "security_pin", "보안: PIN 확인·지문으로 열기", "3.0.1",
+      listOf("앱 PIN을 쓰는 중이면: 설정 → 보안 → 생체 인증 켜기 / 복구 코드 새로 만들기를 누를 때 '현재 PIN 확인'이 먼저 뜨는지 봐 주세요.", "휴대폰 잠금으로 열기를 쓰면: 설정 → 앱 잠금 및 보안 → '지문으로 열기'를 켜고, 앱을 다시 열 때 지문을 먼저 묻는지 봐 주세요."),
       CheckTarget.SETTINGS, openLabel = "설정 열기"
     )
   )
@@ -203,8 +199,137 @@ class FeatureCheckViewModel @Inject constructor(
   @ApplicationContext private val context: Context,
   private val db: AppDatabase,
   private val clock: AppClock,
-  private val messages: UserMessageBus
+  private val messages: UserMessageBus,
+  private val settings: com.moneyflow.data.repository.SettingsRepository,
+  private val budgets: com.moneyflow.data.repository.BudgetRepository,
+  private val processor: com.moneyflow.domain.capture.AutoCaptureProcessor
 ) : ViewModel() {
+  /** Result of a "바로 시험" shown in a dialog (title, text). */
+  private val _demo = MutableStateFlow<Pair<String, String>?>(null)
+  val demo: StateFlow<Pair<String, String>?> = _demo.asStateFlow()
+  fun closeDemo() { _demo.value = null }
+
+  private val stats = com.moneyflow.domain.MonthlyStatsCalculator(clock.zone)
+
+  /** "바로 시험" button of a check, or null. */
+  fun trial(id: String): String? = when (id) {
+    "weekly_report" -> "지금 보내 보기"
+    "budget_carry" -> "이월 미리 보기"
+    "family_settle" -> "예시로 보기"
+    "family_more" -> "가족 예산 알림 시험"
+    "next_bill" -> "시험 청구 안내 넣기"
+    "vouchers" -> "시험 문자 읽어 보기"
+    "start_guide" -> "시작하기 다시 보이기"
+    else -> null
+  }
+
+  fun runTrial(id: String) = viewModelScope.launch {
+    runCatching {
+      when (id) {
+        "weekly_report" -> weeklyNow()
+        "budget_carry" -> carryPreview()
+        "family_settle" -> settleDemo()
+        "family_more" -> familyAlertTest()
+        "next_bill" -> billTest()
+        "vouchers" -> voucherTest()
+        "start_guide" -> { settings.resetStartGuide(); messages.show("홈에 '시작하기'를 다시 보여 드려요. 할 일을 모두 해 둔 상태면 '모두 완료'로 보여요.") }
+      }
+    }.onFailure { messages.show("시험하지 못했어요: ${it.message ?: "오류"}") }
+  }
+
+  private fun canNotify(): Boolean = Notifications.canNotify(context).also {
+    if (!it) messages.show("알림이 꺼져 있어요. 휴대폰 설정 → 애플리케이션 → 머니플로우 → 알림을 켜 주세요.")
+  }
+
+  /** Last week's report right now (any day of the week). */
+  private suspend fun weeklyNow() {
+    if (!canNotify()) return
+    val today = clock.today()
+    val monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    val start = com.moneyflow.domain.alerts.WeeklyReport.lastWeekStart(monday)
+    val dao = db.transactionDao()
+    suspend fun week(from: java.time.LocalDate) =
+      dao.getBetween(com.moneyflow.domain.MonthKeys.dayStartMillis(from, clock.zone), com.moneyflow.domain.MonthKeys.dayStartMillis(from.plusDays(7), clock.zone) - 1)
+    val last = week(start)
+    val spending = last.filter { it.type.isSpending }
+    val earlier = (1..4).map { week(start.minusWeeks(it.toLong())) }.filter { it.isNotEmpty() }.map { stats.budgetExpense(it.filter { t -> t.type.isSpending }) }
+    val top = stats.categoryBreakdown(last).firstOrNull()?.let { it.category to it.amount }
+    val biggest = spending.filter { it.type == TransactionType.EXPENSE }.maxByOrNull { it.amount }?.let { it.memo.ifBlank { it.category }.take(20) to it.amount }
+    val r = com.moneyflow.domain.alerts.WeeklyReport.due(monday, stats.budgetExpense(spending), earlier, top, biggest, emptySet())
+    if (r == null) { messages.show("지난주(${start.monthValue}.${start.dayOfMonth}~) 지출이 없어 보낼 리포트가 없어요."); return }
+    Notifications.post(context, r.copy(key = "test|weekly", title = "[시험] ${r.title}"))
+    messages.show("주간 리포트를 보냈어요. 알림창을 내려 확인해 주세요.")
+  }
+
+  private suspend fun carryPreview() {
+    val month = clock.currentMonth()
+    val budget = budgets.observeBudget(month).first()
+    val title = "예산 이월 미리 보기"
+    if (!budget.isSet) { _demo.value = title to "이번 달 예산이 없어요. 예산 탭에서 예산을 먼저 정해 주세요."; return }
+    val previous = budgets.observeBudget(month.minusMonths(1)).first()
+    if (!previous.isSet) { _demo.value = title to "지난달 예산이 없어서 넘길 금액이 없어요. (예산을 처음 정한 달 다음 달부터 이월돼요)"; return }
+    val carried = budgets.withCarry(budget, true, clock.zone)
+    val c = carried.carry
+    val won: (Long) -> String = { com.moneyflow.util.Formatters.formatCurrency(it) }
+    _demo.value = title to buildString {
+      appendLine("지난달 예산 ${won(previous.total)}")
+      appendLine(if (c >= 0) "지난달 남은 금액 ${won(c)}" else "지난달 초과 금액 ${won(-c)}")
+      appendLine()
+      appendLine("이월을 켜면 이번 달 예산은")
+      append("${won(budget.total)} ${if (c >= 0) "+" else "−"} ${won(kotlin.math.abs(c))} = ${won(carried.total)}")
+      if (!settings.current().budgetCarryOver) append("\n\n지금은 꺼져 있어요. 예산 탭의 '남은 예산 다음 달로 넘기기'를 켜면 적용돼요.")
+    }
+  }
+
+  private fun settleDemo() {
+    val s = com.moneyflow.domain.family.FamilySettlement.settle(listOf("나" to 90_000L, "엄마" to 30_000L, "아빠" to 0L))
+    _demo.value = "가족 정산 예시" to (
+      "같이 쓴 돈에 #공동 을 붙였다고 해 볼게요.\n· 나: 장보기 90,000원 #공동\n· 엄마: 외식 30,000원 #공동\n· 아빠: 없음\n\n" +
+        com.moneyflow.domain.family.FamilySettlement.message("예시", s) { com.moneyflow.util.Formatters.formatCurrency(it) } +
+        "\n\n실제로는 설정 → 가족 합산 → '가족 정산'에 이렇게 나와요."
+      )
+  }
+
+  private suspend fun familyAlertTest() {
+    if (!canNotify()) return
+    val s = settings.current()
+    val budget = s.familyBudget.takeIf { it > 0 } ?: 2_000_000L
+    val r = com.moneyflow.domain.alerts.BudgetReminders.family(clock.currentMonth(), budget, budget * 85 / 100, emptySet())!!
+    Notifications.post(context, r.copy(key = "test|family", title = "[시험] ${r.title}"))
+    messages.show(
+      "가족 예산 85%를 쓴 상황으로 시험 알림을 보냈어요." +
+        if (s.familyBudget <= 0) " (가족 예산이 없어 200만 원으로 가정했어요. 가족 합산 화면에서 가족 예산을 정해 두세요)" else ""
+    )
+  }
+
+  /** A sample "결제 예정 금액" message read like a real one; saved on the matching card. */
+  private suspend fun billTest() {
+    val card = db.accountDao().getAll().firstOrNull { it.accountType == com.moneyflow.data.model.AccountType.CREDIT_CARD && it.bankName.endsWith("카드") }
+      ?: run { messages.show("카드 계좌가 없어요. 자산 탭에서 카드를 먼저 추가해 주세요."); return }
+    val due = com.moneyflow.domain.alerts.BillReminders.nextDate(clock.today().plusDays(7), card.paymentDay.takeIf { it in 1..31 } ?: 14)
+    val text = "[${card.bankName}] ${card.name} ${due.monthValue}월 ${due.dayOfMonth}일 결제예정금액 123,450원 안내드립니다."
+    val outcome = processor.process(com.moneyflow.domain.capture.CaptureChannel.TEST, "test", "시험", "", text, clock.nowMillis())
+    if (outcome is com.moneyflow.domain.capture.CaptureOutcome.BillNoticed && outcome.account.id != 0L) {
+      com.moneyflow.data.repository.CardBills.save(db, settings, outcome.account.id, outcome.bill, "시험 안내", clock.nowMillis())
+    }
+    _demo.value = "청구 안내 시험" to (
+      "보낸 시험 문자:\n$text\n\n결과: ${com.moneyflow.domain.capture.CaptureLog.describe(outcome).second}" +
+        if (outcome is com.moneyflow.domain.capture.CaptureOutcome.BillNoticed) "\n\n자산 탭 → ${outcome.account.name} 맨 위 '다음 결제'에서 확인해 보세요. 진짜 안내가 오면 그 금액으로 바뀌어요." else ""
+      )
+  }
+
+  /** Sample 지역화폐 / 온누리 messages checked like real ones (nothing saved). */
+  private suspend fun voucherTest() {
+    val samples = listOf(
+      "[경기지역화폐] 결제완료 12,000원 행복마트 잔액 38,000원",
+      "[온누리상품권] 15,000원 결제되었습니다. 망원시장 과일가게"
+    )
+    val lines = samples.map { t ->
+      val o = processor.process(com.moneyflow.domain.capture.CaptureChannel.TEST, "test", "시험", "", t, clock.nowMillis())
+      "• $t\n  → ${com.moneyflow.domain.capture.CaptureLog.describe(o).second}"
+    }
+    _demo.value = "지역화폐·온누리 시험 (저장하지 않아요)" to lines.joinToString("\n\n")
+  }
   private val prefs = context.getSharedPreferences("feature_checks", Context.MODE_PRIVATE)
   private val _results = MutableStateFlow(FeatureChecks.decode(prefs.getStringSet(KEY, emptySet()).orEmpty()))
   val results: StateFlow<Map<String, CheckResult>> = _results.asStateFlow()
@@ -252,6 +377,15 @@ fun FeatureCheckScreen(
   viewModel: FeatureCheckViewModel = hiltViewModel()
 ) {
   val results by viewModel.results.collectAsStateWithLifecycle()
+  val demo by viewModel.demo.collectAsStateWithLifecycle()
+  demo?.let { (title, text) ->
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = viewModel::closeDemo,
+      title = { Text(title, fontWeight = FontWeight.Bold) },
+      text = { Text(text) },
+      confirmButton = { androidx.compose.material3.TextButton(onClick = viewModel::closeDemo) { Text("확인") } }
+    )
+  }
   val checks = FeatureChecks.visible(BuildConfig.AUTO_CAPTURE_AVAILABLE)
   val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
   var copied by remember { mutableStateOf(false) }
@@ -279,6 +413,9 @@ fun FeatureCheckScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
                 modifier = Modifier.testTag("check_open_${c.id}")
               ) { Text(c.openLabel) }
+            }
+            viewModel.trial(c.id)?.let { label ->
+              OutlinedButton(onClick = { viewModel.runTrial(c.id) }, modifier = Modifier.testTag("check_try_${c.id}")) { Text(label) }
             }
             if (c.id == "bill") {
               Button(

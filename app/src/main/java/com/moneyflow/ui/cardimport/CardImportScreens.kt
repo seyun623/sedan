@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -314,8 +313,9 @@ fun CardBrowserScreen(
     }
   }
 
+  // The app's frame already keeps clear of the keyboard: padding for it again here left the page
+  // no height at all (a black screen while typing a login).
   Scaffold(
-    modifier = Modifier.imePadding(),
     contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       TopAppBar(
@@ -719,6 +719,12 @@ fun CardImportPreviewScreen(
             Text("${s.site?.name ?: ""} · ${extraction.readBy}", style = MaterialTheme.typography.labelMedium, color = Gray600)
             Spacer(Modifier.height(6.dp))
             Text("어느 계좌(카드)에 넣을까요?", fontWeight = FontWeight.Bold, color = Gray900)
+            if (s.site?.settingsId == "bc") {
+              Text(
+                "BC카드 화면에는 BC 마크가 있는 여러 카드(우리·농협·IBK 등)의 내역이 섞여 있어요. 아래에서 이 카드 내역만 골라 가져오면, 남은 내역은 이어서 다른 카드를 골라 가져올 수 있어요.",
+                style = MaterialTheme.typography.bodySmall, color = AccentOrange, modifier = Modifier.padding(top = 4.dp).testTag("preview_bc_hint")
+              )
+            }
             Box {
               OutlinedButton(onClick = { accountMenu = true }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 Text(

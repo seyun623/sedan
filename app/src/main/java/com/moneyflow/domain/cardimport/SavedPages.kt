@@ -56,6 +56,10 @@ object SavedPages {
    * Combines readings of several pages. The same payment shown on two pages (e.g. "최근이용내역" and
    * "이용내역 조회") is kept once; performance figures and benefits are de-duplicated too.
    */
+  /** Only payments of the last month (today and the 31 days before); bill, 실적 and points stay. */
+  fun lastMonth(e: StatementExtraction, today: java.time.LocalDate): StatementExtraction =
+    e.copy(items = e.items.filter { !it.date.isBefore(today.minusDays(31)) && !it.date.isAfter(today.plusDays(1)) })
+
   fun merge(readings: List<StatementExtraction>, readBy: String): StatementExtraction {
     // Two equal coffees on one page are two payments; the same row on two pages is one. Keep, for
     // each kind of row, as many as the page that shows it most often.

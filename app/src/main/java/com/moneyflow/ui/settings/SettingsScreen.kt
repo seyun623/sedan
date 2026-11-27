@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.moneyflow.ui.theme.TossBlue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -167,9 +168,11 @@ fun SettingsScreen(
         settings.weeklyReportEnabled, settings.billRemindersEnabled, settings.backupReminderEnabled
       ).count { it }
       SettingsItem(
-        title = if (alertsOpen) "알림 설정 접기" else "알림 설정",
-        subtitle = "6가지 중 ${alertsOn}가지 켜짐 · 예산, 주간 리포트, 결제일, 백업 등",
+        title = "알림 설정 (${alertsOn}/6 켜짐)",
+        subtitle = if (alertsOpen) "아래에서 알림마다 켜고 끌 수 있어요" else "카드 실적, 예산, 지난달 요약, 주간 리포트, 결제일, 백업",
         icon = Icons.Filled.NotificationsActive,
+        trailing = if (alertsOpen) "접기 ▲" else "펼치기 ▼",
+        trailingColor = TossBlue,
         showChevron = false,
         onClick = { alertsOpen = !alertsOpen },
         modifier = Modifier.testTag("settings_alerts_toggle")

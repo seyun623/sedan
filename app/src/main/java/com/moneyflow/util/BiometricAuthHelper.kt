@@ -84,18 +84,27 @@ object BiometricAuthHelper {
     title: String = "머니플로우 열기",
     subtitle: String = "휴대폰 잠금(지문·얼굴·패턴·PIN)으로 확인해요",
     onSuccess: () -> Unit,
-    onError: (errorCode: Int, message: CharSequence) -> Unit
+    onError: (errorCode: Int, message: CharSequence) -> Unit,
+    /**
+     * Fingerprint first: only strong biometrics (fingerprint; most phones' face unlock is the weak
+     * kind) plus the phone PIN/pattern. Android 11+; older phones keep the usual prompt.
+     */
+    fingerprintFirst: Boolean = false
   ) {
     val callback = object : BiometricPrompt.AuthenticationCallback() {
       override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
       override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onError(errorCode, errString)
     }
+    val strongOnly = fingerprintFirst && android.os.Build.VERSION.SDK_INT >= 30
     val info = BiometricPrompt.PromptInfo.Builder()
       .setTitle(title)
       .setSubtitle(subtitle)
       .setConfirmationRequired(false)
       // WEAK + DEVICE_CREDENTIAL works on every supported Android version; no negative button allowed.
-      .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+      .setAllowedAuthenticators(
+        (if (strongOnly) BiometricManager.Authenticators.BIOMETRIC_STRONG else BiometricManager.Authenticators.BIOMETRIC_WEAK) or
+          BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      )
       .build()
     try {
       BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)

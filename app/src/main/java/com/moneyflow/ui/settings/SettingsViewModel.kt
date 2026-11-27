@@ -50,6 +50,11 @@ class SettingsViewModel @Inject constructor(
   /** A just-made recovery code to show once (null = no dialog). */
   val recoveryCode: StateFlow<String?> = _recoveryCode
 
+  fun setDeviceLockFingerprint(on: Boolean) = viewModelScope.launch {
+    settingsRepo.setDeviceLockFingerprint(on)
+    messages.show(if (on) "앱을 열 때 지문을 먼저 물어봐요." else "앱을 열 때 휴대폰에 설정된 방법(얼굴·지문)으로 물어봐요.")
+  }
+
   /** Switches to the phone-lock mode; call only after the phone's own lock was confirmed. */
   fun enableDeviceLock() = viewModelScope.launch {
     lock.enableDeviceLock()

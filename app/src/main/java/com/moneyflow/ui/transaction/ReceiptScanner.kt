@@ -28,8 +28,44 @@ object ReceiptScanner {
     File(context.cacheDir, "receipts").listFiles()?.forEach { it.delete() }
   }
 
-  suspend fun read(context: Context, uri: Uri): String {
-    val image = InputImage.fromFilePath(context, uri)
+  /**
+   * The photo made small enough to read reliably (phone cameras take 12–200 MP photos, which can
+   * fail or run out of memory) and the rotation the camera saved. Null when it can't be opened.
+   */
+  fun loadScaled(context: Context, uri: Uri, maxSide: Int = 2_000): Pair<android.graphics.Bitmap, Int>? {
+    val resolver = context.contentResolver
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+    val bitmap = resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) } ?: return null
+    val rotation = runCatching {
+      resolver.openInputStream(uri)?.use { s ->
+        when (android.media.ExifInterface(s).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+          android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
+          android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
+          android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+          else -> 0
+        }
+      }
+    }.getOrNull() ?: 0
+    return bitmap to rotation
+  }
+
+  /** JPEG (upright, at most 1600 px) for reading with AI. */
+  fun jpegForAi(bitmap: android.graphics.Bitmap, rotation: Int): ByteArray {
+    val upright = if (rotation == 0) bitmap else android.graphics.Bitmap.createBitmap(
+      bitmap, 0, 0, bitmap.width, bitmap.height, android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }, true
+    )
+    val scale = 1_600f / maxOf(upright.width, upright.height)
+    val small = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(upright, (upright.width * scale).toInt(), (upright.height * scale).toInt(), true) else upright
+    return java.io.ByteArrayOutputStream().use { out -> small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out); out.toByteArray() }
+  }
+
+  suspend fun read(bitmap: android.graphics.Bitmap, rotation: Int): String {
+    val image = InputImage.fromBitmap(bitmap, rotation)
     val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
     try {
       return suspendCancellableCoroutine { cont ->

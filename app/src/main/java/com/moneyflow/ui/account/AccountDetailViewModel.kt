@@ -46,9 +46,11 @@ sealed interface BenefitReadState {
   data class Done(
     val drafts: List<com.moneyflow.data.model.CardBenefitEntity>,
     /** Web pages the search used (title, address); empty for pasted text. */
-    val sources: List<Pair<String, String>> = emptyList()
+    val sources: List<Pair<String, String>> = emptyList(),
+    /** 실적 조건 found with the benefits (web search). */
+    val conditions: com.moneyflow.domain.card.BenefitReader.Conditions? = null
   ) : BenefitReadState
-  data class Failed(val message: String) : BenefitReadState
+  data class Failed(val message: String, val retryName: String? = null) : BenefitReadState
 }
 
 sealed interface AccountEvent {
@@ -65,7 +67,8 @@ class AccountDetailViewModel @Inject constructor(
   settings: com.moneyflow.data.repository.SettingsRepository,
   private val cards: com.moneyflow.data.repository.CardRepository,
   private val benefitReader: com.moneyflow.domain.card.BenefitReader,
-  private val messages: UserMessageBus
+  private val messages: UserMessageBus,
+  @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context
 ) : ViewModel() {
   private val accountId: Long = checkNotNull(savedState.get<Long>(ARG_ACCOUNT_ID))
 
@@ -181,14 +184,23 @@ class AccountDetailViewModel @Inject constructor(
         when {
           found == null -> BenefitReadState.Failed("AI 설정을 먼저 해 주세요.")
           found.drafts.isEmpty() -> BenefitReadState.Failed("'${cardName.trim()}'의 혜택을 찾지 못했어요. 카드 이름을 정확히 (예: 신한카드 Deep Dream) 입력해 주세요.")
-          else -> BenefitReadState.Done(found.drafts, if (found.fromMemory) listOf("AI가 알고 있는 정보 (최신이 아닐 수 있음)" to "") else found.sources)
+          else -> BenefitReadState.Done(found.drafts, if (found.fromMemory) listOf("AI가 알고 있는 정보 (최신이 아닐 수 있음)" to "") else found.sources, found.conditions)
         }
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
+      } catch (e: com.moneyflow.ai.AiBusyException) {
+        BenefitReadState.Failed(e.message ?: "AI 사용 한도를 넘었어요.", retryName = cardName.trim())
       } catch (e: Exception) {
         BenefitReadState.Failed(e.message ?: "검색하지 못했어요.")
       }
     }
+  }
+
+  /** AI limit reached: search again by itself later and register what it finds. */
+  fun searchBenefitsLater(cardName: String) {
+    com.moneyflow.work.BenefitSearchWorker.schedule(appContext, accountId, cardName)
+    _benefitRead.value = BenefitReadState.Idle
+    messages.show("한도가 풀리면 '$cardName' 혜택과 실적 조건을 자동으로 찾아 등록하고 알림으로 알려 드릴게요.")
   }
 
   fun closeBenefitRead() {
@@ -196,10 +208,15 @@ class AccountDetailViewModel @Inject constructor(
     _benefitRead.value = BenefitReadState.Idle
   }
 
-  fun addBenefits(drafts: List<com.moneyflow.data.model.CardBenefitEntity>, setTarget: Boolean) = viewModelScope.launch {
+  fun addBenefits(
+    drafts: List<com.moneyflow.data.model.CardBenefitEntity>, setTarget: Boolean,
+    conditions: com.moneyflow.domain.card.BenefitReader.Conditions? = null
+  ) = viewModelScope.launch {
     _benefitRead.value = BenefitReadState.Idle
-    if (drafts.isEmpty()) return@launch
-    messages.show(com.moneyflow.ui.cardimport.benefitMessage(cards.addBenefits(accountId, drafts, setTarget)))
+    if (drafts.isEmpty() && conditions == null) return@launch
+    val text = if (drafts.isEmpty()) "" else com.moneyflow.ui.cardimport.benefitMessage(cards.addBenefits(accountId, drafts, setTarget && conditions == null))
+    val saved = conditions?.let { cards.applyConditions(accountId, it) }
+    messages.show(listOfNotNull(text.ifEmpty { null }, saved?.let { "실적 조건도 저장했어요: $it." }).joinToString(" "))
   }
 
   fun transfer(to: AccountEntity, amount: Long, memo: String) = viewModelScope.launch {

@@ -118,6 +118,7 @@ internal fun SettingsItem(
   icon: ImageVector? = null,
   iconTint: Color = TossBlue,
   trailing: String? = null,
+  trailingColor: Color = Gray600,
   showChevron: Boolean = true,
   enabled: Boolean = true,
   titleColor: Color = Gray900,
@@ -148,7 +149,7 @@ internal fun SettingsItem(
     }
     if (trailing != null) {
       Spacer(Modifier.width(8.dp))
-      Text(trailing, style = MaterialTheme.typography.bodyMedium, color = Gray600, maxLines = 1)
+      Text(trailing, style = MaterialTheme.typography.bodyMedium, color = trailingColor, maxLines = 1)
     }
     if (showChevron && onClick != null) {
       Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Gray500)

@@ -130,7 +130,7 @@ class HomeViewModel @Inject constructor(
         budgetSet = budget.isSet,
         familyOn = s.familySyncEnabled,
         backupOn = s.autoBackupEnabled || s.lastBackupAt > 0
-      ).takeIf { com.moneyflow.domain.StartGuide.visible(it, s.startGuideDismissed) }.orEmpty(),
+      ).takeIf { com.moneyflow.domain.StartGuide.visible(it, s.startGuideDismissed, s.startGuideForced) }.orEmpty(),
       cardPoints = s.cardPoints.filterKeys { id -> accounts.any { it.id == id } }.filterValues { it.amount > 0 }
     )
   }

@@ -23,19 +23,20 @@ class AiService @Inject constructor(
    * @param geminiSchema response schema (Gemini enforces it natively)
    * @param shapeHint the same shape described as JSON for OpenAI-compatible providers
    */
-  suspend fun completeJson(prompt: String, geminiSchema: JSONObject, shapeHint: String): String {
+  suspend fun completeJson(prompt: String, geminiSchema: JSONObject, shapeHint: String, image: Pair<String, String>? = null): String {
     val s = settings.current()
     if (!s.isAiReady) throw AiNotConfiguredException()
     val key = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
+    if (image != null && s.aiProvider != AiProvider.GEMINI) throw AiRequestException("사진은 Google Gemini로만 읽을 수 있어요. 설정 → AI 설정에서 Gemini를 골라 주세요.")
     suspend fun call(model: String): String = when (s.aiProvider) {
-      AiProvider.GEMINI -> gemini.generateJson(key, model, prompt, geminiSchema)
+      AiProvider.GEMINI -> gemini.generateJson(key, model, prompt, geminiSchema, image)
       else -> compat.completeJson(
         s.aiBaseUrl ?: throw AiNotConfiguredException(), key, model,
         "$prompt\n\n반드시 다음 형식의 JSON 객체 하나로만 답하세요:\n$shapeHint"
       )
     }
     return try {
-      withBusyRetry { call(s.aiModel) }
+      withQuotaFallback(s.aiProvider, key, s.aiCustomBaseUrl, s.aiModel) { m -> withBusyRetry { call(m) } }
     } catch (e: AiModelNotFoundException) {
       // Providers retire models (and free model lists change): switch to an available one and retry once.
       val available = runCatching { listModels(s.aiProvider, key, s.aiCustomBaseUrl) }.getOrDefault(emptyList())
@@ -53,7 +54,24 @@ class AiService @Inject constructor(
     if (!s.isAiReady) throw AiNotConfiguredException()
     if (s.aiProvider != AiProvider.GEMINI) return null
     val key = s.aiApiKeyEncrypted?.let(secrets::decrypt) ?: throw AiNotConfiguredException()
-    return withBusyRetry { gemini.generateGrounded(key, s.aiModel, prompt) }
+    return withQuotaFallback(s.aiProvider, key, s.aiCustomBaseUrl, s.aiModel) { m -> withBusyRetry { gemini.generateGrounded(key, m, prompt) } }
+  }
+
+  /**
+   * The chosen model is over its free limit (still 429 after the short retries): try other models,
+   * which have their own limits. Only for this request; the chosen model stays as it is.
+   */
+  private suspend fun <T> withQuotaFallback(provider: AiProvider, key: String, customUrl: String, model: String, block: suspend (String) -> T): T {
+    try {
+      return block(model)
+    } catch (e: AiBusyException) {
+      val models = runCatching { listModels(provider, key, customUrl) }.getOrDefault(emptyList())
+      val alternatives = AiModelPicker.quotaAlternatives(provider, models, exclude = model)
+      for (m in alternatives) {
+        try { return block(m) } catch (_: AiBusyException) {} catch (_: AiModelNotFoundException) {}
+      }
+      throw AiBusyException("AI 무료 사용 한도를 넘었어요 (다른 모델 ${alternatives.size}개도 시도했어요). 한도는 보통 하루 단위로 풀려요.")
+    }
   }
 
   /** Whether [searchWeb] can be used with the chosen provider. */

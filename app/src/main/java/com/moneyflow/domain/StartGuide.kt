@@ -21,5 +21,5 @@ object StartGuide {
   )
 
   /** Shown until every step is done or the card is closed. */
-  fun visible(steps: List<StartStep>, dismissed: Boolean) = !dismissed && steps.any { !it.done }
+  fun visible(steps: List<StartStep>, dismissed: Boolean, forced: Boolean = false) = !dismissed && (forced || steps.any { !it.done })
 }

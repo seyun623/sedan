@@ -103,6 +103,34 @@ object CardBrowsing {
 })()
 """
 
+  /**
+   * Installed on every page: a fixed bottom sheet whose top is on screen but most of it below the
+   * bottom edge (it opened too low: only its title shows) is moved up and made scrollable.
+   * Checked again after taps, since sheets open on a tap.
+   */
+  const val LIFT_BOTTOM_SHEETS_JS = """
+(function(){
+  if(window.__mfLift) return; window.__mfLift=1;
+  function lift(){ try{
+    var vh=window.innerHeight, els=document.querySelectorAll('body *');
+    for(var i=0;i<els.length;i++){ var e=els[i];
+      var cs=getComputedStyle(e); if(cs.position!='fixed') continue;
+      if(cs.display=='none'||cs.visibility=='hidden') continue;
+      var r=e.getBoundingClientRect();
+      if(r.height<120 || r.top<0 || r.top>=vh-8) continue;
+      var shown=vh-r.top; if(shown>=r.height*0.6) continue;
+      e.style.setProperty('top','auto','important');
+      e.style.setProperty('bottom','0','important');
+      e.style.setProperty('transform','none','important');
+      e.style.setProperty('max-height',Math.round(vh*0.85)+'px','important');
+      e.style.setProperty('overflow-y','auto','important');
+    }
+  }catch(x){} }
+  document.addEventListener('click',function(){ setTimeout(lift,400); setTimeout(lift,1200); },true);
+  setTimeout(lift,800);
+})()
+"""
+
   private val CODE_WORD = Regex("코드|인증\\s*번호|숫자|번호")
   private val CODE = Regex("(?<![\\d\\-.,:])(\\d{3}\\s?\\d{4}|\\d(?:\\s\\d){6})(?![\\d\\-.,:]|\\s\\d)")
   private val NOT_CODE = Regex("고객센터|전화|상담|☎|TEL|Tel|문의")
@@ -138,7 +166,8 @@ object CardBrowsing {
     Regex("(이용|승인|사용|결제)\\s*내역|(주문|구매)\\s*(내역|목록|배송)") to 0,
     Regex("명세서|청구\\s*(내역|금액|서)") to 1,
     Regex("이용\\s*대금|결제\\s*(예정|금액)|결제하실\\s*금액") to 2,
-    Regex("실적") to 3
+    Regex("실적") to 3,
+    Regex("포인트|마일리지|하나머니|포인트리|캐시백\\s*(조회|내역)") to 4
   )
 
   /** Rank of a link text (lower first), or null when it isn't about card usage. */

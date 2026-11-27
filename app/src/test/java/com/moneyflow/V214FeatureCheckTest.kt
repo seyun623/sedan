@@ -23,11 +23,11 @@ class V214FeatureCheckTest {
   @Test fun onlyPendingChecksAreListed() {
     val ids = FeatureChecks.all.map { it.id }
     listOf("bill", "swipe_delete", "card_import", "capture").forEach { assertTrue(it !in ids) }
-    assertTrue("capture_no_account" in ids && "benefit_search" in ids)
+    assertTrue("next_bill" in ids && "benefit_search" in ids && "capture_no_account" !in ids)
   }
 
   @Test fun basicEditionHidesAutoCapture() {
-    assertTrue(FeatureChecks.visible(false).none { it.id == "capture_no_account" })
+    assertTrue(FeatureChecks.visible(false).none { it.id == "next_bill" })
     assertTrue(FeatureChecks.visible(false).size < FeatureChecks.visible(true).size)
     assertEquals(FeatureChecks.all.size, FeatureChecks.visible(true).size)
   }

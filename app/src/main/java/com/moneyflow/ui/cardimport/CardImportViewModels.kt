@@ -329,7 +329,9 @@ class CardBrowserViewModel @Inject constructor(
       }
       aiFailed?.let { _events.send(BrowserEvent.Info("AI가 응답하지 않은 화면은 기기에서 읽었어요. ($it)")) }
       val readBy = if (useAi) readings.first().readBy else StatementTextParser.READ_LOCAL
-      val merged = com.moneyflow.domain.cardimport.SavedPages.merge(readings, readBy)
+      // 필요한 것만: this month's bill and the last month of payments (older rows were imported before).
+      val all = com.moneyflow.domain.cardimport.SavedPages.merge(readings, readBy)
+      val merged = com.moneyflow.domain.cardimport.SavedPages.lastMonth(all, clock.today())
       val empty = pages.indices.filter { readings[it].isEmpty }.map { pages[it].first.title }
       if (merged.isEmpty) {
         _events.send(BrowserEvent.Error("기억한 화면에서 내역을 찾지 못했어요. 화면이 바뀌었거나 다시 열 수 없는 화면일 수 있어요. 화면을 직접 열고 '이 화면 가져오기'를 눌러 보세요."))
@@ -516,6 +518,19 @@ class CardImportPreviewViewModel @Inject constructor(
     points?.let { repo.savePoints(account.id, it) }
     val benefits = s.extraction?.benefits.orEmpty().filterIndexed { i, _ -> i in s.selectedBenefits }
     val benefitResult = if (benefits.isEmpty()) null else cards.addBenefits(account.id, benefits, setTargetIfMissing = true)
+    // BC카드 shows the payments of every BC card (우리·농협·IBK …) together: what wasn't picked can
+    // go to another card next, so the screen stays open with the rest.
+    val rest = s.rows.filterIndexed { i, r -> i !in s.selected && r.selectedByDefault }.map { it.item }
+    if (s.site?.settingsId == "bc" && s.selected.isNotEmpty() && rest.isNotEmpty()) {
+      val nextExtraction = s.extraction!!.copy(items = rest, bill = null, points = null, benefits = emptyList(), performance = emptyList())
+      session.put(s.site, nextExtraction)
+      _state.value = _state.value.copy(
+        busy = false, extraction = nextExtraction, account = null, createNew = false,
+        rows = emptyList(), selected = emptySet(), selectedBenefits = emptySet()
+      )
+      messages.show("${account.name}에 ${result.added}건을 추가했어요. 남은 ${rest.size}건은 다른 카드를 골라 가져오세요.")
+      return@launch
+    }
     session.clear()
     messages.show(buildString {
       if (s.selected.isNotEmpty()) append("${account.name}에 ${result.added}건을 추가했어요.")

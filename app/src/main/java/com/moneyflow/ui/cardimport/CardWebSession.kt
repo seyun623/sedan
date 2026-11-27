@@ -221,6 +221,8 @@ class CardWebSession(private val appContext: Context, desktop: Boolean) {
 
     override fun onPageFinished(view: WebView, url: String?) {
       if (view == main) _loading.value = false
+      // Bottom sheets that open past the bottom of the screen (KB "다른 로그인 방법 선택") are pulled up.
+      runCatching { view.evaluateJavascript(com.moneyflow.domain.cardimport.CardBrowsing.LIFT_BOTTOM_SHEETS_JS, null) }
       if (view == front) {
         _title.value = view.title?.takeIf { it.isNotBlank() && !it.startsWith("http") } ?: ""
         _pageLoads.value += 1

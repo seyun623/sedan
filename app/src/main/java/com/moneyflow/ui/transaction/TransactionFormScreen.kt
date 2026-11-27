@@ -332,6 +332,7 @@ fun TransactionFormScreen(
 
           if (!isEditMode) {
             ReceiptButtons(
+              aiReader = viewModel.aiReceipts,
               onRead = { info ->
                 type = TransactionType.EXPENSE
                 amount = info.total.toString()
@@ -859,7 +860,11 @@ private fun AiSuggestionPanel(
 
 /** 영수증 사진으로 채우기: camera or gallery → text read on the phone → amount, shop, date, items. */
 @Composable
-private fun ReceiptButtons(onRead: (com.moneyflow.domain.receipt.ReceiptInfo) -> Unit, onMessage: (String) -> Unit) {
+private fun ReceiptButtons(
+  aiReader: com.moneyflow.domain.receipt.AiReceiptReader,
+  onRead: (com.moneyflow.domain.receipt.ReceiptInfo) -> Unit,
+  onMessage: (String) -> Unit
+) {
   val context = androidx.compose.ui.platform.LocalContext.current
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   var busy by remember { mutableStateOf(false) }
@@ -868,12 +873,34 @@ private fun ReceiptButtons(onRead: (com.moneyflow.domain.receipt.ReceiptInfo) ->
     busy = true
     scope.launch {
       try {
-        val text = ReceiptScanner.read(context, uri)
-        val info = com.moneyflow.domain.receipt.ReceiptParser(java.time.LocalDate.now()).parse(text)
-        if (info == null) onMessage("영수증에서 금액을 찾지 못했어요. 밝은 곳에서 영수증 전체가 보이게 다시 찍어 주세요.")
-        else {
+        val today = java.time.LocalDate.now()
+        val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ReceiptScanner.loadScaled(context, uri) }
+        if (loaded == null) {
+          onMessage("사진을 열지 못했어요. 다른 사진으로 해 주세요.")
+          return@launch
+        }
+        val (bitmap, rotation) = loaded
+        val text = runCatching { ReceiptScanner.read(bitmap, rotation) }
+          .onFailure { com.moneyflow.util.ProblemLog.record("영수증 글자 인식", it as? Exception ?: Exception(it)) }
+          .getOrDefault("")
+        var info = com.moneyflow.domain.receipt.ReceiptParser(today).parse(text)
+        var byAi = false
+        // The phone couldn't read it: Gemini reads the photo (the photo is sent to Google).
+        if (info == null && aiReader.canRead()) {
+          onMessage("휴대폰에서 읽지 못해 AI(Gemini)로 읽는 중이에요…")
+          info = runCatching {
+            aiReader.read(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ReceiptScanner.jpegForAi(bitmap, rotation) }, today)
+          }.onFailure { onMessage(it.message ?: "AI로도 읽지 못했어요.") }.getOrNull()
+          byAi = info != null
+        }
+        if (info == null) {
+          onMessage(
+            if (text.isBlank()) "사진에서 글자를 찾지 못했어요. 영수증이 화면에 꽉 차게, 밝은 곳에서 찍어 주세요."
+            else "영수증에서 합계 금액을 찾지 못했어요. 합계 부분이 보이게 다시 찍어 주세요."
+          )
+        } else {
           onRead(info)
-          onMessage("영수증을 읽었어요: ${com.moneyflow.util.Formatters.formatCurrency(info.total)}. 맞는지 확인하고 저장하세요.")
+          onMessage("영수증을 ${if (byAi) "AI로 " else ""}읽었어요: ${com.moneyflow.util.Formatters.formatCurrency(info.total)}. 맞는지 확인하고 저장하세요.")
         }
       } catch (e: Exception) {
         com.moneyflow.util.ProblemLog.record("영수증 읽기", e)

@@ -105,6 +105,16 @@ fun SecuritySettingsScreen(
           }
         }
       )
+      if (settings.usesDeviceLock && android.os.Build.VERSION.SDK_INT >= 30) {
+        SettingsSwitchItem(
+          title = "지문으로 열기",
+          subtitle = "켜면 얼굴 대신 지문을 먼저 물어봐요. 끄면 휴대폰에 설정된 방법(얼굴 등)을 써요",
+          icon = androidx.compose.material.icons.Icons.Filled.Fingerprint,
+          checked = settings.deviceLockFingerprint,
+          onCheckedChange = viewModel::setDeviceLockFingerprint,
+          modifier = Modifier.testTag("settings_lock_fingerprint")
+        )
+      }
       SettingsRadioItem(
         title = "앱 전용 PIN",
         subtitle = "숫자 4~6자리를 따로 정해요. 휴대폰 비밀번호를 가족과 같이 쓸 때 골라 주세요",

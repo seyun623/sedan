@@ -77,6 +77,7 @@ class RulesViewModel @Inject constructor(
 }
 
 /** Settings → 자동 분류 규칙: keyword → category / ignore, and what the app learned. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel()) {
   val rules by viewModel.rules.collectAsStateWithLifecycle()
@@ -92,14 +93,23 @@ fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel())
           style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(16.dp)
         )
       }
-      rules.forEach { r ->
-        SettingsItem(
-          title = r.keyword,
-          subtitle = if (r.action == RuleAction.IGNORE) "자동 기록 안 함" else "→ ${r.category}",
-          icon = if (r.action == RuleAction.IGNORE) Icons.Filled.Block else Icons.Filled.Label,
-          iconTint = if (r.action == RuleAction.IGNORE) AccentRed else com.moneyflow.ui.theme.TossBlue,
-          onClick = { editing = r }
-        )
+      // Grouped by category as short chips: one line per category instead of one row per rule.
+      if (rules.isNotEmpty()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          rules.groupBy { if (it.action == RuleAction.IGNORE) "기록 안 함" else it.category }.toSortedMap().forEach { (group, list) ->
+            Text("$group ${list.size}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+              color = if (group == "기록 안 함") AccentRed else Gray600)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              list.sortedBy { it.keyword }.forEach { r ->
+                androidx.compose.material3.AssistChip(
+                  onClick = { editing = r },
+                  label = { Text(r.keyword, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                  modifier = Modifier.testTag("rule_${r.id}")
+                )
+              }
+            }
+          }
+        }
       }
       SettingsItem(
         title = "규칙 추가",
@@ -118,12 +128,21 @@ fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel())
       if (learned.isEmpty()) {
         Text("아직 자동으로 기록된 곳이 없어요.", style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(16.dp))
       }
-      learned.forEach { l ->
+      var showAll by rememberSaveable { mutableStateOf(false) }
+      (if (showAll) learned else learned.take(LEARNED_SHOWN)).forEach { l ->
         SettingsItem(
           title = l.merchant,
-          subtitle = "${l.category} · ${l.count}건",
+          subtitle = "${l.category} · ${l.count}건 · 누르면 '${com.moneyflow.domain.rules.RuleKeywords.suggest(l.merchant)}' 규칙으로",
           icon = Icons.Filled.History,
-          onClick = { editing = CategoryRuleEntity(keyword = l.merchant, category = l.category) }
+          onClick = { editing = CategoryRuleEntity(keyword = com.moneyflow.domain.rules.RuleKeywords.suggest(l.merchant), category = l.category) }
+        )
+      }
+      if (learned.size > LEARNED_SHOWN) {
+        SettingsItem(
+          title = if (showAll) "접기" else "${learned.size - LEARNED_SHOWN}곳 더 보기",
+          showChevron = false,
+          onClick = { showAll = !showAll },
+          modifier = Modifier.testTag("learned_more")
         )
       }
     }
@@ -138,6 +157,8 @@ fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel())
     )
   }
 }
+
+private const val LEARNED_SHOWN = 5
 
 private val RuleSaver = androidx.compose.runtime.saveable.Saver<CategoryRuleEntity?, List<String>>(
   save = { r -> r?.let { listOf(it.id.toString(), it.keyword, it.action.name, it.category) } ?: emptyList() },

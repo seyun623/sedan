@@ -346,6 +346,8 @@ internal fun BenefitPasteDialog(
   cardName: String = "",
   canSearch: Boolean = false,
   onSearch: (String) -> Unit = {},
+  retryLaterName: String? = null,
+  onSearchLater: (String) -> Unit = {},
   onOpenCardGorilla: () -> Unit = {}
 ) {
   var text by rememberSaveable { mutableStateOf("") }
@@ -404,6 +406,13 @@ internal fun BenefitPasteDialog(
         )
         Text("붙여 넣은 글이 ${aiLabel}(으)로 전송돼요. 카드번호·이름 같은 개인 정보는 넣지 마세요.", style = MaterialTheme.typography.bodySmall, color = Gray600)
         error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AccentRed) }
+        retryLaterName?.let { n ->
+          Button(
+            onClick = { onSearchLater(n) },
+            colors = ButtonDefaults.buttonColors(containerColor = TossBlue),
+            modifier = Modifier.fillMaxWidth().testTag("benefit_search_later")
+          ) { Text("한도가 풀리면 자동으로 찾아 등록하기", fontWeight = FontWeight.Bold) }
+        }
         TextButton(onClick = onOpenCardImport, enabled = !loading) { Text("카드사 화면에서 가져오기") }
       }
     },
@@ -420,10 +429,12 @@ internal fun BenefitPasteDialog(
 internal fun BenefitDraftsDialog(
   drafts: List<CardBenefitEntity>,
   hasProfile: Boolean,
-  onAdd: (List<CardBenefitEntity>, setTarget: Boolean) -> Unit,
+  onAdd: (List<CardBenefitEntity>, setTarget: Boolean, saveConditions: Boolean) -> Unit,
   onDismiss: () -> Unit,
-  sources: List<Pair<String, String>> = emptyList()
+  sources: List<Pair<String, String>> = emptyList(),
+  conditions: com.moneyflow.domain.card.BenefitReader.Conditions? = null
 ) {
+  var saveConditions by rememberSaveable { mutableStateOf(true) }
   var selected by rememberSaveable { mutableStateOf(drafts.indices.toSet()) }
   val minPerf = drafts.filterIndexed { i, _ -> i in selected }.map { it.minPerformance }.filter { it > 0 }.minOrNull()
   var setTarget by rememberSaveable { mutableStateOf(true) }
@@ -448,7 +459,22 @@ internal fun BenefitDraftsDialog(
             }
           }
         }
-        if (!hasProfile && minPerf != null) {
+        if (conditions != null) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp).testTag("benefit_conditions")) {
+            androidx.compose.material3.Checkbox(checked = saveConditions, onCheckedChange = { saveConditions = it })
+            Column {
+              Text("실적 조건도 저장", color = Gray900, fontWeight = FontWeight.SemiBold)
+              Text(
+                listOfNotNull(
+                  conditions.performanceTarget.takeIf { it > 0 }?.let { "전월 실적 ${Formatters.formatCurrency(it)}" },
+                  conditions.excluded.takeIf { it.isNotEmpty() }?.let { "실적 제외: ${it.joinToString(", ")}" }
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = Gray600
+              )
+            }
+          }
+        }
+        if (!hasProfile && minPerf != null && conditions == null) {
           Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
             androidx.compose.material3.Checkbox(checked = setTarget, onCheckedChange = { setTarget = it })
             Text("실적 기준도 ${Formatters.formatCurrency(minPerf)}(으)로 설정", color = Gray900)
@@ -458,7 +484,7 @@ internal fun BenefitDraftsDialog(
       }
     },
     confirmButton = {
-      TextButton(enabled = selected.isNotEmpty(), onClick = { onAdd(drafts.filterIndexed { i, _ -> i in selected }, setTarget && !hasProfile) }) {
+      TextButton(enabled = selected.isNotEmpty(), onClick = { onAdd(drafts.filterIndexed { i, _ -> i in selected }, setTarget && !hasProfile, saveConditions && conditions != null) }) {
         Text("${selected.size}개 등록", fontWeight = FontWeight.Bold)
       }
     },

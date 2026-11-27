@@ -99,6 +99,26 @@ class CardRepository @Inject constructor(
       BenefitImportResult(added, skipped, targetSet)
     }
 
+  /**
+   * Saves 실적 조건 found with benefits: the target when none is set, and the 실적 제외 words added
+   * to the ones already there. Returns a short description of what changed, or null.
+   */
+  suspend fun applyConditions(accountId: Long, c: com.moneyflow.domain.card.BenefitReader.Conditions): String? = db.withTransaction {
+    val current = dao.getProfiles().firstOrNull { it.accountId == accountId }
+    val oldWords = current?.excludedKeywords.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    val words = (oldWords + c.excluded).distinct()
+    val target = current?.performanceTarget?.takeIf { it > 0 } ?: c.performanceTarget
+    if (target <= 0 && words == oldWords) return@withTransaction null
+    dao.upsertProfile(
+      (current ?: CardProfileEntity(accountId, 0)).copy(performanceTarget = target, excludedKeywords = words.joinToString(","))
+    )
+    buildList {
+      if ((current?.performanceTarget ?: 0) <= 0 && target > 0) add("실적 기준 ${com.moneyflow.util.Formatters.formatCurrency(target)}")
+      val added = words - oldWords.toSet()
+      if (added.isNotEmpty()) add("실적 제외 ${added.size}개(${added.take(3).joinToString(", ")}${if (added.size > 3) " 등" else ""})")
+    }.takeIf { it.isNotEmpty() }?.joinToString(", ")
+  }
+
   private fun normalize(title: String) = title.replace(" ", "").lowercase()
 
   private companion object {

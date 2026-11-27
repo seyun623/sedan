@@ -31,8 +31,33 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
     return parse(json.optJSONArray("benefits"))
   }
 
+  /** 실적 조건 found with the benefits: the lowest 전월 실적 tier and what doesn't count toward it. */
+  data class Conditions(val performanceTarget: Long, val excluded: List<String>) {
+    val isEmpty: Boolean get() = performanceTarget <= 0 && excluded.isEmpty()
+  }
+
   /** Benefits found by searching the web for a card product, with the pages used. */
-  data class Searched(val drafts: List<CardBenefitEntity>, val sources: List<Pair<String, String>>, val fromMemory: Boolean = false)
+  data class Searched(
+    val drafts: List<CardBenefitEntity>,
+    val sources: List<Pair<String, String>>,
+    val fromMemory: Boolean = false,
+    val conditions: Conditions? = null
+  )
+
+  /** [read] plus the card's 실적 조건 (search answers describe them). */
+  suspend fun readWithConditions(text: String): Pair<List<CardBenefitEntity>, Conditions?> {
+    val clean = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MAX_CHARS)
+    val prompt = buildString {
+      appendLine("다음은 한국 신용/체크카드의 혜택 안내 글입니다.")
+      appendLine(RULES)
+      appendLine(CONDITION_RULES)
+      appendLine()
+      appendLine("=== 혜택 안내 글 ===")
+      append(clean)
+    }
+    val json = JSONObject(ai.completeJson(prompt, schemaWithConditions(), FULL_SHAPE))
+    return parse(json.optJSONArray("benefits")) to parseConditions(json)
+  }
 
   /**
    * Searches the web for [cardName]'s benefits (card company product page, card comparison sites)
@@ -44,6 +69,7 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
       """
       한국 카드 상품 "$name"의 혜택을 웹에서 찾아 자세히 정리해 주세요. 카드사 공식 상품 안내를 우선하고, 카드고릴라 같은 비교 사이트로 보완하세요.
       혜택마다: 대상(업종·가맹점), 할인·적립·캐시백 비율이나 금액, 건당·일·월 한도, 필요한 전월 실적 구간(구간별로 다르면 모두), 제외 조건.
+      그리고 "전월 실적에서 제외되는 이용" 목록(예: 관리비, 세금, 상품권, 무이자 할부 등)도 빠짐없이 적어 주세요.
       연회비, 포인트 전환, 라운지 같은 결제 할인·적립이 아닌 서비스는 빼 주세요.
       같은 이름의 카드가 여러 개면 가장 흔한 것을 고르고 첫 줄에 정확한 카드 이름을 적어 주세요. 단종된 카드면 그렇다고 적어 주세요.
       찾지 못하면 "찾지 못함"이라고만 답하세요.
@@ -55,12 +81,13 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
         appendLine("한국 카드 상품 \"$name\"의 혜택을 알고 있는 대로 정리해 주세요. 확실하지 않은 혜택은 넣지 마세요. 모르는 카드면 빈 배열로 답하세요.")
         appendLine(RULES)
       }
-      val json = JSONObject(ai.completeJson(prompt, schema(), """{"benefits":[$ITEM_SHAPE]}"""))
-      return Searched(parse(json.optJSONArray("benefits")), emptyList(), fromMemory = true)
+      val json = JSONObject(ai.completeJson(prompt + "\n" + CONDITION_RULES, schemaWithConditions(), FULL_SHAPE))
+      return Searched(parse(json.optJSONArray("benefits")), emptyList(), fromMemory = true, conditions = parseConditions(json))
     }
     val (answer, sources) = web
     if (answer.contains("찾지 못함") && answer.length < 40) return Searched(emptyList(), sources)
-    return Searched(read(answer), sources)
+    val (drafts, conditions) = readWithConditions(answer)
+    return Searched(drafts, sources, conditions = conditions)
   }
 
   companion object {
@@ -81,6 +108,31 @@ class BenefitReader @Inject constructor(private val ai: AiService) {
       - minAmount: 최소 결제 금액(원) 조건, 없으면 0
       - 연회비, 포인트 전환, 서비스(라운지, 발레파킹 등)처럼 결제 할인·적립이 아닌 것은 빼 주세요.
     """.trimIndent()
+
+    val CONDITION_RULES = """
+      카드의 실적 조건도 함께 적어 주세요:
+      - performanceTarget: 혜택을 받기 위한 전월 실적 기준 중 가장 낮은 구간(원), 없거나 모르면 0
+      - excludedFromPerformance: 전월 실적에서 빠지는 이용을 짧은 단어로 (예: "관리비","세금","상품권","무이자할부","대학등록금"), 없으면 빈 배열
+    """.trimIndent()
+
+    private const val FULL_SHAPE =
+      """{"benefits":[{"title":"이름","category":"","merchants":"","kind":"PERCENT","value":10,"monthlyCap":0,"minPerformance":0,"minAmount":0}],"performanceTarget":300000,"excludedFromPerformance":["관리비","세금"]}"""
+
+    private fun schemaWithConditions(): JSONObject = JSONObject().put("type", "OBJECT").put("properties", JSONObject()
+      .put("benefits", JSONObject().put("type", "ARRAY").put("items", itemSchema()))
+      .put("performanceTarget", JSONObject().put("type", "INTEGER"))
+      .put("excludedFromPerformance", JSONObject().put("type", "ARRAY").put("items", JSONObject().put("type", "STRING"))))
+      .put("required", JSONArray(listOf("benefits")))
+
+    /** 실적 조건 from the AI answer: a sane target and short distinct words. */
+    fun parseConditions(json: JSONObject): Conditions? {
+      val target = json.optLong("performanceTarget", 0L).takeIf { it in 10_000..10_000_000 } ?: 0L
+      val arr = json.optJSONArray("excludedFromPerformance")
+      val excluded = if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it).trim() }
+        .map { it.replace(Regex("\\s*(이용|금액|결제|납부)$"), "") }
+        .filter { it.length in 2..12 }.distinct().take(15)
+      return Conditions(target, excluded).takeIf { !it.isEmpty }
+    }
 
     const val ITEM_SHAPE =
       """{"title":"이름","category":"카테고리 또는 빈 문자열","merchants":"가맹점,가맹점","kind":"PERCENT","value":10,"monthlyCap":0,"minPerformance":0,"minAmount":0}"""

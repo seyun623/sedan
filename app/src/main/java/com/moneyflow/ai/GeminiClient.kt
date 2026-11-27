@@ -70,10 +70,16 @@ class GeminiClient @Inject constructor() {
   }
 
   /** Sends [prompt] and returns the model's text output, constrained to JSON by [responseSchema]. */
-  suspend fun generateJson(apiKey: String, model: String, prompt: String, responseSchema: JSONObject): String =
+  suspend fun generateJson(
+    apiKey: String, model: String, prompt: String, responseSchema: JSONObject,
+    /** (mime type, base64) of a photo to read with the prompt (영수증). */
+    image: Pair<String, String>? = null
+  ): String =
     withContext(Dispatchers.IO) {
+      val parts = JSONArray().put(JSONObject().put("text", prompt))
+      image?.let { (mime, data) -> parts.put(JSONObject().put("inline_data", JSONObject().put("mime_type", mime).put("data", data))) }
       val request = JSONObject()
-        .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+        .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
         .put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("responseSchema", responseSchema))
       val url = "$BASE/models/${URLEncoder.encode(model.removePrefix("models/"), "UTF-8")}:generateContent"
       val (code, body) = transport.execute("POST", url, headers(apiKey) + ("Content-Type" to "application/json"), request.toString())

@@ -221,8 +221,9 @@ fun AccountDetailScreen(
     BenefitDraftsDialog(
       drafts = read.drafts,
       sources = read.sources,
+      conditions = read.conditions,
       hasProfile = state.cardProfile != null,
-      onAdd = { drafts, setTarget -> showBenefitPaste = false; viewModel.addBenefits(drafts, setTarget) },
+      onAdd = { drafts, setTarget, saveConditions -> showBenefitPaste = false; viewModel.addBenefits(drafts, setTarget, read.conditions?.takeIf { saveConditions }) },
       onDismiss = viewModel::closeBenefitRead
     )
   } else if (showBenefitPaste) {
@@ -236,6 +237,8 @@ fun AccountDetailScreen(
       cardName = state.account?.name.orEmpty(),
       canSearch = canSearchBenefits,
       onSearch = viewModel::searchBenefits,
+      retryLaterName = (read as? BenefitReadState.Failed)?.retryName,
+      onSearchLater = { showBenefitPaste = false; viewModel.searchBenefitsLater(it) },
       onOpenCardGorilla = { showBenefitPaste = false; viewModel.closeBenefitRead(); onOpenCardGorilla() }
     )
   }

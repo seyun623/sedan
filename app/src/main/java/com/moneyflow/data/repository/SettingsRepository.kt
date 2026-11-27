@@ -35,6 +35,8 @@ data class AppSettings(
   val pinLockedUntilElapsed: Long = 0L,
   val pinLockBoot: String = "",
   val deviceLockEnabled: Boolean = false,
+  /** 휴대폰 잠금으로 열기: ask for the fingerprint rather than the face (3.0.1). */
+  val deviceLockFingerprint: Boolean = false,
   /** A recovery code was made for the PIN (only its hash is kept). */
   val hasRecoveryCode: Boolean = false,
   val recoveryHash: String? = null,
@@ -87,6 +89,8 @@ data class AppSettings(
   val weeklyReportEnabled: Boolean = false,
   /** 3.0: the home "시작하기" checklist was closed. */
   val startGuideDismissed: Boolean = false,
+  /** Shown again on request even when every step is done (until closed). */
+  val startGuideForced: Boolean = false,
   /** Split installment purchases (auto-captured / imported) into monthly parts. */
   val splitInstallments: Boolean = false,
   /** Google Drive bot (service account) key, encrypted with the Keystore. */
@@ -197,6 +201,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val MONTHLY_SUMMARY = booleanPreferencesKey("monthly_summary")
     val WEEKLY_REPORT = booleanPreferencesKey("weekly_report")
     val START_GUIDE_DISMISSED = booleanPreferencesKey("start_guide_dismissed")
+    val START_GUIDE_FORCE = booleanPreferencesKey("start_guide_force")
+    val DEVICE_LOCK_FINGERPRINT = booleanPreferencesKey("device_lock_fingerprint")
     val SETTLED_TRANSFERS = androidx.datastore.preferences.core.stringSetPreferencesKey("settled_transfers")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
@@ -250,6 +256,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       pinLockedUntilElapsed = p[Keys.LOCKED_UNTIL_ELAPSED] ?: 0L,
       pinLockBoot = p[Keys.LOCK_BOOT] ?: "",
       deviceLockEnabled = p[Keys.DEVICE_LOCK] ?: false,
+      deviceLockFingerprint = p[Keys.DEVICE_LOCK_FINGERPRINT] ?: false,
       hasRecoveryCode = p[Keys.RECOVERY_HASH] != null,
       recoveryHash = p[Keys.RECOVERY_HASH],
       recoverySalt = p[Keys.RECOVERY_SALT],
@@ -286,6 +293,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       monthlySummaryEnabled = p[Keys.MONTHLY_SUMMARY] ?: false,
       weeklyReportEnabled = p[Keys.WEEKLY_REPORT] ?: false,
       startGuideDismissed = p[Keys.START_GUIDE_DISMISSED] ?: false,
+      startGuideForced = p[Keys.START_GUIDE_FORCE] ?: false,
       widgetShowAmountsWhenLocked = p[Keys.WIDGET_SHOW_LOCKED] ?: false,
       splitInstallments = p[Keys.SPLIT_INSTALLMENTS] ?: false,
       cardSavedPages = com.moneyflow.domain.cardimport.SavedPages.decode(p[Keys.CARD_SAVED_PAGES]),
@@ -618,7 +626,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val recent = now.sorted().takeLast(200).toSet()
     it[Keys.SETTLED_TRANSFERS] = if (done) recent + key else recent - key
   }
-  suspend fun setStartGuideDismissed() = store.edit { it[Keys.START_GUIDE_DISMISSED] = true }
+  suspend fun setStartGuideDismissed() = store.edit { it[Keys.START_GUIDE_DISMISSED] = true; it[Keys.START_GUIDE_FORCE] = false }
+  suspend fun setDeviceLockFingerprint(on: Boolean) = store.edit { it[Keys.DEVICE_LOCK_FINGERPRINT] = on }
+  suspend fun resetStartGuide() = store.edit { it[Keys.START_GUIDE_DISMISSED] = false; it[Keys.START_GUIDE_FORCE] = true }
   suspend fun setWeeklyReport(enabled: Boolean) = store.edit { it[Keys.WEEKLY_REPORT] = enabled }
   suspend fun setWidgetShowAmountsWhenLocked(enabled: Boolean) = store.edit { it[Keys.WIDGET_SHOW_LOCKED] = enabled }
 
