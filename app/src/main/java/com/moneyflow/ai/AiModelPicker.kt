@@ -47,4 +47,15 @@ object AiModelPicker {
     )
     return order.flatMap { p -> usable.filter(p) }.distinct().take(3)
   }
+
+  /** Which service a pasted key belongs to, by its shape (Gemini AIza…, Groq gsk_…, OpenRouter sk-or-…). */
+  fun providerOfKey(key: String): AiProvider? {
+    val k = key.trim()
+    return when {
+      k.startsWith("AIza") -> AiProvider.GEMINI
+      k.startsWith("gsk_") -> AiProvider.GROQ
+      k.startsWith("sk-or-") -> AiProvider.OPENROUTER
+      else -> null
+    }
+  }
 }

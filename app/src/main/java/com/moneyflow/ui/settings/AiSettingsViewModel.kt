@@ -78,6 +78,35 @@ class AiSettingsViewModel @Inject constructor(
     messages.show("API 키를 삭제하고 AI 추천을 껐어요.")
   }
 
+  // ---- 예비 AI (3.1) ----
+  private val _backupCheck = MutableStateFlow(AiKeyCheck())
+  val backupCheck: StateFlow<AiKeyCheck> = _backupCheck.asStateFlow()
+
+  /** A backup key pasted: which service it is comes from its shape; checked, then saved and switched on. */
+  fun addBackupKey(raw: String) = viewModelScope.launch {
+    val key = raw.trim()
+    val provider = com.moneyflow.ai.AiModelPicker.providerOfKey(key)
+    if (provider == null) { _backupCheck.value = AiKeyCheck(error = "Groq(gsk_…)·OpenRouter(sk-or-…)·Gemini(AIza…) 키가 아니에요. 키 전체를 복사했는지 봐 주세요."); return@launch }
+    if (provider == settingsRepo.current().aiProvider) { _backupCheck.value = AiKeyCheck(error = "${provider.label}는 지금 기본으로 쓰는 AI예요. 예비로는 다른 서비스 키를 넣어 주세요."); return@launch }
+    _backupCheck.value = AiKeyCheck(busy = true)
+    runCatching { ai.listModels(provider, key, "") }
+      .onSuccess { models ->
+        val model = if (models.isEmpty()) provider.defaultModel else pickDefaultModel(provider, models)
+        settingsRepo.setAiKeyFor(provider, secrets.encrypt(key), model)
+        settingsRepo.setAiBackupEnabled(true)
+        _backupCheck.value = AiKeyCheck()
+        messages.show("${provider.label} 키를 확인했어요. 이제 기본 AI 한도가 차면 ${provider.label}(으)로 넘어가요.")
+      }
+      .onFailure { _backupCheck.value = AiKeyCheck(error = it.message ?: "키를 확인하지 못했어요.") }
+  }
+
+  fun removeBackupKey(provider: AiProvider) = viewModelScope.launch {
+    settingsRepo.setAiKeyFor(provider, null)
+    messages.show("${provider.label} 예비 키를 지웠어요.")
+  }
+
+  fun setBackupEnabled(on: Boolean) = viewModelScope.launch { settingsRepo.setAiBackupEnabled(on) }
+
   fun setEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setAiEnabled(enabled) }
   fun setModel(model: String) = viewModelScope.launch { settingsRepo.setAiModel(model) }
 

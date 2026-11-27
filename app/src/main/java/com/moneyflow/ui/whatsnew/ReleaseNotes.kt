@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "3.1.0", "2026.11",
+      listOf(
+        "예비 AI: 설정 → AI 설정 → '예비 AI'에 Groq(추천)나 OpenRouter 키를 넣어 두면, Gemini 무료 한도가 찼을 때 자동으로 넘어가 처리해요",
+        "키 넣기가 쉬워졌어요: '키 받으러 가기'로 발급 페이지를 열고, 키를 복사해 돌아와 '복사한 키 넣기'만 누르면 어느 서비스 키인지 알아보고 확인·저장해요",
+        "예비 AI로 넘어가면 '○○ 한도가 차서 Groq로 처리했어요'라고 알려 드려요. 예비 AI는 웹 검색이 안 돼 카드 혜택은 알고 있는 정보로 찾고, 영수증 사진은 Gemini로만 읽어요"
+      )
+    ),
+    ReleaseNote(
       "3.0.1", "2026.11",
       listOf(
         "카드사·쇼핑몰 화면: 로그인할 때 키보드가 올라오면 화면이 검게 변하던 문제를 고쳤어요",

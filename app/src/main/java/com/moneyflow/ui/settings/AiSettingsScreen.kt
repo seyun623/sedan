@@ -1,5 +1,7 @@
 package com.moneyflow.ui.settings
 
+import androidx.compose.foundation.layout.width
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Column
@@ -150,6 +152,73 @@ fun AiSettingsScreen(
           showChevron = false,
           onClick = { confirmRemove = true }
         )
+      }
+    }
+
+    if (s.hasAiKey) {
+      val backupCheck by viewModel.backupCheck.collectAsStateWithLifecycle()
+      val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+      var backupInput by rememberSaveable { mutableStateOf("") }
+      val candidates = listOf(AiProvider.GROQ, AiProvider.OPENROUTER, AiProvider.GEMINI).filter { it != provider }
+      SettingsSection("예비 AI · 한도 초과 시 자동 전환") {
+        SettingsSwitchItem(
+          title = "예비 AI로 자동 전환",
+          subtitle = if (s.aiBackups.isEmpty()) "아래에서 Groq 키를 넣으면 켜져요. ${provider.label} 한도가 차면 예비 AI가 대신 처리해요"
+          else "${provider.label} → ${s.aiBackups.joinToString(" → ") { it.label }} 순서로 넘어가요. 넘어가면 같은 내용이 그 서비스로 전송돼요",
+          checked = s.aiBackupEnabled,
+          icon = Icons.Filled.AutoAwesome,
+          onCheckedChange = viewModel::setBackupEnabled,
+          modifier = Modifier.testTag("ai_backup_switch")
+        )
+        candidates.forEach { p ->
+          val has = !s.aiKeysEncrypted[p].isNullOrBlank()
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+            Column(Modifier.weight(1f)) {
+              Text(p.label + if (p == AiProvider.GROQ) " (추천)" else if (p == AiProvider.OPENROUTER) " (선택)" else "", fontWeight = FontWeight.SemiBold)
+              Text(
+                if (has) "✅ 키 등록됨 · ${s.aiModelFor(p)}" else "키 없음",
+                style = MaterialTheme.typography.bodySmall, color = if (has) AccentGreen else Gray600
+              )
+            }
+            if (has) TextButton(onClick = { viewModel.removeBackupKey(p) }) { Text("삭제", color = AccentRed) }
+            else p.keyUrl?.let { url -> TextButton(onClick = { openUrl(url) }, modifier = Modifier.testTag("ai_backup_get_${p.name}")) { Text("키 받으러 가기") } }
+          }
+        }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+          Text(
+            "키 받는 법 (Groq): '키 받으러 가기' → 구글 계정으로 로그인 → Create API Key → 이름 아무거나 → 키 복사 → 이 화면으로 돌아와 '복사한 키 넣기'",
+            style = MaterialTheme.typography.bodySmall, color = Gray600
+          )
+          Spacer(Modifier.height(6.dp))
+          OutlinedTextField(
+            value = backupInput,
+            onValueChange = { backupInput = it.trim() },
+            label = { Text("예비 AI 키 (어느 서비스 키인지 자동으로 알아봐요)") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            isError = backupCheck.error != null,
+            supportingText = backupCheck.error?.let { { Text(it) } },
+            modifier = Modifier.fillMaxWidth().testTag("ai_backup_input")
+          )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(
+              onClick = {
+                val pasted = clipboard.getText()?.text?.trim().orEmpty()
+                if (pasted.isNotEmpty()) viewModel.addBackupKey(pasted)
+              },
+              enabled = !backupCheck.busy,
+              colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+              modifier = Modifier.testTag("ai_backup_paste")
+            ) { Text("복사한 키 넣기", fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { viewModel.addBackupKey(backupInput); backupInput = "" }, enabled = backupInput.length >= 10 && !backupCheck.busy) { Text("입력한 키 저장") }
+          }
+          if (backupCheck.busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue)
+          Text(
+            "예비 AI는 웹 검색이 안 돼서, 카드 혜택은 'AI가 알고 있는 정보'로 찾아요(최신이 아닐 수 있어요). 영수증 사진은 Gemini로만 읽어요.",
+            style = MaterialTheme.typography.labelSmall, color = Gray600, modifier = Modifier.padding(top = 6.dp)
+          )
+        }
       }
     }
 

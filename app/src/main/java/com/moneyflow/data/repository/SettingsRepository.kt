@@ -57,6 +57,8 @@ data class AppSettings(
   val aiProvider: AiProvider = AiProvider.GEMINI,
   /** API keys per provider, encrypted with the Android Keystore (never stored in plain text). */
   val aiKeysEncrypted: Map<AiProvider, String> = emptyMap(),
+  /** 3.1: when the chosen AI is over its limit, other AIs with a key answer instead (예비 AI). */
+  val aiBackupEnabled: Boolean = false,
   val aiModels: Map<AiProvider, String> = emptyMap(),
   /** Base URL for [AiProvider.CUSTOM]. */
   val aiCustomBaseUrl: String = "",
@@ -139,6 +141,11 @@ data class AppSettings(
 
   val autoBackupEnabled: Boolean get() = autoBackupFolder != null && autoBackupPasswordEncrypted != null
   val aiApiKeyEncrypted: String? get() = aiKeysEncrypted[aiProvider]
+  /** Backup AIs in the order they are tried (Gemini → Groq → OpenRouter), ones with a key only. */
+  val aiBackups: List<AiProvider>
+    get() = if (!aiBackupEnabled) emptyList()
+    else listOf(AiProvider.GEMINI, AiProvider.GROQ, AiProvider.OPENROUTER).filter { it != aiProvider && !aiKeysEncrypted[it].isNullOrBlank() }
+  fun aiModelFor(p: AiProvider): String = aiModels[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
   val aiModel: String get() = aiModels[aiProvider]?.takeIf { it.isNotBlank() } ?: aiProvider.defaultModel
   val aiBaseUrl: String? get() = if (aiProvider == AiProvider.CUSTOM) aiCustomBaseUrl else aiProvider.defaultBaseUrl
   val hasAiKey: Boolean get() = !aiApiKeyEncrypted.isNullOrBlank()
@@ -203,6 +210,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val START_GUIDE_DISMISSED = booleanPreferencesKey("start_guide_dismissed")
     val START_GUIDE_FORCE = booleanPreferencesKey("start_guide_force")
     val DEVICE_LOCK_FINGERPRINT = booleanPreferencesKey("device_lock_fingerprint")
+    val AI_BACKUP = booleanPreferencesKey("ai_backup")
     val SETTLED_TRANSFERS = androidx.datastore.preferences.core.stringSetPreferencesKey("settled_transfers")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
@@ -277,6 +285,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
         (p[Keys.aiModel(pr)] ?: if (pr == AiProvider.GEMINI) p[Keys.LEGACY_AI_MODEL] else null)?.let { pr to it }
       }.toMap(),
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
+      aiBackupEnabled = p[Keys.AI_BACKUP] ?: false,
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
       cardBills = parseBills(p[Keys.CARD_BILLS]),
       cardPoints = parsePoints(p[Keys.CARD_POINTS]),
@@ -458,6 +467,14 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
   suspend fun setAiModel(model: String) = store.edit {
     val provider = it[Keys.AI_PROVIDER]?.let { n -> runCatching { AiProvider.valueOf(n) }.getOrNull() } ?: AiProvider.GEMINI
     it[Keys.aiModel(provider)] = model
+  }
+
+  suspend fun setAiBackupEnabled(on: Boolean) = store.edit { it[Keys.AI_BACKUP] = on }
+
+  /** Key and model of a backup AI (not the selected one); null removes the key. */
+  suspend fun setAiKeyFor(provider: AiProvider, encrypted: String?, model: String? = null) = store.edit {
+    if (encrypted == null) it.remove(Keys.aiKey(provider)) else it[Keys.aiKey(provider)] = encrypted
+    if (model != null) it[Keys.aiModel(provider)] = model
   }
 
   /** Sets (or with null removes) the key of the currently selected provider. Removing turns AI off. */

@@ -73,8 +73,16 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.0.1. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.1.0. */
   val all = listOf(
+    FeatureCheck(
+      "backup_ai", "예비 AI (Gemini → Groq)", "3.1",
+      listOf(
+        "설정 → AI 카테고리 추천 → '예비 AI'에서 Groq '키 받으러 가기' → 키 복사 → '복사한 키 넣기' → '✅ 키 등록됨'이 뜨는지 봐 주세요.",
+        "Gemini 한도가 찼을 때(혜택 찾기 등) '한도가 차서 Groq로 처리했어요'가 뜨고 결과가 나오는지 봐 주세요."
+      ),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
     FeatureCheck(
       "start_guide", "홈 '시작하기'·설정 정리", "3.0.1",
       listOf(
