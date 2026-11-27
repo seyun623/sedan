@@ -1,0 +1,99 @@
+name: Release build
+
+# Builds the signed APK that family members install, when a tag like v1.0.0 is pushed
+# or manually from the Actions tab. Every release MUST be signed with the same key,
+# otherwise phones refuse to install it as an update.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   ANDROID_KEYSTORE_BASE64  base64 of the upload keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS        (e.g. upload)
+#   ANDROID_KEY_PASSWORD
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      versionName:
+        description: "Version name (e.g. 1.0.0)"
+        required: true
+        default: "2.9.0"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: the version code counts commits
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_NAME: ${{ github.event.inputs.versionName }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then NAME="${GITHUB_REF_NAME#v}"; else NAME="$INPUT_NAME"; fi
+          [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must look like 2.9.0"; exit 1; }
+          # Monotonic version code: commits on this ref, kept above the versions already installed (136 = 2.8.0).
+          CODE=$(( $(git rev-list --count HEAD) + 100 ))
+          if [ "$CODE" -le 136 ]; then CODE=$(( CODE + 136 )); fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Version $NAME ($CODE)"
+        shell: bash
+
+      - name: Restore upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Unit tests
+        run: ./gradlew :app:testBasicDebugUnitTest :app:testFullDebugUnitTest
+
+      - name: Build signed APK
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >
+          ./gradlew :app:assembleBasicRelease :app:assembleFullRelease
+          -PversionCode=${{ steps.version.outputs.code }}
+          -PversionName=${{ steps.version.outputs.name }}
+
+      - name: Verify signature
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          # Phones only accept updates signed with the family key.
+          EXPECTED="f31d58419b47e2df53692dc8dd5d1505380ead823069ff9fd8f60d7540485068"
+          for APK in app/build/outputs/apk/basic/release/app-basic-release.apk app/build/outputs/apk/full/release/app-full-release.apk; do
+            "$APKSIGNER" verify --print-certs "$APK" | grep -q "SHA-256 digest: $EXPECTED" || { echo "::error::$APK is not signed with the family key"; exit 1; }
+          done
+          cp app/build/outputs/apk/basic/release/app-basic-release.apk "moneyflow-${{ steps.version.outputs.name }}-basic.apk"
+          cp app/build/outputs/apk/full/release/app-full-release.apk "moneyflow-${{ steps.version.outputs.name }}-autocapture.apk"
+        shell: bash
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moneyflow-${{ steps.version.outputs.name }}
+          path: |
+            moneyflow-${{ steps.version.outputs.name }}-basic.apk
+            moneyflow-${{ steps.version.outputs.name }}-autocapture.apk
+            app/build/outputs/mapping/

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "full" flavor only: payment auto-capture from notifications and SMS.
+     These are sensitive permissions; Play Protect's enhanced fraud protection blocks installing
+     such an app from a browser/messenger/file manager, so it must be installed another way
+     (see docs/family-install-guide.md). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- "배터리 사용 제한 없음" button in the auto-capture check list. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Names of card / bank apps (an unknown app whose name contains 카드·은행·페이 is read too). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+    <!-- SMS auto-capture is optional; the app must still install on devices without telephony. -->
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
+    <application>
+        <service
+            android:name=".service.FinanceNotificationListenerService"
+            android:label="@string/notification_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".receiver.SmsTransactionReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
