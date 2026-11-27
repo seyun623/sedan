@@ -59,6 +59,12 @@ data class AppSettings(
   val aiKeysEncrypted: Map<AiProvider, String> = emptyMap(),
   /** 3.1: when the chosen AI is over its limit, other AIs with a key answer instead (예비 AI). */
   val aiBackupEnabled: Boolean = false,
+  /** 3.2: Google Cloud Vision key for reading receipts (encrypted). */
+  val visionKeyEncrypted: String? = null,
+  /** 3.2: new camera photos that look like receipts are read by themselves. */
+  val receiptAutoEnabled: Boolean = false,
+  /** Seconds (MediaStore DATE_ADDED) of the newest photo already looked at. */
+  val receiptLastScan: Long = 0L,
   val aiModels: Map<AiProvider, String> = emptyMap(),
   /** Base URL for [AiProvider.CUSTOM]. */
   val aiCustomBaseUrl: String = "",
@@ -211,6 +217,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val START_GUIDE_FORCE = booleanPreferencesKey("start_guide_force")
     val DEVICE_LOCK_FINGERPRINT = booleanPreferencesKey("device_lock_fingerprint")
     val AI_BACKUP = booleanPreferencesKey("ai_backup")
+    val VISION_KEY = stringPreferencesKey("vision_key_enc")
+    val RECEIPT_AUTO = booleanPreferencesKey("receipt_auto")
+    val RECEIPT_LAST_SCAN = longPreferencesKey("receipt_last_scan")
     val SETTLED_TRANSFERS = androidx.datastore.preferences.core.stringSetPreferencesKey("settled_transfers")
     val WIDGET_SHOW_LOCKED = booleanPreferencesKey("widget_show_amounts_locked")
     val SPLIT_INSTALLMENTS = booleanPreferencesKey("split_installments")
@@ -286,6 +295,9 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
       }.toMap(),
       aiCustomBaseUrl = p[Keys.AI_CUSTOM_URL] ?: "",
       aiBackupEnabled = p[Keys.AI_BACKUP] ?: false,
+      visionKeyEncrypted = p[Keys.VISION_KEY],
+      receiptAutoEnabled = p[Keys.RECEIPT_AUTO] ?: false,
+      receiptLastScan = p[Keys.RECEIPT_LAST_SCAN] ?: 0L,
       cardPerformance = parsePerformance(p[Keys.CARD_PERFORMANCE]),
       cardBills = parseBills(p[Keys.CARD_BILLS]),
       cardPoints = parsePoints(p[Keys.CARD_POINTS]),
@@ -468,6 +480,14 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
     val provider = it[Keys.AI_PROVIDER]?.let { n -> runCatching { AiProvider.valueOf(n) }.getOrNull() } ?: AiProvider.GEMINI
     it[Keys.aiModel(provider)] = model
   }
+
+  suspend fun setVisionKey(encrypted: String?) = store.edit { if (encrypted == null) it.remove(Keys.VISION_KEY) else it[Keys.VISION_KEY] = encrypted }
+  suspend fun setReceiptAuto(on: Boolean, nowSeconds: Long) = store.edit {
+    it[Keys.RECEIPT_AUTO] = on
+    // Only photos taken from now on: old ones are not read.
+    if (on) it[Keys.RECEIPT_LAST_SCAN] = nowSeconds
+  }
+  suspend fun setReceiptLastScan(seconds: Long) = store.edit { it[Keys.RECEIPT_LAST_SCAN] = seconds }
 
   suspend fun setAiBackupEnabled(on: Boolean) = store.edit { it[Keys.AI_BACKUP] = on }
 

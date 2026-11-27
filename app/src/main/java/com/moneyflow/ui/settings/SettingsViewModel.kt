@@ -50,6 +50,13 @@ class SettingsViewModel @Inject constructor(
   /** A just-made recovery code to show once (null = no dialog). */
   val recoveryCode: StateFlow<String?> = _recoveryCode
 
+  fun setReceiptAuto(context: android.content.Context, on: Boolean) = viewModelScope.launch {
+    settingsRepo.setReceiptAuto(on, System.currentTimeMillis() / 1000)
+    if (on) com.moneyflow.work.ReceiptWatchWorker.schedule(context, androidx.work.ExistingWorkPolicy.REPLACE)
+    else com.moneyflow.work.ReceiptWatchWorker.cancel(context)
+    messages.show(if (on) "이제 카메라로 영수증을 찍으면 자동으로 읽어 알려 드려요." else "영수증 자동 인식을 껐어요.")
+  }
+
   fun setDeviceLockFingerprint(on: Boolean) = viewModelScope.launch {
     settingsRepo.setDeviceLockFingerprint(on)
     messages.show(if (on) "앱을 열 때 지문을 먼저 물어봐요." else "앱을 열 때 휴대폰에 설정된 방법(얼굴·지문)으로 물어봐요.")

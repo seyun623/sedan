@@ -78,6 +78,11 @@ class ReceiptParser(private val today: LocalDate) {
       .distinct().take(5).toList()
 
   companion object {
+    private val RECEIPT_WORDS = Regex("영수증|합\\s*계|결제\\s*금액|받을\\s*금액|신용\\s*카드|카드\\s*결제|승인\\s*번호|부가세|과세|사업자|매출|판매\\s*총액|TOTAL", RegexOption.IGNORE_CASE)
+
+    /** Words found on almost every receipt (two of them): photos of people or places are skipped. */
+    fun looksLikeReceipt(text: String): Boolean = RECEIPT_WORDS.findAll(text).map { it.value.replace(" ", "") }.distinct().count() >= 2
+
     private val AMOUNT = Regex("(?<![0-9.,])([0-9]{1,3}(?:[,.][0-9]{3})+|[0-9]{3,8})\\s*원?(?![0-9])")
     private val TIME = Regex("(?<![0-9])[0-2]?[0-9]:[0-5][0-9]")
     private val ONLY_AMOUNT = Regex("[₩\\s]*[0-9][0-9,]{2,12}\\s*원?")
@@ -115,5 +120,25 @@ class AiReceiptReader @javax.inject.Inject constructor(private val ai: com.money
       ?.takeIf { !it.isAfter(today.plusDays(1)) && it.isAfter(today.minusYears(2)) }
     val items = json.optJSONArray("items")?.let { a -> (0 until a.length()).map { a.optString(it).trim().take(20) }.filter { it.length >= 2 }.distinct().take(5) }.orEmpty()
     return ReceiptInfo(total, json.optString("merchant").trim().take(30), date, items)
+  }
+}
+
+/** A receipt and an already recorded card payment of the same amount (pure, testable). */
+object ReceiptMatch {
+  /**
+   * The expense of exactly [info]'s total, recorded within a day of [date], that has no product
+   * names yet (" · "), closest in time first. The card alert usually recorded it already.
+   */
+  fun find(info: ReceiptInfo, date: java.time.LocalDate, txs: List<com.moneyflow.data.model.TransactionEntity>, zone: java.time.ZoneId) =
+    txs.filter { tx ->
+      tx.type == com.moneyflow.data.model.TransactionType.EXPENSE && tx.amount == info.total && !tx.memo.contains(" · ") &&
+        kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(date, java.time.Instant.ofEpochMilli(tx.timestamp).atZone(zone).toLocalDate())) <= 1
+    }.minByOrNull { kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(date, java.time.Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate())) }
+
+  /** "스타벅스" + items → "스타벅스 · 아메리카노 외 1건" (the shop name stays first). */
+  fun newMemo(memo: String, info: ReceiptInfo): String {
+    if (info.items.isEmpty()) return memo
+    val summary = if (info.items.size == 1) info.items.first() else "${info.items.first()} 외 ${info.items.size - 1}건"
+    return "${memo.ifBlank { info.merchant }} · $summary".take(90)
   }
 }

@@ -56,6 +56,12 @@ class MoneyFlowApplication : Application(), Configuration.Provider {
     ) com.moneyflow.service.FinanceNotificationListenerService.rebind(this)
     AutoBackupWorker.schedule(this)
     com.moneyflow.work.FamilySyncWorker.schedule(this)
+    // 영수증 자동 인식 waits for new photos (only when switched on and allowed).
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+      if (settings.get().current().receiptAutoEnabled && com.moneyflow.work.ReceiptWatchWorker.hasPhotoAccess(this@MoneyFlowApplication)) {
+        com.moneyflow.work.ReceiptWatchWorker.schedule(this@MoneyFlowApplication)
+      }
+    }
 
     watchWidgetPrivacy()
     // When records change (typed in, auto-captured, imported), check budget alerts and the widget soon.

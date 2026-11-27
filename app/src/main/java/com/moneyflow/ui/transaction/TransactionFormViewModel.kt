@@ -50,7 +50,7 @@ class TransactionFormViewModel @Inject constructor(
   settings: SettingsRepository,
   private val cards: com.moneyflow.data.repository.CardRepository,
   private val messages: UserMessageBus,
-  val aiReceipts: com.moneyflow.domain.receipt.AiReceiptReader,
+  val receipts: com.moneyflow.domain.receipt.ReceiptReading,
   prefillStore: com.moneyflow.ui.common.PrefillStore
 ) : ViewModel() {
 

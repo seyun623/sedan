@@ -121,7 +121,7 @@ class ScreenshotTest {
   @Test fun budgetLight() { val vm = budgetVm(); shot("04_budget", false) { BudgetScreen({}, viewModel = vm) } }
   @Test fun budgetDark() { val vm = budgetVm(); shot("04_budget", true) { BudgetScreen({}, viewModel = vm) } }
 
-  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus, com.moneyflow.domain.receipt.AiReceiptReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient())), com.moneyflow.ui.common.PrefillStore())
+  private fun formVm() = TransactionFormViewModel(SavedStateHandle(), ledger, CategorySuggester(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), db, clock), settings, com.moneyflow.data.repository.CardRepository(db, clock), bus, com.moneyflow.domain.receipt.ReceiptReading(androidx.test.core.app.ApplicationProvider.getApplicationContext(), settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GoogleVisionClient(), com.moneyflow.domain.receipt.AiReceiptReader(com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()))), com.moneyflow.ui.common.PrefillStore())
   @Test fun formLight() { val vm = formVm(); shot("05_form", false) { TransactionFormScreen({}, viewModel = vm) } }
   @Test fun formDark() { val vm = formVm(); shot("05_form", true) { TransactionFormScreen({}, viewModel = vm) } }
 
@@ -163,7 +163,7 @@ class ScreenshotTest {
     val vm = home(); shot("12_firstrun", true) { HomeScreen({}, {}, {}, {}, {}, {}, {}, {}, viewModel = vm) }
   }
   private fun aiVm() = com.moneyflow.ui.settings.AiSettingsViewModel(settings, com.moneyflow.testing.PlainSecretStore,
-    com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), bus)
+    com.moneyflow.ai.AiService(settings, com.moneyflow.testing.PlainSecretStore, com.moneyflow.ai.GeminiClient(), com.moneyflow.ai.OpenAiCompatClient()), bus, com.moneyflow.ai.GoogleVisionClient())
   @Test fun aiLight() { runBlocking { settings.setAiApiKeyEncrypted("enc:k"); settings.setAiEnabled(true) }; val vm = aiVm(); shot("13_ai", false) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
   @Test fun aiDark() { val vm = aiVm(); shot("13_ai", true) { com.moneyflow.ui.settings.AiSettingsScreen({}, viewModel = vm) } }
   @Test fun cardImportList() = shot("14_cardimport", false) { com.moneyflow.ui.cardimport.CardImportScreen({}, {}) }

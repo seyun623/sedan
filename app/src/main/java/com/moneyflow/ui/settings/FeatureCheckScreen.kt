@@ -73,8 +73,21 @@ data class FeatureCheck(
 data class CheckResult(val ok: Boolean, val note: String = "")
 
 object FeatureChecks {
-  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.1.0. */
+  /** Only what still needs a check on a real phone (confirmed items are removed). Version 3.2.0. */
   val all = listOf(
+    FeatureCheck(
+      "receipt_auto", "영수증 자동 인식", "3.2",
+      listOf(
+        "설정 → 기록 도구 → '영수증 자동 인식'을 켜고 사진 권한을 '모두 허용'으로 주세요.",
+        "카드로 결제한 영수증을 카메라로 찍고 1분쯤 기다리면, '영수증 품목을 붙였어요' 또는 '🧾 가게 금액' 알림이 오는지 봐 주세요. 알림을 누르면 내역 추가 화면이 채워져 열려요."
+      ),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
+    FeatureCheck(
+      "receipt_vision", "구글 Vision으로 영수증 읽기", "3.2",
+      listOf("설정 → AI 카테고리 추천 → '영수증 읽기 · 구글 Vision'의 안내대로 키를 받아 '복사한 키 넣기' → ✅가 뜨는지, 휴대폰이 못 읽던 영수증을 '구글 Vision으로 읽었어요'로 읽는지 봐 주세요."),
+      CheckTarget.SETTINGS, openLabel = "설정 열기"
+    ),
     FeatureCheck(
       "backup_ai", "예비 AI (Gemini → Groq)", "3.1",
       listOf(

@@ -1,5 +1,7 @@
 package com.moneyflow.ui.settings
 
+import com.moneyflow.ui.theme.Gray900
+
 import androidx.compose.foundation.layout.width
 
 import android.content.Intent
@@ -250,6 +252,43 @@ fun AiSettingsScreen(
             color = Gray600,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
           )
+        }
+      }
+    }
+
+    run {
+      val visionCheck by viewModel.visionCheck.collectAsStateWithLifecycle()
+      val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+      SettingsSection("영수증 읽기 · 구글 Vision") {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+          Text(
+            if (s.visionKeyEncrypted != null) "✅ 구글 Vision 키 등록됨: 휴대폰에서 못 읽은 영수증을 구글 Vision으로 읽어요 (사진이 구글로 전송돼요)"
+            else "영수증은 먼저 휴대폰 안에서 읽어요. 구글 Vision 키를 넣으면 휴대폰이 못 읽은 영수증을 더 잘 읽어요 (월 1,000장 무료).",
+            style = MaterialTheme.typography.bodySmall, color = if (s.visionKeyEncrypted != null) AccentGreen else Gray600
+          )
+          if (s.visionKeyEncrypted == null) {
+            Text(
+              "키 받는 법: ① '구글 클라우드 열기' → 구글 계정 로그인 → 새 프로젝트 만들기\n" +
+                "② 'Cloud Vision API' 검색 → 사용 설정 (처음이면 결제 카드 연결: 월 1,000장까지는 청구되지 않아요)\n" +
+                "③ API 및 서비스 → 사용자 인증 정보 → '사용자 인증 정보 만들기' → API 키 → 복사\n" +
+                "④ 이 화면으로 돌아와 '복사한 키 넣기'",
+              style = MaterialTheme.typography.bodySmall, color = Gray900, modifier = Modifier.padding(top = 6.dp)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+              Button(
+                onClick = { clipboard.getText()?.text?.let { viewModel.saveVisionKey(it) } },
+                enabled = !visionCheck.busy,
+                colors = ButtonDefaults.buttonColors(containerColor = TossBlue, contentColor = OnBrand),
+                modifier = Modifier.testTag("vision_paste")
+              ) { Text("복사한 키 넣기", fontWeight = FontWeight.Bold) }
+              Spacer(Modifier.width(8.dp))
+              TextButton(onClick = { openUrl("https://console.cloud.google.com/apis/library/vision.googleapis.com") }, modifier = Modifier.testTag("vision_open")) { Text("구글 클라우드 열기") }
+            }
+          } else {
+            TextButton(onClick = viewModel::removeVisionKey) { Text("구글 Vision 키 삭제", color = AccentRed) }
+          }
+          if (visionCheck.busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = TossBlue)
+          visionCheck.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AccentRed) }
         }
       }
     }

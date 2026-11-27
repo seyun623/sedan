@@ -56,6 +56,28 @@ fun SettingsScreen(
 
   SettingsScaffold(title = "설정", onBack = onBack) {
     SettingsSection("기록 도구") {
+      val receiptContext = androidx.compose.ui.platform.LocalContext.current
+      val photoPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+      ) { granted ->
+        if (granted[com.moneyflow.work.ReceiptWatchWorker.PERMISSION] == true) viewModel.setReceiptAuto(receiptContext, true)
+        else android.widget.Toast.makeText(receiptContext, "사진 권한을 '모두 허용'으로 해야 새 영수증 사진을 알아볼 수 있어요.", android.widget.Toast.LENGTH_LONG).show()
+      }
+      SettingsSwitchItem(
+        title = "영수증 자동 인식",
+        subtitle = "카메라로 영수증을 찍으면 휴대폰 안에서 읽어, 이미 기록된 카드 결제에 품목을 붙이거나 '확인하고 저장' 알림을 보내요. 다른 사진은 건너뛰어요",
+        icon = Icons.Filled.NotificationsActive,
+        checked = settings.receiptAutoEnabled,
+        onCheckedChange = { on ->
+          if (on && !com.moneyflow.work.ReceiptWatchWorker.hasPhotoAccess(receiptContext)) {
+            photoPermission.launch(
+              (listOf(com.moneyflow.work.ReceiptWatchWorker.PERMISSION) +
+                if (android.os.Build.VERSION.SDK_INT >= 33) listOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyList()).toTypedArray()
+            )
+          } else viewModel.setReceiptAuto(receiptContext, on)
+        },
+        modifier = Modifier.testTag("settings_receipt_auto")
+      )
       SettingsItem(
         title = "카드사에서 가져오기",
         subtitle = "카드사 홈페이지에 로그인해 이용내역·실적을 불러와요",

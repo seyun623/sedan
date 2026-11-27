@@ -6,6 +6,14 @@ data class ReleaseNote(val version: String, val date: String, val items: List<St
 object ReleaseNotes {
   val all = listOf(
     ReleaseNote(
+      "3.2.0", "2026.11",
+      listOf(
+        "영수증 자동 인식: 설정 → 기록 도구 → '영수증 자동 인식'을 켜면, 카메라로 영수증을 찍기만 해도 휴대폰 안에서 읽어요. 이미 기록된 같은 금액의 카드 결제가 있으면 품목 이름을 붙이고, 없으면 '확인하고 저장' 알림을 보내요. 영수증이 아닌 사진은 건너뛰고 밖으로 보내지 않아요",
+        "영수증 읽기 정확도: 흐린 감열지는 흑백·대비를 높여 한 번 더 읽어요",
+        "구글 Vision: 설정 → AI 설정 → '영수증 읽기 · 구글 Vision'에 키를 넣으면, 휴대폰이 못 읽은 영수증을 구글 Vision으로 읽어요 (월 1,000장 무료). 순서: 휴대폰 → 구글 Vision → Gemini"
+      )
+    ),
+    ReleaseNote(
       "3.1.0", "2026.11",
       listOf(
         "예비 AI: 설정 → AI 설정 → '예비 AI'에 Groq(추천)나 OpenRouter 키를 넣어 두면, Gemini 무료 한도가 찼을 때 자동으로 넘어가 처리해요",

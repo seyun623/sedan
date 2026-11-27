@@ -24,7 +24,8 @@ class AiSettingsViewModel @Inject constructor(
   private val settingsRepo: SettingsRepository,
   private val secrets: SecretStore,
   private val ai: AiService,
-  private val messages: UserMessageBus
+  private val messages: UserMessageBus,
+  private val vision: com.moneyflow.ai.GoogleVisionClient
 ) : ViewModel() {
 
   val settings: StateFlow<AppSettings> = settingsRepo.settings
@@ -106,6 +107,28 @@ class AiSettingsViewModel @Inject constructor(
   }
 
   fun setBackupEnabled(on: Boolean) = viewModelScope.launch { settingsRepo.setAiBackupEnabled(on) }
+
+  // ---- 영수증 읽기: 구글 Vision (3.2) ----
+  private val _visionCheck = MutableStateFlow(AiKeyCheck())
+  val visionCheck: StateFlow<AiKeyCheck> = _visionCheck.asStateFlow()
+
+  fun saveVisionKey(raw: String) = viewModelScope.launch {
+    val key = raw.trim()
+    if (!key.startsWith("AIza") || key.length < 30) { _visionCheck.value = AiKeyCheck(error = "구글 클라우드 API 키(AIza로 시작)를 붙여 넣어 주세요."); return@launch }
+    _visionCheck.value = AiKeyCheck(busy = true)
+    runCatching { vision.verify(key) }
+      .onSuccess {
+        settingsRepo.setVisionKey(secrets.encrypt(key))
+        _visionCheck.value = AiKeyCheck()
+        messages.show("구글 Vision 키를 확인했어요. 휴대폰에서 못 읽은 영수증은 구글 Vision으로 읽어요.")
+      }
+      .onFailure { _visionCheck.value = AiKeyCheck(error = it.message ?: "키를 확인하지 못했어요.") }
+  }
+
+  fun removeVisionKey() = viewModelScope.launch {
+    settingsRepo.setVisionKey(null)
+    messages.show("구글 Vision 키를 지웠어요.")
+  }
 
   fun setEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepo.setAiEnabled(enabled) }
   fun setModel(model: String) = viewModelScope.launch { settingsRepo.setAiModel(model) }

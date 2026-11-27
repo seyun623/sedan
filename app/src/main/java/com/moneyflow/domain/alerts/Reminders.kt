@@ -11,7 +11,8 @@ enum class ReminderChannel(val id: String, val label: String) {
   BACKUP("backup_alerts", "백업 알림"),
   CARD("card_alerts", "카드 실적·혜택 알림"),
   CAPTURE("capture_alerts", "결제 확인 알림"),
-  BILL("bill_alerts", "결제일 미리 알림")
+  BILL("bill_alerts", "결제일 미리 알림"),
+  RECEIPT("receipt_alerts", "영수증 자동 인식")
 }
 
 /** A notification to show. [key] makes sure each one is sent once. */
